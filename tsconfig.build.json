@@ -1,0 +1,11 @@
+{
+  // Build de publicação: compila só src/ para dist/, com os tipos (.d.ts) para quem usar como biblioteca.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true
+  },
+  "include": ["src"]
+}

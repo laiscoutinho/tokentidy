@@ -1,0 +1,69 @@
+{
+  "name": "tokentidy",
+  "version": "0.0.1",
+  "description": "Encontra valores visuais soltos no código front-end e ajuda a migrá-los para design tokens.",
+  "keywords": [
+    "design-tokens",
+    "design-system",
+    "tokens",
+    "dtcg",
+    "lint",
+    "linter",
+    "cli",
+    "css",
+    "scss",
+    "react",
+    "jsx",
+    "angular",
+    "hardcoded-values",
+    "autofix",
+    "frontend"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/laiscoutinho/tokentidy.git"
+  },
+  "author": {
+    "name": "Laís Coutinho",
+    "url": "https://github.com/laiscoutinho"
+  },
+  "license": "ISC",
+  "engines": {
+    "node": ">=22.17.0"
+  },
+  "bugs": {
+    "url": "https://github.com/laiscoutinho/tokentidy/issues"
+  },
+  "homepage": "https://github.com/laiscoutinho/tokentidy#readme",
+  "type": "module",
+  "bin": {
+    "tokentidy": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "node src/cli.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "check": "npm run typecheck && npm test",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "figlet": "^1.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
+}
