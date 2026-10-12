@@ -1,0 +1,25 @@
+{
+  // Configuração de desenvolvimento: checa tipos de src/ e test/ sem gerar arquivos.
+  // O Node executa os .ts direto (type stripping), então nada aqui afeta a execução.
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "lib": ["es2023"],
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Só sintaxe que o Node consegue apagar (sem enum, namespace, parameter properties)
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    // Imports com .ts no código; o build troca para .js
+    "rewriteRelativeImportExtensions": true,
+
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}
