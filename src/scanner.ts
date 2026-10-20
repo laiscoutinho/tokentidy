@@ -28,21 +28,25 @@ export async function scanDirectory(dir: string): Promise<ScanResult> {
     const root = path.resolve(dir);
 
     if (!existsSync(root)) {
-        throw new Error(`Diretório não encontrado: ${dir}`);
+        throw new Error(`Directory not found: ${dir}`);
     }
     if (!statSync(root).isDirectory()) {
-        throw new Error(`Não é um diretório: ${dir}`);
+        throw new Error(`Not a directory: ${dir}`);
     }
 
-    const patterns = SUPPORTED_EXTENSIONS.map((ext) => `**/*${ext}`);
-    // fs.glob é embutido no Node; o exclude também impede de entrar nas pastas ignoradas
+    // Um padrão só e o filtro de extensão aqui: com um padrão por extensão o fs.glob
+    // percorria a árvore uma vez para cada um (medido: ~45% mais lento em 1.400 arquivos).
+    // O exclude também impede de entrar nas pastas ignoradas.
     const files: string[] = [];
-    const matches = glob(patterns, {
+    const entries = glob('**/*', {
         cwd: root,
-        exclude: (entry) => IGNORED_DIRS.includes(path.basename(entry)),
+        withFileTypes: true,
+        exclude: (entry) => entry.isDirectory() && IGNORED_DIRS.includes(entry.name),
     });
-    for await (const file of matches) {
-        files.push(file);
+    for await (const entry of entries) {
+        if (entry.isFile() && isSupportedExtension(path.extname(entry.name))) {
+            files.push(path.relative(root, path.join(entry.parentPath, entry.name)));
+        }
     }
 
     const byExtension = Object.fromEntries(SUPPORTED_EXTENSIONS.map((ext) => [ext, 0])) as Record<SupportedExtension, number>;

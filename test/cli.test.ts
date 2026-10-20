@@ -5,41 +5,75 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 const cli = path.join(import.meta.dirname, '..', 'src', 'cli.ts');
-const fixture = path.join(import.meta.dirname, 'fixtures', 'projeto-basico');
+const fixtures = path.join(import.meta.dirname, 'fixtures');
+const project = path.join(fixtures, 'basic-project');
 
+// Roda a partir da pasta de fixtures, para os caminhos da saída ficarem curtos e previsíveis
 function run(...args: string[]) {
-    return spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });
+    return spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', cwd: fixtures });
 }
 
-test('check imprime uma linha por extensão, separada por tab, e sai com 0', () => {
-    const { stdout, stderr, status } = run('check', fixture);
-
-    assert.equal(status, 0);
-    assert.equal(stderr, '');
-    const lines = stdout.trim().split('\n');
-    assert.ok(lines.includes('.scss\t1'));
-    assert.equal(lines.at(-1), 'total\t4');
-});
-
-test('check --json imprime só JSON válido no stdout', () => {
-    const { stdout, status } = run('check', fixture, '--json');
-
-    assert.equal(status, 0);
-    const data = JSON.parse(stdout);
-    assert.equal(data.total, 4);
-    assert.equal(data.byExtension['.jsx'], 1);
-});
-
-test('erro vai para o stderr e sai com código 1', () => {
-    const { stdout, stderr, status } = run('check', '/caminho/que/nao/existe');
+test('check prints one finding per line (file:line:column, category, property, value) and exits with 1', () => {
+    const { stdout, stderr, status } = run('check', project);
 
     assert.equal(status, 1);
-    assert.equal(stdout, '');
-    assert.match(stderr, /Diretório não encontrado/);
+    assert.equal(stderr, '');
+    assert.deepEqual(stdout.trim().split('\n'), [
+        `${path.join('basic-project', 'src', 'App.scss')}:2:10\tcolor\tcolor\t#ff0000`,
+        `${path.join('basic-project', 'src', 'components', 'Button.css')}:2:12\tspacing\tpadding\t12px`,
+    ]);
 });
 
-test('check não mostra o banner', () => {
-    const { stdout } = run('check', fixture);
+test('check with no hardcoded values prints nothing and exits with 0', () => {
+    const { stdout, status } = run('check', path.join(fixtures, 'clean-project'));
+
+    assert.equal(status, 0);
+    assert.equal(stdout, '');
+});
+
+test('check --json prints only valid JSON to stdout', () => {
+    const { stdout, status } = run('check', project, '--json');
+
+    assert.equal(status, 1);
+    const data = JSON.parse(stdout);
+    assert.equal(data.filesAnalyzed, 2);
+    assert.deepEqual(data.findings[0], {
+        file: 'src/App.scss', line: 2, column: 10, offset: 16, endOffset: 23,
+        kind: 'color', property: 'color', value: '#ff0000',
+    });
+    assert.deepEqual(data.errors, []);
+});
+
+test('a syntax error goes to stderr without stopping the other files', () => {
+    const { stdout, stderr, status } = run('check', 'css');
+
+    assert.equal(status, 1);
+    assert.match(stderr, /broken\.css:2:14\tsyntax error\tMissed semicolon/);
+    assert.match(stdout, /variables\.scss/);
+});
+
+test('a missing directory goes to stderr and exits with 2', () => {
+    const { stdout, stderr, status } = run('check', '/path/that/does/not/exist');
+
+    assert.equal(status, 2);
+    assert.equal(stdout, '');
+    assert.match(stderr, /Directory not found/);
+});
+
+test('an unknown option is a usage error: exit code 2', () => {
+    const { stderr, status } = run('check', project, '--does-not-exist');
+
+    assert.equal(status, 2);
+    assert.match(stderr, /unknown option/);
+});
+
+test('--help and --version exit with 0', () => {
+    assert.equal(run('--help').status, 0);
+    assert.equal(run('--version').status, 0);
+});
+
+test('check does not show the banner', () => {
+    const { stdout } = run('check', project);
 
     assert.doesNotMatch(stdout, /_____/);
 });

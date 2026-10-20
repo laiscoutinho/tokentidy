@@ -1,0 +1,17 @@
+@use 'sass:math';
+
+$red: #e53935;
+$spacing: (md: 16px);
+
+// comment with #f00 and 8px
+.button {
+  color: $red;
+  padding: math.div($gap, 2) 12px;
+  width: calc(100% - #{$gutter * 2});
+  margin: map.get($spacing, 'md');
+  @include shadow(4px);
+
+  &:hover {
+    background: darken(#1976d2, 10%);
+  }
+}

@@ -1,0 +1,20 @@
+.text {
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  font-family: "Inter", Arial, sans-serif;
+}
+
+.shorthand {
+  font: italic bold 12px/20px Georgia, serif;
+}
+
+/* Nothing here is a violation */
+.ok {
+  font-weight: normal;
+  font-family: sans-serif;
+  line-height: normal;
+  font-size: 120%;
+  font-family: var(--font-body);
+}
