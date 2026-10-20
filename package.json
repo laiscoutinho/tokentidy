@@ -1,7 +1,7 @@
 {
   "name": "tokentidy",
-  "version": "0.0.1",
-  "description": "Encontra valores visuais soltos no código front-end e ajuda a migrá-los para design tokens.",
+  "version": "0.0.2",
+  "description": "Finds hardcoded visual values in front-end code and helps migrate them to design tokens.",
   "keywords": [
     "design-tokens",
     "design-system",
@@ -59,8 +59,13 @@
     "prepare": "npm run build"
   },
   "dependencies": {
+    "@csstools/css-color-parser": "^4.2.6",
+    "@csstools/css-parser-algorithms": "^4.0.2",
+    "@csstools/css-tokenizer": "^4.0.2",
     "commander": "^15.0.0",
-    "figlet": "^1.12.0"
+    "figlet": "^1.12.0",
+    "postcss": "^8.5.30",
+    "postcss-scss": "^4.0.9"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

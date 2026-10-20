@@ -4,9 +4,9 @@ import path from 'node:path';
 
 import { scanDirectory, isSupportedExtension } from '../src/scanner.ts';
 
-const fixture = path.join(import.meta.dirname, 'fixtures', 'projeto-basico');
+const fixture = path.join(import.meta.dirname, 'fixtures', 'basic-project');
 
-test('conta arquivos por extensão, inclusive em subpastas', async () => {
+test('counts files by extension, including subfolders', async () => {
     const result = await scanDirectory(fixture);
 
     assert.equal(result.total, 4);
@@ -17,22 +17,22 @@ test('conta arquivos por extensão, inclusive em subpastas', async () => {
     assert.equal(result.byExtension['.tsx'], 0);
 });
 
-test('ignora node_modules, dist e extensões não suportadas', async () => {
+test('ignores node_modules, dist and unsupported extensions', async () => {
     const result = await scanDirectory(fixture);
 
     assert.ok(result.files.every((file) => !file.includes('node_modules') && !file.startsWith('dist')));
-    assert.ok(!result.files.includes('notas.txt'));
+    assert.ok(!result.files.includes('notes.txt'));
 });
 
-test('lança erro para diretório inexistente', async () => {
-    await assert.rejects(() => scanDirectory('/caminho/que/nao/existe'), /Diretório não encontrado/);
+test('throws for a missing directory', async () => {
+    await assert.rejects(() => scanDirectory('/path/that/does/not/exist'), /Directory not found/);
 });
 
-test('lança erro quando o caminho é um arquivo', async () => {
-    await assert.rejects(() => scanDirectory(import.meta.filename), /Não é um diretório/);
+test('throws when the path is a file', async () => {
+    await assert.rejects(() => scanDirectory(import.meta.filename), /Not a directory/);
 });
 
-test('isSupportedExtension reconhece só as extensões analisadas', () => {
+test('isSupportedExtension accepts only analyzed extensions', () => {
     assert.equal(isSupportedExtension('.tsx'), true);
     assert.equal(isSupportedExtension('.txt'), false);
 });

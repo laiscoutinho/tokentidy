@@ -1,270 +1,296 @@
 # 🧹 TokenTidy
 
-Ferramenta de linha de comando desenvolvida como meu **Trabalho de Conclusão de Curso (TCC)** para ajudar a manter o código de front-end **fiel ao design system**. A ideia é encontrar valores visuais "soltos" no código (como `#4f46e5`, `17px` ou `font-family: Arial`), indicar qual **design token** deveria ser usado no lugar, corrigir o código com segurança e, quando o projeto ainda não tem tokens, ajudar a criá-los.
+A command-line tool built as my **undergraduate capstone project (TCC)** to help keep front-end code **faithful to the design system**. It finds hardcoded visual values in the code (such as `#4f46e5`, `17px` or `font-family: Arial`), points out which **design token** should be used instead, fixes the code safely and, when the project has no tokens yet, helps create them.
 
-> ⚠️ Projeto em desenvolvimento (versão `0.x`). Hoje a CLI já varre o projeto e identifica os arquivos que serão analisados; a detecção de valores soltos vem nas próximas etapas. Veja o [roadmap](#️-roadmap).
+> ⚠️ Work in progress (version `0.x`). Today the CLI already finds hardcoded colors, spacing and typography in CSS and SCSS files. See the [roadmap](#️-roadmap).
 
 ---
 
-## Sumário
+## Contents
 
-- [O problema](#-o-problema)
-- [O que são design tokens](#-o-que-são-design-tokens)
-- [A proposta](#-a-proposta)
-- [Escopo](#-escopo)
-- [Instalação e uso](#-instalação-e-uso)
-- [Como deve funcionar](#️-como-deve-funcionar)
-- [Trabalhos relacionados](#-trabalhos-relacionados)
-- [Metodologia](#-metodologia)
+- [The problem](#-the-problem)
+- [What design tokens are](#-what-design-tokens-are)
+- [The proposal](#-the-proposal)
+- [What makes it different: context](#-what-makes-it-different-context)
+- [Scope](#-scope)
+- [Installation and usage](#-installation-and-usage)
+- [How it works](#️-how-it-works)
+- [Related work](#-related-work)
+- [Methodology](#-methodology)
 - [Roadmap](#️-roadmap)
-- [Estrutura do repositório](#-estrutura-do-repositório)
-- [Desenvolvimento](#️-desenvolvimento)
-- [Relação com o TCC](#-relação-com-o-tcc)
-- [Licença](#-licença)
+- [Repository structure](#-repository-structure)
+- [Development](#️-development)
+- [About the TCC](#-about-the-tcc)
+- [License](#-license)
 
 ---
 
-## ❓ O problema
+## ❓ The problem
 
-Em quase todo projeto de front-end, o design começa organizado e vai se perdendo aos poucos:
+In almost every front-end project, the design starts organized and slowly drifts:
 
-- A mesma cor aparece escrita de cinco jeitos diferentes (`#4F46E5`, `#4f46e5`, `rgb(79, 70, 229)`…)
-- Surgem espaçamentos "quase iguais", como `10px`, `11px` e `12px`, que deveriam ser um só
-- Estilos ficam espalhados entre arquivos CSS, SCSS, estilos inline e componentes
-- Quando o design muda (ex.: a cor primária), é preciso caçar e trocar o valor manualmente em vários arquivos
+- The same color shows up written five different ways (`#4F46E5`, `#4f46e5`, `rgb(79, 70, 229)`…)
+- "Almost equal" spacing values appear, like `10px`, `11px` and `12px`, that should be a single one
+- Styles end up scattered across CSS, SCSS, inline styles and components
+- When the design changes (e.g. the primary color), the value has to be hunted down and replaced by hand in many files
 
-O resultado é uma interface **inconsistente** e um código **difícil de manter**. Os linters tradicionais (ESLint, Stylelint) verificam se o código está bem escrito, mas **não sabem se ele segue o design system**. E muitos projetos **nem chegaram a ter tokens**: criar um conjunto do zero a partir de um código existente é lento e manual.
+The result is an **inconsistent** interface and code that is **hard to maintain**. Traditional linters (ESLint, Stylelint) check whether the code is well written, but **they don't know whether it follows the design system**. And many projects **never had tokens at all**: building a set from scratch out of existing code is slow and manual.
 
 ---
 
-## 🎨 O que são design tokens
+## 🎨 What design tokens are
 
-**Design tokens** são as decisões visuais de um design system guardadas como dados nomeados: cores, espaçamentos, tipografia, bordas, sombras etc. Em vez de escrever o valor direto, o código referencia o token:
+**Design tokens** are the visual decisions of a design system stored as named data: colors, spacing, typography, borders, shadows and so on. Instead of writing the value directly, the code references the token:
 
 ```css
-/* ❌ Valor solto (hardcoded) */
-.botao {
+/* ❌ Hardcoded value */
+.button {
   background-color: #4f46e5;
   padding: 10px 12px;
   border-radius: 10px;
 }
 
-/* ✅ Usando design tokens */
-.botao {
+/* ✅ Using design tokens */
+.button {
   background-color: var(--color-primary);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
 }
 ```
 
-Os tokens podem ser **primitivos** (`--color-indigo-600: #4f46e5`) ou **semânticos** (`--color-primary: var(--color-indigo-600)`), e são exportados em formatos que designers e desenvolvedores compartilham, como o [DTCG](https://www.designtokens.org/) (W3C Design Tokens Community Group).
+Tokens can be **primitive** (`--color-indigo-600: #4f46e5`) or **semantic** (`--color-primary: var(--color-indigo-600)`), and they are exported in formats shared by designers and developers, such as [DTCG](https://www.designtokens.org/) (W3C Design Tokens Community Group).
 
-Assim, mudar a cor primária significa alterar **um único lugar**.
+Changing the primary color then means editing **a single place**.
 
 ---
 
-## 💡 A proposta
+## 💡 The proposal
 
-O **TokenTidy** ataca dois problemas: **detectar e corrigir os desvios** onde já existe um padrão e **ajudar a criar o padrão** onde ele ainda não existe.
+**TokenTidy** tackles two problems: **detecting and fixing drift** where a standard already exists, and **helping create the standard** where it doesn't exist yet.
 
-| Etapa | O que faz |
+| Step | What it does |
 |---|---|
-| 🔍 **Detectar** | Varre o projeto e encontra valores visuais soltos (cores, espaçamentos, tipografia), com arquivo, linha e coluna |
-| 🎯 **Sugerir** | Compara cada valor com os tokens do projeto e indica o token exato ou o mais próximo, explicando a escolha |
-| 🔁 **Corrigir** | Troca os valores pelos tokens editando só o trecho necessário, com simulação prévia (`--dry-run`) e, por padrão, apenas para valores exatos |
-| 🏷️ **Gerar** | Quando o projeto não tem tokens, agrupa os valores repetidos e propõe um arquivo de tokens com nomes semânticos |
-| 🛡️ **Verificar** | Saída previsível, `--json` e códigos de saída próprios para rodar no CI e em hooks de pre-commit |
+| 🔍 **Detect** | Scans the project and finds hardcoded visual values (colors, spacing, typography), with file, line and column |
+| 🎯 **Suggest** | Compares each value with the project's tokens and points to the exact or closest token, explaining the choice |
+| 🔁 **Fix** | Replaces values with tokens by editing only the necessary slice, with a preview (`--dry-run`) and, by default, only for exact matches |
+| 🏷️ **Generate** | When the project has no tokens, groups repeated values and proposes a token file with semantic names |
+| 🛡️ **Verify** | Predictable output, `--json` and dedicated exit codes to run in CI and pre-commit hooks |
 
-Princípios: nada é alterado sem pedido explícito, cada sugestão vem com o motivo, a mesma entrada produz sempre o mesmo resultado e um arquivo com erro não interrompe a análise dos demais. A ferramenta não coleta dados de uso nem envia nada para fora do computador.
+Principles: nothing is changed without an explicit request, every suggestion comes with a reason, the same input always produces the same output, and a broken file never stops the analysis of the others. The tool collects no usage data and sends nothing off your machine.
 
 ---
 
-## 🧭 Escopo
+## 🧠 What makes it different: context
 
-| Analisa | Fora do escopo (por decisão) |
+A value alone doesn't say whether it should be a token. TokenTidy's goal is to understand **what the value is doing** before suggesting anything:
+
+- **The same value can mean different things.** `width: 800px` that sets the maximum width of the page content on every screen is a layout decision, and a token candidate (e.g. `--layout-max-width`). The same `800px` setting the width of a card is a different decision, and shouldn't be merged with the first one just because the number is equal.
+- **Different values can mean the same thing.** A `max-width` repeated across page containers with slightly different values is probably one decision written several ways. Pointing that out helps the user decide whether it should become a single token.
+- **Context comes from the code itself:** the property, the selector and where it's used, which other declarations sit next to it, and how often the value repeats in the same role.
+
+This is what lets TokenTidy go beyond "this is a hardcoded value" and explain *why* something should (or shouldn't) become a token.
+
+---
+
+## 🧭 Scope
+
+| Analyzes | Out of scope (by design) |
 |---|---|
-| CSS e SCSS | Tailwind e outras abordagens de classes utilitárias |
-| Estilos inline do React (`style={{...}}` em JSX/TSX) | Bibliotecas de CSS-in-JS |
-| Angular: estilos do componente, arquivos de estilo e templates | Estilos dinâmicos, calculados só em execução |
-| HTML | Inteligência artificial e serviços externos |
+| CSS and SCSS | Tailwind and other utility-class approaches |
+| React inline styles (`style={{...}}` in JSX/TSX) | CSS-in-JS libraries |
+| Angular: component styles, style files and templates | Dynamic styles computed only at runtime |
+| HTML | Artificial intelligence and external services |
 
-Arquivos considerados hoje: `.css`, `.scss`, `.html`, `.js`, `.jsx`, `.ts` e `.tsx`. As pastas `node_modules`, `dist`, `build`, `.git` e `coverage` são ignoradas.
+Files considered today: `.css`, `.scss`, `.html`, `.js`, `.jsx`, `.ts` and `.tsx` (only `.css` and `.scss` are analyzed so far). The `node_modules`, `dist`, `build`, `.git` and `coverage` folders are ignored.
 
 ---
 
-## 🚀 Instalação e uso
+## 🚀 Installation and usage
 
-Requisito: **Node.js 22.17 ou superior**.
+Requirement: **Node.js 22.17 or later**.
 
-Como o pacote ainda não foi publicado no npm, instale direto do GitHub, como dependência de desenvolvimento do seu projeto:
+The package is not on npm yet, so install it straight from GitHub as a dev dependency of your project:
 
 ```bash
 npm install -D github:laiscoutinho/tokentidy
 npx tokentidy --help
 ```
 
-### Comandos disponíveis
+### Available commands
 
 ```bash
-tokentidy check ./src          # conta os arquivos analisáveis por extensão
-tokentidy check ./src --json   # o mesmo resultado em JSON, para scripts e CI
+tokentidy check ./src          # list hardcoded values in CSS and SCSS files
+tokentidy check ./src --json   # the same result as JSON, for scripts and CI
 tokentidy --version
 ```
 
-A saída segue a filosofia UNIX: só o dado, uma linha por registro, campos separados por tab. Por isso combina com outras ferramentas do terminal:
+The output follows the UNIX philosophy: only data, one hardcoded value per line (`file:line:column`, category, property and value, tab-separated). That makes it work with other terminal tools:
 
-```bash
-tokentidy check ./src | grep -v "0$"   # só as extensões que têm arquivos
+```
+src/App.scss:2:10	color	color	#ff0000
+src/components/Button.css:2:12	spacing	padding	12px
 ```
 
-Erros vão para o `stderr` e o comando termina com código de saída diferente de zero. A lista completa de comandos (atuais e planejados) está em [docs/comandos.md](docs/comandos.md).
+```bash
+tokentidy check ./src | grep color                           # colors only
+tokentidy check ./src | cut -f4 | sort | uniq -c | sort -rn  # most repeated values
+```
+
+Exit code: `0` no hardcoded values, `1` hardcoded values found (or a file with a syntax error), `2` usage error. Errors go to `stderr`. The full list of commands (current and planned) is in [docs/commands.md](docs/commands.md).
 
 ---
 
-## ⚙️ Como deve funcionar
-
-Fluxo previsto de uso:
+## ⚙️ How it works
 
 ```
-  Código do projeto
+  Project code
         │
         ▼
  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
- │  1. Ler o    │ ──▶ │ 2. Entender  │ ──▶ │ 3. Comparar  │
- │  projeto     │     │ o código(AST)│     │ com os tokens│
+ │  1. Read the │ ──▶ │ 2. Understand│ ──▶ │ 3. Compare   │
+ │  project     │     │ the code(AST)│     │ with tokens  │
  └──────────────┘     └──────────────┘     └──────┬───────┘
                                                   │
                                            ┌──────▼───────┐
-                                           │ 4. Reportar, │
-                                           │ sugerir ou   │
-                                           │ corrigir     │
+                                           │ 4. Report,   │
+                                           │ suggest or   │
+                                           │ fix          │
                                            └──────────────┘
 ```
 
-Cada arquivo é interpretado pela sua estrutura (árvore sintática), e não por busca de texto. Assim a ferramenta distingue uma cor de um texto que só parece uma e sabe a posição exata de cada valor, o que permite corrigir sem mexer no resto do arquivo.
+Each file is read through its structure (syntax tree), not through text search. That way the tool tells a color apart from text that only looks like one, and knows the exact position of every value, which makes it possible to fix code without touching the rest of the file.
 
-Exemplo previsto de um achado no `--json`:
+A finding in `--json`:
 
 ```json
 {
   "file": "src/App.scss",
-  "line": 10,
-  "column": 21,
-  "offset": 184,
+  "line": 2,
+  "column": 10,
+  "offset": 16,
+  "endOffset": 23,
   "kind": "color",
-  "value": "#f9fafb"
+  "property": "color",
+  "value": "#ff0000"
 }
 ```
 
 ---
 
-## 📚 Trabalhos relacionados
+## 📚 Related work
 
-Antes de construir o TokenTidy, ferramentas existentes foram estudadas e testadas na prática no [tcc-labs](https://github.com/laiscoutinho/tcc-labs). Cada uma resolve parte do problema:
+Before building TokenTidy, existing tools were studied and tested hands-on in [tcc-labs](https://github.com/laiscoutinho/tcc-labs). Each one solves part of the problem:
 
-| Ferramenta | Foco | Pontos fortes | Limitações observadas / documentadas |
+| Tool | Focus | Strengths | Observed / documented limitations |
 |---|---|---|---|
-| [**@lapidist/design-lint**](https://github.com/bylapidist/design-lint) | Linter de design system | Valida uso de tokens em JS, TS, CSS, SCSS e Less; formato de tokens DTIF; `--fix`; integração com CI, LSP e MCP | Precisa que os tokens já existam; não analisa expressões dinâmicas em estilo inline; `.sass` indentado gera `parse-error`; kernel em segundo plano exige cuidado ao trocar de projeto |
-| [**Design Token Extractor & Migrator**](https://github.com/bobrowsse-tech/design-token-extractor) | Extração e migração de tokens | Varre CSS, SCSS, Less, Vue, HTML e JS/TS; agrupa valores parecidos; gera DTCG/Tokens Studio; migração com pré-visualização e desfazer | Foco em extensão do VS Code; a verificação contínua é mais simples (`check` contra o lockfile) |
-| [**stylelint-declaration-strict-value**](https://github.com/AndyOGo/stylelint-declaration-strict-value) | Regra do Stylelint | Obriga o uso de variáveis em propriedades escolhidas | Só analisa folhas de estilo; não sabe quais tokens existem nem sugere substituições |
+| [**@lapidist/design-lint**](https://github.com/bylapidist/design-lint) | Design system linter | Validates token usage in JS, TS, CSS, SCSS and Less; DTIF token format; `--fix`; CI, LSP and MCP integration | Tokens must already exist; doesn't analyze dynamic expressions in inline styles; indented `.sass` produces a `parse-error`; the background kernel needs care when switching projects |
+| [**Design Token Extractor & Migrator**](https://github.com/bobrowsse-tech/design-token-extractor) | Token extraction and migration | Scans CSS, SCSS, Less, Vue, HTML and JS/TS; groups similar values; generates DTCG/Tokens Studio; migration with preview and undo | Focused on a VS Code extension; continuous checking is simpler (`check` against the lockfile) |
+| [**stylelint-declaration-strict-value**](https://github.com/AndyOGo/stylelint-declaration-strict-value) | Stylelint rule | Forces variables in chosen properties | Only analyzes stylesheets; doesn't know which tokens exist and doesn't suggest replacements |
 
-O TokenTidy se apoia nessas lições: combinar **verificação e correção** com a **geração de tokens** para quem ainda não tem um conjunto, sem processos em segundo plano, e tratar o **Angular** com o mesmo cuidado que o React.
+TokenTidy builds on these lessons: combine **checking and fixing** with **token generation** for those who don't have a set yet, without background processes, treat **Angular** with the same care as React, and use the **context** of each value to decide what is really a token.
 
 ---
 
-## 🔬 Metodologia
+## 🔬 Methodology
 
-1. **Revisão bibliográfica** sobre design systems, design tokens e padrões de formato (DTCG, DTIF)
-2. **Experimentação** com ferramentas existentes no [tcc-labs](https://github.com/laiscoutinho/tcc-labs), seguindo o fluxo: escolher, configurar, rodar em cada projeto-base, registrar resultados (inclusive o que falhou) e concluir
-3. **Levantamento de lacunas**: o que nenhuma ferramenta cobre bem (ex.: projetos sem tokens, CSS inline, Angular)
-4. **Desenvolvimento** do TokenTidy com foco nessas lacunas
-5. **Avaliação** do TokenTidy nos projetos-base, comparando com as ferramentas estudadas por critérios como:
-   - Formas de estilização detectadas
-   - Quantidade de valores soltos encontrados (e falsos positivos/negativos)
-   - Qualidade das sugestões de tokens e das correções automáticas
-   - Facilidade de instalação, configuração e uso
+1. **Literature review** on design systems, design tokens and format standards (DTCG, DTIF)
+2. **Experimentation** with existing tools in [tcc-labs](https://github.com/laiscoutinho/tcc-labs), following the flow: choose, configure, run on each base project, record results (including what failed) and conclude
+3. **Gap analysis**: what no tool covers well (e.g. projects without tokens, inline CSS, Angular, the context of a value)
+4. **Development** of TokenTidy focused on those gaps
+5. **Evaluation** of TokenTidy on the base projects, compared with the studied tools by criteria such as:
+   - Styling approaches detected
+   - Number of hardcoded values found (and false positives/negatives)
+   - Quality of token suggestions and automatic fixes
+   - Ease of installation, configuration and use
 
-Os projetos-base são a mesma aplicação de lista de tarefas feita em HTML + JavaScript, React + Vite e Angular, com formas de estilização diferentes. Eles ficam no [tcc-labs](https://github.com/laiscoutinho/tcc-labs).
+The base projects are the same to-do list app built with plain HTML + JavaScript, React + Vite and Angular, using different styling approaches. They live in [tcc-labs](https://github.com/laiscoutinho/tcc-labs), along with the results of each TokenTidy version (`testar-tokentidy/`).
 
 ---
 
 ## 🗺️ Roadmap
 
-**Legenda:** ⚪ Planejado · 🟡 Em andamento · 🟢 Concluído
+**Legend:** ⚪ Planned · 🟡 In progress · 🟢 Done
 
-| Etapa | Status |
+| Step | Status |
 |---|---|
-| Estudo de ferramentas existentes (design-lint, Design Token Extractor) | 🟢 |
-| Definição do escopo e da arquitetura | 🟢 |
-| Esqueleto da CLI em TypeScript (`check`, `--json`, testes) | 🟡 |
-| Detecção de valores soltos em CSS e SCSS | ⚪ |
-| Detecção em estilos inline do React (JSX/TSX) | ⚪ |
-| Detecção em componentes e templates Angular | ⚪ |
-| Leitura de arquivo de tokens (DTCG) | ⚪ |
-| Sugestão do token exato ou mais próximo | ⚪ |
-| Correção automática (`--fix`, `--dry-run`) | ⚪ |
-| Geração de tokens com nomes semânticos | ⚪ |
-| Uso no CI (códigos de saída, configuração do projeto) e publicação no npm | ⚪ |
-| Avaliação comparativa nos projetos-base | ⚪ |
-| Escrita do texto do TCC | ⚪ |
+| Study of existing tools (design-lint, Design Token Extractor) | 🟢 |
+| Scope and architecture definition | 🟢 |
+| TypeScript CLI skeleton (`check`, `--json`, tests) | 🟢 |
+| Hardcoded value detection in CSS and SCSS | 🟢 |
+| Detection in React inline styles (JSX/TSX) | ⚪ |
+| Detection in Angular components and templates | ⚪ |
+| Reading a token file (DTCG) | ⚪ |
+| Suggesting the exact or closest token | ⚪ |
+| Mapping `var()` fallback values (e.g. `var(--space, 12px)`) | ⚪ |
+| Relative units (`%`, `vw`, `vh`): compare with absolute values used in the same role and unify them into one token | ⚪ |
+| Context-aware suggestions (role of the value: page layout vs. component, see [above](#-what-makes-it-different-context)) | ⚪ |
+| Automatic fixes (`--fix`, `--dry-run`) | ⚪ |
+| Token generation with semantic names | ⚪ |
+| CI usage (project configuration) and npm release | ⚪ |
+| Comparative evaluation on the base projects | ⚪ |
+| Writing the TCC text | ⚪ |
 
 ---
 
-## 📁 Estrutura do repositório
+## 📁 Repository structure
 
 ```
 tokentidy/
 ├── src/
-│   ├── cli.ts          # interface de linha de comando (argumentos, saída, exit code)
-│   ├── index.ts        # API pública, para usar o TokenTidy como biblioteca
-│   ├── types.ts        # tipos compartilhados (ex.: Finding, um valor solto encontrado)
-│   ├── scanner.ts      # encontra os arquivos a analisar
-│   ├── parsers/        # análise de CSS/SCSS, JSX/TSX e Angular
-│   ├── tokens/         # leitura do arquivo de tokens
-│   ├── suggest/        # normalização de valores e token mais próximo
-│   ├── fix/            # correção automática
-│   └── generate/       # geração de tokens
-├── test/               # testes automatizados e projetos de exemplo (fixtures)
-└── docs/               # guia de desenvolvimento, comandos e registros
+│   ├── cli.ts          # entry point (enables the compile cache and loads program.ts)
+│   ├── program.ts      # command-line interface (arguments, output, exit code)
+│   ├── index.ts        # public API, to use TokenTidy as a library
+│   ├── types.ts        # shared types (e.g. Finding, a hardcoded value found)
+│   ├── scanner.ts      # finds the files to analyze
+│   ├── analyze.ts      # ties it together: reads each file and calls the parser for its extension
+│   ├── rules.ts        # what counts as a violation: properties, units and exceptions
+│   ├── position.ts     # converts an offset into line and column
+│   ├── parsers/        # CSS/SCSS (done), JSX/TSX and Angular analysis
+│   ├── tokens/         # reading the token file
+│   ├── suggest/        # value normalization and closest token
+│   ├── fix/            # automatic fixes
+│   └── generate/       # token generation
+├── test/               # automated tests and sample projects (fixtures)
+└── docs/               # development guide, commands and logs
 ```
 
-A CLI (`cli.ts`) só cuida de entrada e saída; toda a análise fica em módulos separados, testáveis sem terminal.
+The CLI (`cli.ts` and `program.ts`) only handles input and output; all analysis lives in separate modules that can be tested without a terminal.
 
 ---
 
-## 🛠️ Desenvolvimento
+## 🛠️ Development
 
-Feito em **TypeScript** (ESM), com Node.js **22.18 ou superior** para desenvolver: o Node executa os arquivos `.ts` direto, sem etapa de build. O build só acontece para gerar o pacote (`dist/`, com JavaScript e tipos).
+Written in **TypeScript** (ESM), with Node.js **22.18 or later** for development: Node runs the `.ts` files directly, with no build step. The build only happens to produce the package (`dist/`, with JavaScript and types).
 
 ```bash
 git clone https://github.com/laiscoutinho/tokentidy.git
 cd tokentidy
-npm install                    # instala as dependências e compila o dist/
+npm install                    # installs dependencies and builds dist/
 
-npm run dev -- check ./src     # roda a CLI direto do código-fonte
-npm run check                  # checagem de tipos + testes
-npm run build                  # compila src/ para dist/
-npm link                       # cria o comando global tokentidy (aponta para dist/)
+npm run dev -- check ./src     # runs the CLI straight from the source
+npm run check                  # type checking + tests
+npm run build                  # compiles src/ into dist/
+npm link                       # creates the global tokentidy command (points to dist/)
 ```
 
-Mais comandos e o passo a passo para testar a instalação como usuário estão em [docs/comandos.md](docs/comandos.md).
+More commands and the step-by-step for testing the install as a user are in [docs/commands.md](docs/commands.md).
 
 ---
 
-## 🔗 Relação com o TCC
+## 🔗 About the TCC
 
-- **Tema:** ferramenta para detecção, correção e geração de design tokens em projetos de front-end
-- **Autoria:** Laís Coutinho
-- **Curso / Instituição:** _preencher_
-- **Orientador(a):** _preencher_
-- **Laboratório de experimentos:** [tcc-labs](https://github.com/laiscoutinho/tcc-labs)
-
----
-
-## 📄 Licença
-
-_Defina a licença (ex.: MIT) ou indique que o conteúdo é de uso acadêmico._
+- **Topic:** a tool for detecting, fixing and generating design tokens in front-end projects
+- **Author:** Laís Coutinho
+- **Program / Institution:** _to fill in_
+- **Advisor:** _to fill in_
+- **Experiment lab:** [tcc-labs](https://github.com/laiscoutinho/tcc-labs)
 
 ---
 
-<sub>Feito com curiosidade e muito café ☕</sub>
+## 📄 License
+
+_Choose a license (e.g. MIT) or state that the content is for academic use._
+
+---
+
+<sub>Made with curiosity and lots of coffee ☕</sub>

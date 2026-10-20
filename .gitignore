@@ -3,5 +3,4 @@ node_modules/
 dist/
 !test/fixtures/**/dist/
 *.tgz
-teste-tokentidy/
 docs/CLAUDE.md

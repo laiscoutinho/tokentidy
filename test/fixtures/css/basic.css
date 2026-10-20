@@ -1,0 +1,26 @@
+.card {
+  color: #333;
+  background-color: white;
+  margin: 4px 8px 0 auto;
+  border: 1px solid #ccc;
+  padding: 16px !important;
+  margin-top: 8px /* comment with #f00 */;
+}
+
+/* Nothing here is a violation */
+.ok {
+  color: var(--color-text);
+  background: transparent;
+  border-color: currentColor;
+  margin: 0 auto;
+  padding: inherit;
+  gap: var(--space-2, 12px);
+  width: 320px;
+  border-radius: 4px;
+}
+
+@media (min-width: 768px) {
+  .card {
+    padding: 24px;
+  }
+}
