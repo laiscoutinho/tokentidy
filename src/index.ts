@@ -1,6 +1,8 @@
 // API pública: o que fica disponível com `import { ... } from 'tokentidy'`.
 export { analyzeDirectory } from './analyze.ts';
 export type { AnalysisResult } from './analyze.ts';
+export { loadConfig, validateConfig, DEFAULT_CONFIG, CONFIG_FILE, ConfigError } from './config.ts';
+export type { Config } from './config.ts';
 export { parseCss } from './parsers/css.ts';
 export type { StyleSyntax } from './parsers/css.ts';
 export { parseHtml } from './parsers/html.ts';
@@ -10,6 +12,11 @@ export { parseDtcg } from './parsers/dtcg.ts';
 export type { ParseResult, RootFontSize } from './parsers/collector.ts';
 export { findValues } from './parsers/css-values.ts';
 export type { ValueMatch } from './parsers/css-values.ts';
+export { generateTokens, TOKEN_TYPES } from './generate/generate.ts';
+export type { BelowThreshold, GeneratedToken, GenerationOptions, GenerationResult, OwnToken, ReusedToken, Suggestion } from './generate/generate.ts';
+export type { SemanticAlias } from './generate/semantic.ts';
+export { buildDtcgTree, renderOutput, writeOutput, dtcgValueOf } from './generate/output.ts';
+export { normalizeValue, normalizeFinding, colorInfo } from './suggest/normalize.ts';
 export { rulesForProperty } from './rules.ts';
 export type { PropertyRule, ValueMatcher } from './rules.ts';
 export { scanDirectory, isSupportedExtension, SUPPORTED_EXTENSIONS } from './scanner.ts';

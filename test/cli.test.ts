@@ -2,7 +2,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+import { copyFixture } from './helpers.ts';
 
 const cli = path.join(import.meta.dirname, '..', 'src', 'cli.ts');
 const fixtures = path.join(import.meta.dirname, 'fixtures');
@@ -82,4 +86,101 @@ test('check does not show the banner', () => {
     const { stdout } = run('check', project);
 
     assert.doesNotMatch(stdout, /_____/);
+});
+
+test('generate writes DTCG + CSS + SCSS into design-tokens/ and lists the files on stdout', async () => {
+    const dir = await copyFixture('generate-project');
+    try {
+        const { stdout, stderr, status } = runIn(dir, 'generate', '.');
+
+        assert.equal(status, 0);
+        assert.deepEqual(stdout.trim().split('\n'), [
+            path.join('design-tokens', 'tokens.tokens.json'),
+            path.join('design-tokens', 'tokens.css'),
+            path.join('design-tokens', '_tokens.scss'),
+        ]);
+        assert.match(stderr, /^6 new tokens, 0 kept, 0 semantic aliases$/m);
+        assert.match(stderr, /values used fewer than 2 times were not turned into tokens/);
+        assert.match(await readFile(path.join(dir, 'design-tokens', 'tokens.css'), 'utf8'), /--color-white: #ffffff;/);
+    } finally {
+        await rm(dir, { recursive: true });
+    }
+});
+
+test('with existing token files and no terminal, generate asks for --extend or --new and exits with 2', async () => {
+    const dir = await copyFixture('generate-project');
+    try {
+        runIn(dir, 'generate', '.');
+        const second = runIn(dir, 'generate', '.');
+        assert.equal(second.status, 2);
+        assert.equal(second.stdout, '');
+        assert.match(second.stderr, /Existing token files found/);
+        assert.match(second.stderr, /Use --extend to reuse them or --new to start over/);
+
+        const extend = runIn(dir, 'generate', '.', '--extend');
+        assert.equal(extend.status, 0);
+        assert.match(extend.stderr, /^0 new tokens, 6 kept/m);
+
+        const fresh = runIn(dir, 'generate', '.', '--new', '--min-occurrences', '3');
+        assert.equal(fresh.status, 0);
+        assert.match(fresh.stderr, /^2 new tokens, 0 kept/m);
+    } finally {
+        await rm(dir, { recursive: true });
+    }
+});
+
+test('generate --dry-run prints the files and writes nothing', async () => {
+    const dir = await copyFixture('generate-project');
+    try {
+        const { stdout, status } = runIn(dir, 'generate', '.', '--dry-run');
+
+        assert.equal(status, 0);
+        assert.match(stdout, /^==> design-tokens\/tokens\.tokens\.json <==\n\{/);
+        assert.match(stdout, /==> design-tokens\/tokens\.css <==\n/);
+        assert.equal(existsSync(path.join(dir, 'design-tokens')), false);
+    } finally {
+        await rm(dir, { recursive: true });
+    }
+});
+
+test('generate --json prints only valid JSON, with tokens and their occurrences', () => {
+    const { stdout, status } = run('generate', 'generate-project', '--json', '--dry-run');
+
+    assert.equal(status, 0);
+    const data = JSON.parse(stdout);
+    assert.equal(data.mode, 'extend');
+    assert.equal(data.config.minOccurrences, 2);
+    assert.equal(data.tokens.length, 6);
+    assert.ok(data.tokens.every((t: { occurrences: unknown[]; count: number }) => t.occurrences.length === t.count));
+    assert.equal(data.belowThreshold.length, 6);
+});
+
+test('the config file is read from the project; options on the command line win', async () => {
+    const dir = await copyFixture('generate-project');
+    try {
+        await writeFile(path.join(dir, 'tokentidy.config.json'), JSON.stringify({ minOccurrences: 3, output: 'tokens' }));
+        const fromConfig = runIn(dir, 'generate', '.', '--dry-run');
+        assert.match(fromConfig.stdout, /^==> tokens\/tokens\.tokens\.json <==/);
+        assert.match(fromConfig.stderr, /^2 new tokens/m);
+
+        const fromFlag = runIn(dir, 'generate', '.', '--dry-run', '--min-occurrences', '2');
+        assert.match(fromFlag.stderr, /^6 new tokens/m);
+
+        await writeFile(path.join(dir, 'tokentidy.config.json'), JSON.stringify({ minOccurences: 3 }));
+        const invalid = runIn(dir, 'generate', '.');
+        assert.equal(invalid.status, 2);
+        assert.match(invalid.stderr, /unknown option "minOccurences"/);
+    } finally {
+        await rm(dir, { recursive: true });
+    }
+});
+
+test('usage errors in generate exit with 2', () => {
+    const one = run('generate', 'generate-project', '--min-occurrences', '1');
+    assert.equal(one.status, 2);
+    assert.match(one.stderr, /--min-occurrences must be an integer >= 2/);
+
+    const both = run('generate', 'generate-project', '--extend', '--new');
+    assert.equal(both.status, 2);
+    assert.match(both.stderr, /--extend and --new cannot be used together/);
 });
