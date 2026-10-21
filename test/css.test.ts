@@ -4,13 +4,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { parseCss } from '../src/parsers/css.ts';
-import type { CssSyntax } from '../src/parsers/css.ts';
+import type { StyleSyntax } from '../src/parsers/css.ts';
 
 const fixtures = path.join(import.meta.dirname, 'fixtures', 'css');
 
 function parseFixture(name: string) {
     const source = readFileSync(path.join(fixtures, name), 'utf8');
-    const syntax: CssSyntax = name.endsWith('.scss') ? 'scss' : 'css';
+    const syntax: StyleSyntax = name.endsWith('.scss') ? 'scss' : 'css';
     return { source, ...parseCss(source, name, syntax) };
 }
 
@@ -25,9 +25,12 @@ test('CSS: shorthands, comments, !important and @media', () => {
         '3:21 background-color white',
         '4:11 margin 4px',
         '4:15 margin 8px',
+        '5:11 border 1px',
         '5:21 border #ccc',
         '6:12 padding 16px',
         '7:15 margin-top 8px',
+        '18:10 width 320px',
+        '19:18 border-radius 4px',
         '24:14 padding 24px',
     ]);
 });
@@ -37,8 +40,8 @@ test('token definitions (--x) are not violations', () => {
 });
 
 test('colors inside functions and color functions', () => {
+    // A sombra com `var()` em uma das camadas já depende de token: não é reportada
     assert.deepEqual(summary('functions.css'), [
-        '2:25 box-shadow rgba(0, 0, 0, .2)',
         '3:10 color hsl(210 50% 40%)',
         '4:18 outline-color oklch(70% 0.1 200)',
         '5:47 background-image #fff',
@@ -59,6 +62,7 @@ test('typography: size, line height, weight, family and the font shorthand', () 
         '10:16 font bold',
         '10:21 font 12px',
         '10:26 font 20px',
+        '10:31 font Georgia, serif',
     ]);
 });
 
@@ -69,11 +73,14 @@ test('SCSS: variables, // comments, module functions, interpolation and nesting'
     ]);
 });
 
-test('category of each finding', () => {
-    const kinds = new Set(parseFixture('typography.css').findings.map((f) => f.kind));
-    assert.deepEqual([...kinds], ['typography']);
-    assert.equal(parseFixture('basic.css').findings[2]?.kind, 'spacing');
-    assert.equal(parseFixture('basic.css').findings[0]?.kind, 'color');
+test('token type of each finding', () => {
+    assert.deepEqual(parseFixture('typography.css').findings.map((f) => f.type), [
+        'font-size', 'line-height', 'font-weight', 'letter-spacing', 'font-family',
+        'font-weight', 'font-size', 'line-height', 'font-family',
+    ]);
+    assert.deepEqual(parseFixture('basic.css').findings.map((f) => f.type), [
+        'color', 'color', 'spacing', 'spacing', 'border-width', 'color', 'spacing', 'spacing', 'container', 'radius', 'spacing',
+    ]);
 });
 
 test('a syntax error becomes an AnalysisError instead of throwing', () => {

@@ -10,15 +10,21 @@ const project = path.join(fixtures, 'basic-project');
 
 // Roda a partir da pasta de fixtures, para os caminhos da saída ficarem curtos e previsíveis
 function run(...args: string[]) {
-    return spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', cwd: fixtures });
+    return runIn(fixtures, ...args);
 }
 
-test('check prints one finding per line (file:line:column, category, property, value) and exits with 1', () => {
+// Sem `stdio: 'inherit'`, a CLI não está num terminal interativo: é o caso de CI
+function runIn(cwd: string, ...args: string[]) {
+    return spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', cwd });
+}
+
+test('check prints one finding per line (file:line:column, token type, property, value) and exits with 1', () => {
     const { stdout, stderr, status } = run('check', project);
 
     assert.equal(status, 1);
     assert.equal(stderr, '');
     assert.deepEqual(stdout.trim().split('\n'), [
+        `${path.join('basic-project', 'src', 'App.jsx')}:2:32\tcolor\tcolor\t#ff0000`,
         `${path.join('basic-project', 'src', 'App.scss')}:2:10\tcolor\tcolor\t#ff0000`,
         `${path.join('basic-project', 'src', 'components', 'Button.css')}:2:12\tspacing\tpadding\t12px`,
     ]);
@@ -36,10 +42,10 @@ test('check --json prints only valid JSON to stdout', () => {
 
     assert.equal(status, 1);
     const data = JSON.parse(stdout);
-    assert.equal(data.filesAnalyzed, 2);
-    assert.deepEqual(data.findings[0], {
+    assert.equal(data.filesAnalyzed, 4);
+    assert.deepEqual(data.findings[1], {
         file: 'src/App.scss', line: 2, column: 10, offset: 16, endOffset: 23,
-        kind: 'color', property: 'color', value: '#ff0000',
+        type: 'color', property: 'color', value: '#ff0000', host: 'scss', selector: '.app',
     });
     assert.deepEqual(data.errors, []);
 });

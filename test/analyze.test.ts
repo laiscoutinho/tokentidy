@@ -6,13 +6,14 @@ import { analyzeDirectory } from '../src/analyze.ts';
 
 const fixtures = path.join(import.meta.dirname, 'fixtures');
 
-test('analyzes only CSS/SCSS, ignoring node_modules and dist', async () => {
+test('analyzes styles, HTML and JSX, ignoring node_modules and dist', async () => {
     const result = await analyzeDirectory(path.join(fixtures, 'basic-project'));
 
-    assert.equal(result.filesAnalyzed, 2);
-    assert.deepEqual(result.findings.map((f) => `${f.file} ${f.value}`), [
-        'src/App.scss #ff0000',
-        'src/components/Button.css 12px',
+    assert.equal(result.filesAnalyzed, 4);
+    assert.deepEqual(result.findings.map((f) => `${f.file} ${f.host} ${f.value}`), [
+        'src/App.jsx jsx #ff0000',
+        'src/App.scss scss #ff0000',
+        'src/components/Button.css css 12px',
     ]);
     assert.deepEqual(result.errors, []);
 });

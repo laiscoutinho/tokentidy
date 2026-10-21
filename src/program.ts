@@ -5,6 +5,7 @@ import { Command, CommanderError } from 'commander';
 
 import { pkg } from './package-info.ts';
 import { analyzeDirectory } from './analyze.ts';
+import type { AnalysisResult } from './analyze.ts';
 import { bannerText } from './banner.ts';
 
 /** Códigos de saída: o CI e os hooks decidem por eles. */
@@ -28,7 +29,7 @@ Exit codes: 0 no hardcoded values, 1 hardcoded values or files with syntax error
 
 program
     .command('check')
-    .description('List hardcoded visual values (colors, spacing, typography) in CSS and SCSS files')
+    .description('List hardcoded visual values in stylesheets (CSS, SCSS, Sass, Less) and inline styles (HTML, JSX, Angular)')
     .argument('<dir>', 'project directory to analyze')
     .option('--json', 'print the result as JSON')
     .action(async (dir: string, options: { json?: boolean }) => {
@@ -41,17 +42,24 @@ program
             return;
         }
 
-        // Caminho relativo à pasta atual: o terminal e o editor transformam `arquivo:linha:coluna` em link
-        const display = (file: string) => path.relative(process.cwd(), path.join(result.root, file));
-
         // Um achado por linha, campos separados por tab: fácil de usar com grep/sort/awk
         for (const f of result.findings) {
-            console.log(`${display(f.file)}:${f.line}:${f.column}\t${f.kind}\t${f.property}\t${oneLine(f.value)}`);
+            console.log(`${display(result, f.file)}:${f.line}:${f.column}\t${f.type}\t${f.property}\t${oneLine(f.value)}`);
         }
-        for (const e of result.errors) {
-            console.error(`${display(e.file)}:${e.line}:${e.column}\tsyntax error\t${e.message}`);
-        }
+        printErrors(result);
     });
+
+/** Arquivos com erro de sintaxe vão para o stderr, no mesmo formato `arquivo:linha:coluna` dos achados. */
+function printErrors(result: AnalysisResult): void {
+    for (const e of result.errors) {
+        console.error(`${display(result, e.file)}:${e.line}:${e.column}\tsyntax error\t${e.message}`);
+    }
+}
+
+/** Caminho relativo à pasta atual: o terminal e o editor transformam `arquivo:linha:coluna` em link. */
+function display(result: AnalysisResult, file: string): string {
+    return path.relative(process.cwd(), path.join(result.root, file));
+}
 
 /** Valores que ocupam várias linhas no arquivo (ex.: lista de fontes) viram uma linha só na saída de texto. */
 function oneLine(value: string): string {
