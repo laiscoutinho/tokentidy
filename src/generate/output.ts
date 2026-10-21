@@ -1,0 +1,383 @@
+// Saída da geração: a pasta de tokens (padrão `design-tokens/`).
+// - `tokens.tokens.json`: formato DTCG (W3C, versão 2025.10), a fonte da verdade. Ferramentas como
+//   Style Dictionary e Tokens Studio leem esse formato;
+// - `tokens.css`: os mesmos tokens como custom properties (`--color-red-500`), que funcionam em qualquer arquivo;
+// - `_tokens.scss` / `_tokens.less`: só quando o projeto usa SCSS/Sass ou Less, para usar em funções
+//   que rodam no build (`darken($cor, 10%)`), que não aceitam `var()`.
+// Projeto grande (muitos tokens): o CSS é dividido em um arquivo por categoria e entra um README.
+// Cada token leva em `$extensions["dev.tokentidy"]` as ocorrências no código: é o que o autofix vai usar.
+
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+import { cssValueOf } from '../parsers/dtcg.ts';
+import { colorInfo, cubicBezierOf, lengthInPx, parseLength, parseShadow, splitFontFamilies } from '../suggest/normalize.ts';
+import type { ShadowLayer } from '../suggest/normalize.ts';
+import type { Finding, TokenType } from '../types.ts';
+import type { GeneratedToken, GenerationResult, OwnToken } from './generate.ts';
+import { TOKEN_TYPES } from './generate.ts';
+import type { SemanticAlias } from './semantic.ts';
+
+/** Chave das extensões do TokenTidy no DTCG (notação de domínio invertido, como a especificação pede). */
+export const EXTENSION = 'dev.tokentidy';
+export const DTCG_FILE = 'tokens.tokens.json';
+
+/** Arquivos que o TokenTidy gera: só eles são apagados no modo "começar do zero". */
+const GENERATED_FILES = [DTCG_FILE, 'tokens.css', '_tokens.scss', '_tokens.less', 'README.md'];
+const SPLIT_DIR = 'css';
+
+type DtcgTree = Record<string, unknown>;
+
+interface DtcgToken {
+    $type?: string;
+    $value: unknown;
+    $extensions?: Record<string, unknown>;
+}
+
+// ─── DTCG ───────────────────────────────────────────────────────────────────
+
+/** Valor e `$type` de um token no formato DTCG. Unidade que o DTCG não aceita (`em`, `%`) vira `number` + unidade na extensão. */
+export function dtcgValueOf(type: TokenType, key: string): { $type?: string; $value: unknown; unit?: string } {
+    switch (type) {
+        case 'color':
+            return { $type: 'color', $value: dtcgColor(key) ?? key };
+        case 'font-family': {
+            const families = splitFontFamilies(key);
+            return { $type: 'fontFamily', $value: families.length === 1 ? families[0] : families };
+        }
+        case 'font-weight':
+            return { $type: 'fontWeight', $value: Number.isFinite(Number(key)) ? Number(key) : key };
+        case 'opacity':
+        case 'z-index':
+            return { $type: 'number', $value: Number(key) };
+        case 'duration':
+            return { $type: 'duration', $value: { value: Number(key.replace(/ms$/, '')), unit: 'ms' } };
+        case 'easing': {
+            const bezier = cubicBezierOf(key);
+            return bezier ? { $type: 'cubicBezier', $value: bezier } : { $value: key };
+        }
+        case 'shadow': {
+            const layers = parseShadow(key)?.map(dtcgShadowLayer);
+            if (!layers || layers.some((layer) => layer === undefined)) {
+                return { $value: key };
+            }
+            return { $type: 'shadow', $value: layers.length === 1 ? layers[0] : layers };
+        }
+        case 'line-height':
+            if (parseLength(key)?.unit === '') {
+                return { $type: 'number', $value: Number(key) };
+            }
+            return dtcgDimension(key);
+        default:
+            return dtcgDimension(key);
+    }
+}
+
+function dtcgDimension(key: string): { $type?: string; $value: unknown; unit?: string } {
+    const length = parseLength(key);
+    if (!length) {
+        return { $value: key };
+    }
+    if (length.unit === 'px' || length.unit === 'rem' || (length.unit === '' && length.value === 0)) {
+        return { $type: 'dimension', $value: { value: length.value, unit: length.unit || 'px' } };
+    }
+    return { $type: 'number', $value: length.value, unit: length.unit };
+}
+
+/** Cor no formato 2025.10: `{ colorSpace, components, alpha?, hex }`. Fora do sRGB, fica em OKLCH. */
+function dtcgColor(key: string): Record<string, unknown> | undefined {
+    const info = colorInfo(key);
+    if (!info) {
+        return undefined;
+    }
+    const alpha = info.alpha < 1 ? { alpha: info.alpha } : {};
+    if (info.wideGamut) {
+        const [l, c, h] = info.oklch;
+        return { colorSpace: 'oklch', components: [round(l), round(c), Number.isNaN(h) ? 'none' : round(h)], ...alpha };
+    }
+    return { colorSpace: 'srgb', components: info.srgb.map(round), ...alpha, hex: info.hex!.slice(0, 7) };
+}
+
+function dtcgShadowLayer(layer: ShadowLayer): Record<string, unknown> | undefined {
+    const parts = [layer.offsetX, layer.offsetY, layer.blur, layer.spread].map((p) => dtcgDimension(p === '0' ? '0px' : p));
+    const color = dtcgColor(layer.color);
+    if (parts.some((p) => p.$type !== 'dimension') || !color) {
+        return undefined;
+    }
+    const [offsetX, offsetY, blur, spread] = parts.map((p) => p.$value);
+    return { color, offsetX, offsetY, blur, spread, ...(layer.inset ? { inset: true } : {}) };
+}
+
+function round(n: number): number {
+    return Math.round(n * 10000) / 10000;
+}
+
+/** Ocorrência como vai para o JSON: o que o autofix precisa para trocar o trecho certo do arquivo certo. */
+function occurrenceOf(finding: Finding): Record<string, unknown> {
+    const { file, line, column, offset, endOffset, property, value, host, selector, atRules, function: fn, impliedUnit } = finding;
+    return {
+        file, line, column, offset, endOffset, property, value, host,
+        ...(selector === undefined ? {} : { selector }),
+        ...(atRules === undefined ? {} : { atRules }),
+        ...(fn === undefined ? {} : { function: fn }),
+        ...(impliedUnit === undefined ? {} : { impliedUnit }),
+    };
+}
+
+function tokenEntry(token: GeneratedToken): DtcgToken {
+    const { unit, ...dtcg } = dtcgValueOf(token.type, token.key);
+    return {
+        ...dtcg,
+        $extensions: {
+            [EXTENSION]: {
+                type: token.type,
+                key: token.key,
+                css: token.value,
+                ...(unit ? { unit } : {}),
+                count: token.count,
+                spellings: token.spellings,
+                ...(token.equivalents ? { equivalents: token.equivalents.map(({ name, file, line }) => ({ name, file, line })) } : {}),
+                occurrences: token.occurrences.map(occurrenceOf),
+            },
+        },
+    };
+}
+
+function aliasEntry(alias: SemanticAlias): DtcgToken {
+    return {
+        $type: 'color',
+        $value: `{${alias.target.join('.')}}`,
+        $extensions: { [EXTENSION]: { count: alias.count, occurrences: alias.occurrences.map(occurrenceOf) } },
+    };
+}
+
+/**
+ * Árvore DTCG final. No modo extend parte do arquivo que já existe: tokens que não aparecem mais no código
+ * continuam lá (podem estar em uso via `var()`), e os gerados agora são atualizados ou acrescentados.
+ */
+export function buildDtcgTree(result: GenerationResult, existing: DtcgTree | undefined): DtcgTree {
+    const tree: DtcgTree = existing ? structuredClone(existing) : {};
+    for (const token of result.tokens) {
+        setAt(tree, token.path, tokenEntry(token));
+    }
+    for (const alias of result.aliases) {
+        if (getAt(tree, alias.path) === undefined || isTokenNode(getAt(tree, alias.path))) {
+            setAt(tree, alias.path, aliasEntry(alias));
+        }
+    }
+    return tree;
+}
+
+function getAt(tree: DtcgTree, trail: readonly string[]): unknown {
+    let node: unknown = tree;
+    for (const key of trail) {
+        node = typeof node === 'object' && node !== null ? (node as DtcgTree)[key] : undefined;
+    }
+    return node;
+}
+
+function setAt(tree: DtcgTree, trail: readonly string[], value: DtcgToken): void {
+    let node = tree;
+    for (const key of trail.slice(0, -1)) {
+        const next = node[key];
+        if (typeof next !== 'object' || next === null || isTokenNode(next)) {
+            node[key] = {};
+        }
+        node = node[key] as DtcgTree;
+    }
+    node[trail.at(-1)!] = value;
+}
+
+function isTokenNode(node: unknown): node is DtcgToken {
+    return typeof node === 'object' && node !== null && '$value' in node;
+}
+
+/** Todos os tokens de uma árvore, em ordem, com o tipo herdado dos grupos. */
+function* tokensOf(tree: DtcgTree, trail: string[] = [], type?: string): Generator<{ path: string[]; token: DtcgToken; type?: string }> {
+    const ownType = typeof tree['$type'] === 'string' ? tree['$type'] : type;
+    for (const [key, child] of Object.entries(tree)) {
+        if (key.startsWith('$') || typeof child !== 'object' || child === null) {
+            continue;
+        }
+        if (isTokenNode(child)) {
+            yield { path: [...trail, key], token: child, ...(child.$type ?? ownType ? { type: child.$type ?? ownType } : {}) };
+        } else {
+            yield* tokensOf(child as DtcgTree, [...trail, key], ownType);
+        }
+    }
+}
+
+/** Tokens gerados antes pelo TokenTidy (os que têm a extensão), para manter o nome no modo extend. */
+export function ownTokensOf(tree: DtcgTree): OwnToken[] {
+    const own: OwnToken[] = [];
+    for (const { path: trail, token } of tokensOf(tree)) {
+        const extension = token.$extensions?.[EXTENSION] as { type?: TokenType; key?: string } | undefined;
+        if (extension?.type && extension.key !== undefined) {
+            own.push({ path: trail, type: extension.type, key: extension.key });
+        }
+    }
+    return own;
+}
+
+/** Lê o `tokens.tokens.json` da pasta de saída, se existir. */
+export async function readDtcgTree(outDir: string): Promise<DtcgTree | undefined> {
+    const file = path.join(outDir, DTCG_FILE);
+    if (!existsSync(file)) {
+        return undefined;
+    }
+    const json: unknown = JSON.parse(await readFile(file, 'utf8'));
+    return typeof json === 'object' && json !== null && !Array.isArray(json) ? (json as DtcgTree) : undefined;
+}
+
+// ─── CSS, SCSS e Less ───────────────────────────────────────────────────────
+
+interface FlatToken {
+    name: string;
+    category: string;
+    /** Valor final em CSS, ou o nome do token apontado (alias). */
+    value: string;
+    alias?: string;
+}
+
+/** Lista plana a partir da árvore DTCG: o CSS sai sempre do mesmo lugar que o JSON. */
+function flatten(tree: DtcgTree): FlatToken[] {
+    const flat: FlatToken[] = [];
+    for (const { path: trail, token, type } of tokensOf(tree)) {
+        const name = trail.join('-');
+        const category = trail[0]!;
+        const reference = typeof token.$value === 'string' ? /^\{([^}]+)\}$/.exec(token.$value)?.[1] : undefined;
+        if (reference) {
+            flat.push({ name, category, value: '', alias: reference.split('.').join('-') });
+            continue;
+        }
+        const extension = token.$extensions?.[EXTENSION] as { css?: string } | undefined;
+        const value = extension?.css ?? cssValueOf(token.$value, type);
+        if (value !== undefined) {
+            flat.push({ name, category, value });
+        }
+    }
+    return flat;
+}
+
+type Syntax = 'css' | 'scss' | 'less';
+
+function declarationLine(token: FlatToken, syntax: Syntax): string {
+    switch (syntax) {
+        case 'css':
+            return `  --${token.name}: ${token.alias ? `var(--${token.alias})` : token.value};`;
+        case 'scss':
+            return `$${token.name}: ${token.alias ? `$${token.alias}` : token.value};`;
+        case 'less':
+            return `@${token.name}: ${token.alias ? `@${token.alias}` : token.value};`;
+    }
+}
+
+const HEADER = '/* Generated by TokenTidy from tokens.tokens.json. Edit the JSON and run `tokentidy generate` again. */';
+
+/** Um bloco por categoria, com o nome da categoria em comentário: o arquivo se lê como um índice. */
+function stylesheet(tokens: readonly FlatToken[], syntax: Syntax): string {
+    const sections = [...Map.groupBy(tokens, (t) => t.category)].map(([category, ofCategory]) =>
+        [syntax === 'css' ? `  /* ${category} */` : `// ${category}`, ...ofCategory.map((t) => declarationLine(t, syntax))].join('\n'));
+    const body = sections.join('\n\n');
+    return syntax === 'css' ? `${HEADER}\n:root {\n${body}\n}\n` : `${HEADER}\n${body}\n`;
+}
+
+export interface WriteOptions {
+    /** Pasta de saída, absoluta. */
+    outDir: string;
+    mode: 'extend' | 'new';
+    /** Linguagens de estilo do projeto: decidem se `_tokens.scss` e `_tokens.less` são gerados. */
+    styleLanguages: readonly string[];
+    splitThreshold: number;
+}
+
+export interface OutputFile {
+    /** Caminho absoluto. */
+    file: string;
+    content: string;
+}
+
+/** Monta os arquivos de saída (sem escrever): o `--dry-run` mostra exatamente isto. */
+export function renderOutput(tree: DtcgTree, options: WriteOptions): OutputFile[] {
+    const flat = sortForReading(flatten(tree));
+    const at = (name: string) => path.join(options.outDir, name);
+    const files: OutputFile[] = [{ file: at(DTCG_FILE), content: `${JSON.stringify(tree, null, 2)}\n` }];
+
+    const split = flat.length > options.splitThreshold;
+    if (split) {
+        const categories = [...new Set(flat.map((t) => t.category))];
+        for (const category of categories) {
+            files.push({ file: at(path.join(SPLIT_DIR, `${category}.css`)), content: stylesheet(flat.filter((t) => t.category === category), 'css') });
+        }
+        files.push({ file: at('tokens.css'), content: `${HEADER}\n${categories.map((c) => `@import "./${SPLIT_DIR}/${c}.css";`).join('\n')}\n` });
+    } else {
+        files.push({ file: at('tokens.css'), content: stylesheet(flat, 'css') });
+    }
+    if (options.styleLanguages.includes('scss') || options.styleLanguages.includes('sass')) {
+        files.push({ file: at('_tokens.scss'), content: stylesheet(flat, 'scss') });
+    }
+    if (options.styleLanguages.includes('less')) {
+        files.push({ file: at('_tokens.less'), content: stylesheet(flat, 'less') });
+    }
+    if (split) {
+        files.push({ file: at('README.md'), content: readme(files.map((f) => path.relative(options.outDir, f.file).split(path.sep).join('/')), flat.length) });
+    }
+    return files;
+}
+
+/**
+ * Ordem de leitura: categorias na ordem de `TOKEN_TYPES` e, dentro delas, medidas do menor para o maior.
+ * Não dá para confiar na ordem do JSON: em objetos JavaScript, chaves que parecem inteiros (`"3"`)
+ * sempre vêm antes das outras (`"2_5"`), qualquer que seja a ordem de inserção.
+ */
+function sortForReading(tokens: FlatToken[]): FlatToken[] {
+    const measure = (t: FlatToken) => (t.alias ? undefined : lengthInPx(t.value) ?? parseLength(t.value)?.value);
+    const byCategory = [...Map.groupBy(tokens, (t) => t.category)].sort(([a], [b]) => categoryRank(a) - categoryRank(b));
+    return byCategory.flatMap(([, ofCategory]) => {
+        const measures = ofCategory.map(measure);
+        if (measures.some((m) => m === undefined)) {
+            return ofCategory;
+        }
+        // `toSorted` é estável: medidas iguais (16px e 1rem) mantêm a ordem do JSON
+        return ofCategory.map((t, i) => ({ t, m: measures[i]! })).toSorted((a, b) => a.m - b.m).map(({ t }) => t);
+    });
+}
+
+function categoryRank(category: string): number {
+    const index = TOKEN_TYPES.indexOf(category as TokenType);
+    if (index !== -1) {
+        return index;
+    }
+    // `text-shadow` fica junto de `shadow`; categorias de fora (modo extend) vão para o fim
+    return category === 'text-shadow' ? TOKEN_TYPES.indexOf('shadow') : TOKEN_TYPES.length;
+}
+
+function readme(files: readonly string[], count: number): string {
+    return `# Design tokens
+
+Generated by TokenTidy: ${count} tokens.
+
+- \`${DTCG_FILE}\` is the source of truth, in the W3C Design Tokens (DTCG) format.
+- \`tokens.css\` imports one file per category from \`${SPLIT_DIR}/\` and exposes every token as a CSS custom property.
+- \`_tokens.scss\` / \`_tokens.less\` (when present) expose the same tokens as preprocessor variables.
+
+Files:
+
+${files.map((file) => `- \`${file}\``).join('\n')}
+`;
+}
+
+/** Escreve os arquivos. No modo "começar do zero", apaga antes só os arquivos que o TokenTidy gera. */
+export async function writeOutput(files: readonly OutputFile[], options: WriteOptions): Promise<void> {
+    if (options.mode === 'new') {
+        for (const name of GENERATED_FILES) {
+            await rm(path.join(options.outDir, name), { force: true });
+        }
+        await rm(path.join(options.outDir, SPLIT_DIR), { recursive: true, force: true });
+    }
+    for (const { file, content } of files) {
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, content);
+    }
+}

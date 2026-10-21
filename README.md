@@ -2,7 +2,7 @@
 
 A command-line tool built as my **undergraduate capstone project (TCC)** to help keep front-end code **faithful to the design system**. It finds hardcoded visual values in the code (such as `#4f46e5`, `17px` or `font-family: Arial`), points out which **design token** should be used instead, fixes the code safely and, when the project has no tokens yet, helps create them.
 
-> ⚠️ Work in progress (version `0.x`). Today the CLI already finds hardcoded colors, spacing and typography in CSS and SCSS files. See the [roadmap](#️-roadmap).
+> ⚠️ Work in progress (version `0.0.x`: each feature is a patch release; `0.1.0` will be the first with every planned feature). Today the CLI finds hardcoded values in CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) and Angular, and generates design tokens (DTCG + CSS/SCSS/Less) from the repeated ones. Automatic fixes are next. See the [roadmap](#️-roadmap).
 
 ---
 
@@ -70,7 +70,7 @@ Changing the primary color then means editing **a single place**.
 
 | Step | What it does |
 |---|---|
-| 🔍 **Detect** | Scans the project and finds hardcoded visual values (colors, spacing, typography), with file, line and column |
+| 🔍 **Detect** | Scans the project and finds hardcoded visual values (colors, spacing, sizes, radius, typography, shadows, motion…), with file, line and column |
 | 🎯 **Suggest** | Compares each value with the project's tokens and points to the exact or closest token, explaining the choice |
 | 🔁 **Fix** | Replaces values with tokens by editing only the necessary slice, with a preview (`--dry-run`) and, by default, only for exact matches |
 | 🏷️ **Generate** | When the project has no tokens, groups repeated values and proposes a token file with semantic names |
@@ -96,12 +96,13 @@ This is what lets TokenTidy go beyond "this is a hardcoded value" and explain *w
 
 | Analyzes | Out of scope (by design) |
 |---|---|
-| CSS and SCSS | Tailwind and other utility-class approaches |
+| CSS, SCSS, Sass (indented) and Less | Tailwind and other utility-class approaches |
 | React inline styles (`style={{...}}` in JSX/TSX) | CSS-in-JS libraries |
-| Angular: component styles, style files and templates | Dynamic styles computed only at runtime |
-| HTML | Artificial intelligence and external services |
+| Angular: component styles, style files and templates (`[style.x]`, `[ngStyle]`) | Dynamic styles computed only at runtime |
+| HTML (`<style>` and `style=""`) | Artificial intelligence and external services |
+| Design token files in the [DTCG](https://www.designtokens.org/) format | |
 
-Files considered today: `.css`, `.scss`, `.html`, `.js`, `.jsx`, `.ts` and `.tsx` (only `.css` and `.scss` are analyzed so far). The `node_modules`, `dist`, `build`, `.git` and `coverage` folders are ignored.
+Files considered: `.css`, `.scss`, `.sass`, `.less`, `.html`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx` and `*.tokens.json`. Folders like `node_modules`, `dist`, `build`, `.angular` and `.next`, plus type declarations, tests, stories and minified files, are ignored.
 
 ---
 
@@ -119,24 +120,29 @@ npx tokentidy --help
 ### Available commands
 
 ```bash
-tokentidy check ./src          # list hardcoded values in CSS and SCSS files
+tokentidy check ./src          # list hardcoded values
 tokentidy check ./src --json   # the same result as JSON, for scripts and CI
+tokentidy generate .           # turn repeated values into tokens in design-tokens/
+tokentidy generate . --dry-run # show the token files without writing them
 tokentidy --version
 ```
 
-The output follows the UNIX philosophy: only data, one hardcoded value per line (`file:line:column`, category, property and value, tab-separated). That makes it work with other terminal tools:
+`check` follows the UNIX philosophy: only data, one hardcoded value per line (`file:line:column`, token type, property and value, tab-separated). That makes it work with other terminal tools:
 
 ```
-src/App.scss:2:10	color	color	#ff0000
-src/components/Button.css:2:12	spacing	padding	12px
+src/App.jsx:29:28	color	color	#4f46e5
+src/App.jsx:29:93	spacing	margin-bottom	24
+src/App.scss:8:8	spacing	gap	10px
 ```
 
 ```bash
-tokentidy check ./src | grep color                           # colors only
+tokentidy check ./src | awk -F'\t' '$2 == "color"'            # colors only
 tokentidy check ./src | cut -f4 | sort | uniq -c | sort -rn  # most repeated values
 ```
 
-Exit code: `0` no hardcoded values, `1` hardcoded values found (or a file with a syntax error), `2` usage error. Errors go to `stderr`. The full list of commands (current and planned) is in [docs/commands.md](docs/commands.md).
+`generate` writes `tokens.tokens.json` (DTCG) and `tokens.css`, plus `_tokens.scss`/`_tokens.less` when the project uses them. A value becomes a token when it is used at least twice (configurable in `tokentidy.config.json`); tokens the project already has are reused; names follow familiar scales (`spacing-2`, `radius-lg`, `color-indigo-600`).
+
+Exit code: `0` ok, `1` hardcoded values found (or a file with a syntax error), `2` usage error. Errors go to `stderr`. The full list of commands, options and configuration is in [docs/commands.md](docs/commands.md).
 
 ---
 
@@ -169,9 +175,11 @@ A finding in `--json`:
   "column": 10,
   "offset": 16,
   "endOffset": 23,
-  "kind": "color",
+  "type": "color",
   "property": "color",
-  "value": "#ff0000"
+  "value": "#ff0000",
+  "host": "scss",
+  "selector": ".title"
 }
 ```
 
@@ -217,16 +225,21 @@ The base projects are the same to-do list app built with plain HTML + JavaScript
 | Scope and architecture definition | 🟢 |
 | TypeScript CLI skeleton (`check`, `--json`, tests) | 🟢 |
 | Hardcoded value detection in CSS and SCSS | 🟢 |
-| Detection in React inline styles (JSX/TSX) | ⚪ |
-| Detection in Angular components and templates | ⚪ |
-| Reading a token file (DTCG) | ⚪ |
-| Suggesting the exact or closest token | ⚪ |
+| Detection in Sass (indented), Less and HTML | 🟢 |
+| Detection in React inline styles (JSX/TSX) | 🟢 |
+| Detection in Angular components and templates | 🟢 |
+| Reading existing tokens (DTCG, CSS custom properties, SCSS/Less variables) | 🟢 |
+| Token generation (DTCG + CSS/SCSS/Less, scale names, semantic aliases) | 🟢 |
+| Project configuration (`tokentidy.config.json`) | 🟢 |
+| Context-aware detection (page container vs. icon size, see [above](#-what-makes-it-different-context)) | 🟡 |
+| Automatic fixes (`--fix`, `--dry-run`) | 🟡 next |
+| Suggesting the exact or closest token (`check --tokens`) | ⚪ |
+| Near-duplicate colors and renaming existing tokens | ⚪ |
+| Style objects outside `style={{}}` and CSS-in-JS | ⚪ |
 | Mapping `var()` fallback values (e.g. `var(--space, 12px)`) | ⚪ |
 | Relative units (`%`, `vw`, `vh`): compare with absolute values used in the same role and unify them into one token | ⚪ |
-| Context-aware suggestions (role of the value: page layout vs. component, see [above](#-what-makes-it-different-context)) | ⚪ |
-| Automatic fixes (`--fix`, `--dry-run`) | ⚪ |
-| Token generation with semantic names | ⚪ |
-| CI usage (project configuration) and npm release | ⚪ |
+| Ignore comments and ignored folders | ⚪ |
+| CI usage and npm release | ⚪ |
 | Comparative evaluation on the base projects | ⚪ |
 | Writing the TCC text | ⚪ |
 
@@ -241,15 +254,16 @@ tokentidy/
 │   ├── program.ts      # command-line interface (arguments, output, exit code)
 │   ├── index.ts        # public API, to use TokenTidy as a library
 │   ├── types.ts        # shared types (e.g. Finding, a hardcoded value found)
+│   ├── config.ts       # tokentidy.config.json
 │   ├── scanner.ts      # finds the files to analyze
 │   ├── analyze.ts      # ties it together: reads each file and calls the parser for its extension
 │   ├── rules.ts        # what counts as a violation: properties, units and exceptions
 │   ├── position.ts     # converts an offset into line and column
-│   ├── parsers/        # CSS/SCSS (done), JSX/TSX and Angular analysis
-│   ├── tokens/         # reading the token file
-│   ├── suggest/        # value normalization and closest token
-│   ├── fix/            # automatic fixes
-│   └── generate/       # token generation
+│   ├── parsers/        # CSS/SCSS/Sass/Less, HTML, JSX/TSX, Angular and DTCG
+│   ├── suggest/        # value normalization (closest token comes next)
+│   ├── generate/       # token generation: grouping, names, semantic aliases, output files
+│   ├── tokens/         # token index for check --tokens (planned)
+│   └── fix/            # automatic fixes (next)
 ├── test/               # automated tests and sample projects (fixtures)
 └── docs/               # development guide, commands and logs
 ```

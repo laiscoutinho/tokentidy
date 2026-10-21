@@ -12,7 +12,7 @@ Tool scope: a TypeScript/Node CLI for **CSS/SCSS, React (JSX/TSX) and Angular** 
 4. Keep an experiments repository (one folder per phase) and a short log per phase (template at the end). It becomes material for LinkedIn and for the TCC.
 5. Links marked with ✅ were checked during the research for this guide; the others are well-known official pages, worth opening once.
 
-> **This guide is the baseline, not the rule.** When a better option shows up, it replaces the guide's, and the decision (with the reason) is recorded in [CLAUDE.md](CLAUDE.md). Already replaced: `tsx` (Node runs `.ts` directly), `fast-glob` (replaced by Node's `fs.glob`, for security), `vitest` (replaced by `node:test`), `chalk` (replaced by Node's `util.styleText`) and `postcss-value-parser` (replaced by `@csstools/css-tokenizer` and `css-parser-algorithms`, which follow the spec and deliver typed tokens).
+> **This guide is the baseline, not the rule.** When a better option shows up, it replaces the guide's, and the decision (with the reason) is recorded in [CLAUDE.md](CLAUDE.md). Already replaced: `tsx` (Node runs `.ts` directly), `fast-glob` (replaced by Node's `fs.glob`, for security), `vitest` (replaced by `node:test`), `chalk` (replaced by Node's `util.styleText`) and `postcss-value-parser` (replaced by `@csstools/css-tokenizer` and `css-parser-algorithms`, which follow the spec and deliver typed tokens). The current state of each phase is in [Status after v0.0.4](#status-after-v004).
 
 ### Phase map
 
@@ -31,6 +31,24 @@ Tool scope: a TypeScript/Node CLI for **CSS/SCSS, React (JSX/TSX) and Angular** 
 | 10 | Polish, documentation and release | README, `--json`, published version | 1 to 2 weeks |
 
 > The pace is an estimate for someone studying alongside their degree. Adjust it to your routine.
+
+### Status after v0.0.4
+
+The phases were not followed strictly in order: after Phase 2, the priority became proving the two critical features (generation and autofix) on the lab's projects, and the phases they depend on were done as needed. Decisions and reasons are in [CLAUDE.md](CLAUDE.md).
+
+| Phase | Status | What it became |
+|---|---|---|
+| 0 | ✅ Done (v0.0.1) | TypeScript + ESM, Node type stripping instead of `tsx`, `fs.glob` instead of `fast-glob` |
+| 1 | ✅ Study | No code |
+| 2 | ✅ Done (v0.0.2), extended in v0.0.3 | CSS, SCSS, plus **Less** (`postcss-less`), **indented Sass** (`sass-parser`) and `<style>` in HTML. Values analyzed with `@csstools` |
+| 3 | ✅ Done (v0.0.3) | `style={{}}` in JSX/TSX with `@babel/parser` 8, numbers with an implied `px`, inline `style=""` in HTML with `parse5`. Missing: style objects outside the attribute, CSS-in-JS |
+| 4 | ✅ Done (v0.0.3) | `@Component` `styles`, `template` and `templateUrl` with `@angular/compiler` 22: `style=""`, `[style.x.unit]`, `[ngStyle]`, `@if`/`@for` blocks |
+| 5 | 🟡 Partial | DTCG files and existing tokens (`--x`, `$x`, `@x`) are read as definitions and used by `generate`. Missing: `check --tokens` and the value → token index for suggestions |
+| 6 | 🟡 Partial | Normalization done (`src/suggest/normalize.ts`: colors to hex/OKLCH, `pt` → `px`, `s` → `ms`, keyword weights). Decided **not** to merge `px` and `rem` (it becomes a suggestion). Missing: "closest value" with tolerances (ΔE for colors) |
+| 7 | ⏭️ **Next** | The data is ready: every token stores its occurrences (offsets, host, enclosing function, implied unit) in the DTCG extension |
+| 8 | 🟡 Ongoing | 126 tests with `node:test`: per module, all hosts in one fixture, the `slice(offset, endOffset) === value` invariant, the CLI end to end. CI not set up yet |
+| 9 | ✅ Done (v0.0.4) | DTCG 2025.10 output + CSS/SCSS/Less, threshold `minOccurrences`, reuse of existing tokens, scale names, semantic aliases, `--extend`/`--new`, suggestions |
+| 10 | 🟡 Partial | `--json`, exit codes and `tokentidy.config.json` done. Missing: ignore comment, ignored folders, `--quiet`, publishing |
 
 ---
 

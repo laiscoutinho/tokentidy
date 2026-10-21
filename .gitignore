@@ -4,3 +4,4 @@ dist/
 !test/fixtures/**/dist/
 *.tgz
 docs/CLAUDE.md
+test/.tmp/
