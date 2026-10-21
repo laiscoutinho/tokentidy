@@ -7,7 +7,7 @@
   margin-top: 8px /* comment with #f00 */;
 }
 
-/* Nothing here is a violation */
+/* Only width (centered block = container) and border-radius are violations here */
 .ok {
   color: var(--color-text);
   background: transparent;

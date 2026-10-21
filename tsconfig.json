@@ -2,9 +2,9 @@
   // Configuração de desenvolvimento: checa tipos de src/ e test/ sem gerar arquivos.
   // O Node executa os .ts direto (type stripping), então nada aqui afeta a execução.
   "compilerOptions": {
-    "target": "es2023",
+    "target": "es2024",
     "module": "nodenext",
-    "lib": ["es2023"],
+    "lib": ["es2024"],
     "types": ["node"],
 
     "strict": true,
@@ -21,5 +21,7 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "test"],
+  // Fixtures são projetos de exemplo (JSX, Angular) analisados pelos testes, não código do TokenTidy
+  "exclude": ["test/fixtures"]
 }

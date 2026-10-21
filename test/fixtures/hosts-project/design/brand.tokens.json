@@ -1,0 +1,10 @@
+{
+  "color": {
+    "$type": "color",
+    "brand": { "$value": { "colorSpace": "srgb", "components": [0.3098, 0.2745, 0.898], "hex": "#4f46e5" } },
+    "ink": { "$value": "{color.brand}" }
+  },
+  "space": {
+    "md": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } }
+  }
+}

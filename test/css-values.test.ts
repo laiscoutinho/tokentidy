@@ -37,7 +37,7 @@ const cases: Array<[string, ValueMatcher, string[]]> = [
     ['700', 'font-weight', ['700']],
     ['bold', 'font-weight', ['bold']],
     ['normal', 'font-weight', []],
-    ['italic bold 12px/20px Georgia, serif', 'font', ['bold', '12px', '20px']],
+    ['italic bold 12px/20px Georgia, serif', 'font', ['bold', '12px', '20px', 'Georgia, serif']],
     ['"Inter", Arial, sans-serif', 'font-family', ['"Inter", Arial, sans-serif']],
     ['sans-serif', 'font-family', []],
     ['var(--font-body)', 'font-family', []],
