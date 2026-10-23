@@ -2,7 +2,7 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { AnalysisResult } from '../analyze.ts';
+import type { AnalysisResult } from '../analysis/analyze.ts';
 
 // Controles C0/C1 (ESC inicia sequências ANSI e OSC) e marcas bidi (mudam a ordem do texto na tela, "Trojan Source")
 const UNSAFE = /[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g;

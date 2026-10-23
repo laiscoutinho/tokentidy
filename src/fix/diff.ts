@@ -1,5 +1,7 @@
-// Diff unificado (o formato do `git diff`) a partir das edições conhecidas. Não precisa de um algoritmo de diff
-// geral: as linhas que mudam são exatamente as que as edições tocam. A saída pode ser aplicada com `git apply`.
+/**
+ * Diff unificado (o formato do `git diff`) a partir das edições conhecidas. Não precisa de um algoritmo de diff
+ * geral: as linhas que mudam são exatamente as que as edições tocam. A saída pode ser aplicada com `git apply`.
+ */
 
 import type { Edit } from './plan.ts';
 
@@ -111,13 +113,13 @@ export function unifiedDiff(file: string, source: string, edits: readonly Edit[]
         // Sem linhas no original, o início é a linha antes do bloco (0), como no `diff`
         const oldStart = oldCount === 0 ? from : from + 1;
         const newStart = newCount === 0 ? from + delta : from + delta + 1;
-        out.push(`@@ -${range(oldStart, oldCount)} +${range(newStart, newCount)} @@`, ...body);
+        out.push(`@@ -${hunkRange(oldStart, oldCount)} +${hunkRange(newStart, newCount)} @@`, ...body);
         delta += newCount - oldCount;
     }
     return `${out.join('\n')}\n`;
 }
 
-function range(start: number, count: number): string {
+function hunkRange(start: number, count: number): string {
     return count === 1 ? `${start}` : `${start},${count}`;
 }
 

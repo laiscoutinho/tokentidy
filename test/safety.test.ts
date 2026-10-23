@@ -5,7 +5,7 @@ import { chmod, mkdir, readdir, readFile, rm, stat, symlink } from 'node:fs/prom
 import path from 'node:path';
 
 import { oneLine, printable } from '../src/cli/print.ts';
-import { OutsideRootError, assertInsideRoot, writeFileAtomic } from '../src/fs-safe.ts';
+import { OutsideRootError, assertInsideRoot, writeFileAtomic } from '../src/safe-write.ts';
 import { tempDir } from './helpers.ts';
 
 test('printable escapes terminal controls and bidi marks, and keeps normal text', () => {

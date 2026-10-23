@@ -1,6 +1,8 @@
-// Diagnóstico da escala: quantos valores diferentes o projeto usa por tipo, quantos viraram token
-// e que parte dos usos já cai num token. Comparado com sistemas maduros, nunca limitado por eles:
-// um projeto pode precisar de mais degraus, mas 40 espaçamentos diferentes costumam ser inconsistência.
+/**
+ * Diagnóstico da escala: quantos valores diferentes o projeto usa por tipo, quantos viraram token
+ * e que parte dos usos já cai num token. Comparado com sistemas maduros, nunca limitado por eles:
+ * um projeto pode precisar de mais degraus, mas 40 espaçamentos diferentes costumam ser inconsistência.
+ */
 
 import type { TokenType } from '../types.ts';
 

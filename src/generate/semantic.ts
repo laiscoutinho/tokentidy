@@ -1,10 +1,12 @@
-// Aliases semânticos: o papel de uma cor na interface (`color.text.danger`), apontando para o primitivo
-// (`{color.red.600}`). O papel vem de ONDE a cor é usada, nunca do valor:
-// - função: a propriedade (`color` → texto, `background` → fundo, `border-color` → borda);
-// - intenção: palavras do seletor, em inglês e português (`.btn-remover` → danger);
-// - estado: a pseudo-classe (`:hover`).
-// Só vira alias o que é inequívoco: se o mesmo papel usa duas cores diferentes, ou um seletor
-// sugere duas intenções, nada é gerado. Um nome semântico errado seria pior do que nenhum.
+/**
+ * Aliases semânticos: o papel de uma cor na interface (`color.text.danger`), apontando para o primitivo
+ * (`{color.red.600}`). O papel vem de ONDE a cor é usada, nunca do valor:
+ * - função: a propriedade (`color` → texto, `background` → fundo, `border-color` → borda);
+ * - intenção: palavras do seletor, em inglês e português (`.btn-remover` → danger);
+ * - estado: a pseudo-classe (`:hover`).
+ * Só vira alias o que é inequívoco: se o mesmo papel usa duas cores diferentes, ou um seletor
+ * sugere duas intenções, nada é gerado. Um nome semântico errado seria pior do que nenhum.
+ */
 
 import type { Finding } from '../types.ts';
 import type { GeneratedToken } from './generate.ts';

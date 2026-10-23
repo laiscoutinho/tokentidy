@@ -1,8 +1,11 @@
-// Tokens que o projeto já tem e onde cada um funciona. Usado pelo `generate` (reutilizar em vez de criar)
-// e pelo `fix` (trocar o valor solto pelo token).
+/**
+ * Tokens que o projeto já tem e onde cada um funciona. Usado pelo `generate` (reutilizar em vez de criar)
+ * e pelo `fix` (trocar o valor solto pelo token).
+ */
 
-import { rulesForProperty } from './rules.ts';
-import { colorInfo, normalizeValue } from './suggest/normalize.ts';
+import { rulesForProperty } from './analysis/rules.ts';
+import { normalizeValue } from './values/normalize.ts';
+import { colorInfo } from './values/color-info.ts';
 import type { Host, TokenDefinition, TokenReference, TokenType } from './types.ts';
 
 export interface ReusableDefinition {

@@ -1,13 +1,15 @@
-// Acumula o que os parsers encontram em um arquivo. Todo parser (folha de estilo, HTML, JSX, Angular)
-// chega no mesmo ponto: uma declaração `propriedade: valor` com a posição do valor no arquivo.
-// Daqui em diante o caminho é um só: regras → valores → achados.
+/**
+ * Acumula o que os parsers encontram em um arquivo. Todo parser (folha de estilo, HTML, JSX, Angular)
+ * chega no mesmo ponto: uma declaração `propriedade: valor` com a posição do valor no arquivo.
+ * Daqui em diante o caminho é um só: regras → valores → achados.
+ */
 
-import { createPositionLookup } from '../position.ts';
-import { rulesForProperty, violationRule } from '../rules.ts';
-import type { PropertyRule, Siblings } from '../rules.ts';
+import { createPositionLookup } from './position.ts';
+import { rulesForProperty, violationRule } from '../analysis/rules.ts';
+import type { PropertyRule, Siblings } from '../analysis/rules.ts';
 import type { AnalysisError, DefinitionSyntax, Finding, Host, ReviewItem, TokenDefinition, TokenReference } from '../types.ts';
-import { findReferences, findValues } from './css-values.ts';
-import type { ValueMatch } from './css-values.ts';
+import { findReferences, findValues } from './css/values.ts';
+import type { ValueMatch } from './css/values.ts';
 
 /** Explicação de cada regra de revisão, para quem lê a saída. */
 export const REVIEW_MESSAGES: Readonly<Record<NonNullable<PropertyRule['review']>, string>> = {
@@ -97,8 +99,10 @@ export class FileCollector {
             });
         }
 
-        // Número que o host lê como medida (`padding: 8` no React = 8px): analisa como se a unidade
-        // estivesse escrita, mas o trecho do achado continua sendo só o número que está no arquivo.
+        /**
+         * Número que o host lê como medida (`padding: 8` no React = 8px): analisa como se a unidade
+         * estivesse escrita, mas o trecho do achado continua sendo só o número que está no arquivo.
+         */
         const text = decl.impliedUnit ? `${value}${decl.impliedUnit}` : value;
 
         for (const rule of rulesForProperty(property, decl.siblings)) {

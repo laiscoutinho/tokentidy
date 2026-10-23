@@ -1,6 +1,8 @@
-// Parser de templates Angular: `style="..."`, `[style.x]="..."`, `[style]="{...}"` e `[ngStyle]="{...}"`.
-// Usa o parser oficial (@angular/compiler), o mesmo que o Angular usa para compilar: entende os blocos
-// (`@if`, `@for`), as diretivas estruturais (`*ngIf`) e as expressões de binding, com a posição de cada literal.
+/**
+ * Parser de templates Angular: `style="..."`, `[style.x]="..."`, `[style]="{...}"` e `[ngStyle]="{...}"`.
+ * Usa o parser oficial (@angular/compiler), o mesmo que o Angular usa para compilar: entende os blocos
+ * (`@if`, `@for`), as diretivas estruturais (`*ngIf`) e as expressões de binding, com a posição de cada literal.
+ */
 
 import {
     BindingType,
@@ -15,7 +17,7 @@ import type { AST, TmplAstBoundAttribute, TmplAstElement } from '@angular/compil
 
 import { FileCollector, elementSelector, toKebabCase } from './collector.ts';
 import type { ParseResult } from './collector.ts';
-import { walkDeclarationList } from './css.ts';
+import { walkDeclarationList } from './css/stylesheet.ts';
 
 export function parseAngularTemplate(source: string, file: string): ParseResult {
     const collector = new FileCollector(file, source);

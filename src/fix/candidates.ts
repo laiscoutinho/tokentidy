@@ -1,9 +1,11 @@
-// Tokens que podem substituir um valor solto, com o valor EXATO: o mesmo tipo e a mesma chave normalizada do `generate`.
-// Vêm de dois lugares: o que o projeto já define à mão e o que o `generate` escreveu na pasta de tokens.
+/**
+ * Tokens que podem substituir um valor solto, com o valor EXATO: o mesmo tipo e a mesma chave normalizada do `generate`.
+ * Vêm de dois lugares: o que o projeto já define à mão e o que o `generate` escreveu na pasta de tokens.
+ */
 
 import { reusableDefinitions } from '../token-index.ts';
-import type { TreeOccurrence, TreeToken } from '../generate/output.ts';
-import { normalizeValue } from '../suggest/normalize.ts';
+import type { TreeOccurrence, TreeToken } from '../generate/output/dtcg-tree.ts';
+import { normalizeValue } from '../values/normalize.ts';
 import type { TokenDefinition, TokenReference, TokenType } from '../types.ts';
 
 /**

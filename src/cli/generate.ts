@@ -2,12 +2,12 @@
 import path from 'node:path';
 import type { Command } from 'commander';
 
-import type { AnalysisResult } from '../analyze.ts';
-import { CONFIG_FILE, integerAtLeast } from '../config.ts';
-import { assertInsideRoot } from '../fs-safe.ts';
+import type { AnalysisResult } from '../analysis/analyze.ts';
+import { CONFIG_FILE, integerAtLeast } from '../project/config.ts';
+import { assertInsideRoot } from '../safe-write.ts';
 import { describe } from '../generate/diagnosis.ts';
 import type { GenerationResult } from '../generate/generate.ts';
-import { isInside } from '../scope.ts';
+import { isInside } from '../project/scope.ts';
 import { analyzeProject } from './check.ts';
 import { EXIT, UsageError } from './errors.ts';
 import { displayPath, link, printable, printDiagnostics } from './print.ts';
@@ -49,9 +49,11 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
     await assertInsideRoot(outDir, result.root);
 
     const { generateTokens } = await import('../generate/generate.ts');
-    const output = await import('../generate/output.ts');
-    const previous = await output.readDtcgTree(outDir);
-    const mode = previous ? await chooseMode(path.join(outDir, output.DTCG_FILE), options) : 'extend';
+    const dtcgTree = await import('../generate/output/dtcg-tree.ts');
+    const { renderOutput } = await import('../generate/output/render-files.ts');
+    const { writeOutput } = await import('../generate/output/write-files.ts');
+    const previous = await dtcgTree.readDtcgTree(outDir);
+    const mode = previous ? await chooseMode(path.join(outDir, dtcgTree.DTCG_FILE), options) : 'extend';
     const existingTree = mode === 'extend' ? previous : undefined;
     // Os tokens da própria pasta de saída entram pelo JSON (mantêm o nome), não como "tokens do projeto"
     const insideOut = (file: string) => isInside(path.join(result.root, file), outDir);
@@ -65,14 +67,14 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
         ...(config.rootFontSize ?? result.rootFontSize?.px ? { rootFontSize: config.rootFontSize ?? result.rootFontSize!.px } : {}),
         definitions: result.definitions.filter((d) => !insideOut(d.file)),
         references: result.references,
-        ownTokens: existingTree ? output.ownTokensOf(existingTree) : [],
+        ownTokens: existingTree ? dtcgTree.ownTokensOf(existingTree) : [],
     });
 
     const writeOptions = { outDir, mode, styleLanguages: result.styleLanguages, splitThreshold: config.splitThreshold };
-    const tree = output.buildDtcgTree(generation, existingTree);
-    const files = generation.tokens.length > 0 || existingTree ? output.renderOutput(tree, writeOptions) : [];
+    const tree = dtcgTree.buildDtcgTree(generation, existingTree);
+    const files = generation.tokens.length > 0 || existingTree ? renderOutput(tree, writeOptions) : [];
     if (!options.dryRun && files.length > 0) {
-        await output.writeOutput(files, writeOptions);
+        await writeOutput(files, writeOptions);
     }
     process.exitCode = result.errors.length > 0 ? EXIT.findings : EXIT.ok;
 
