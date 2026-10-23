@@ -27,7 +27,7 @@
     "name": "Laís Coutinho",
     "url": "https://github.com/laiscoutinho"
   },
-  "license": "ISC",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22.20.0"
   },
@@ -47,7 +47,8 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "NOTICE"
   ],
   "scripts": {
     "dev": "node src/cli.ts",
