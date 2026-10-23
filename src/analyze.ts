@@ -107,9 +107,18 @@ export async function analyzePaths(paths: readonly string[], options: AnalyzeOpt
     return analyzeScope(await collectFiles(paths, root, options), options);
 }
 
+export interface ScopeAnalysisOptions extends ScopeOptions {
+    /**
+     * Conteúdo de arquivos em memória (caminho relativo à raiz → texto), usado no lugar do disco.
+     * O `fix` analisa os arquivos corrigidos antes de escrevê-los.
+     */
+    sources?: ReadonlyMap<string, string>;
+}
+
 /** Analisa os arquivos de um escopo já resolvido. */
-export async function analyzeScope(scope: Scope, options: ScopeOptions = {}): Promise<AnalysisResult> {
+export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions = {}): Promise<AnalysisResult> {
     const { root } = scope;
+    const read = async (file: string) => options.sources?.get(file) ?? readFile(path.join(root, file), 'utf8');
     const skipped = [...scope.skipped];
     const loaded = new Map<string, Parser>();
     const results: ParseResult[] = [];
@@ -117,7 +126,7 @@ export async function analyzeScope(scope: Scope, options: ScopeOptions = {}): Pr
     const warnings: AnalysisWarning[] = [];
 
     async function run(file: string, kind: string): Promise<ParseResult | undefined> {
-        const source = await readFile(path.join(root, file), 'utf8');
+        const source = await read(file);
         // Bundle gerado com outro nome (`vendor.css`): o conteúdo denuncia
         if (!options.includeMinified && isMinified(source)) {
             skipped.push({ file, reason: 'minified' });
@@ -165,7 +174,7 @@ export async function analyzeScope(scope: Scope, options: ScopeOptions = {}): Pr
     if (scope.tokenFiles.length > 0) {
         const { parseDtcg } = await import('./parsers/dtcg.ts');
         for (const file of scope.tokenFiles) {
-            const { definitions, errors } = parseDtcg(await readFile(path.join(root, file), 'utf8'), file);
+            const { definitions, errors } = parseDtcg(await read(file), file);
             results.push({ findings: [], review: [], errors, definitions, references: [], declarations: 0 });
             tokenFiles.push(file);
         }

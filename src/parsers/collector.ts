@@ -70,6 +70,8 @@ export interface Declaration {
     selector?: string;
     atRules?: string[];
     impliedUnit?: string;
+    unitSuffix?: { offset: number; endOffset: number };
+    numeric?: boolean;
 }
 
 export class FileCollector {
@@ -144,6 +146,8 @@ export class FileCollector {
                 ...(decl.atRules?.length ? { atRules: decl.atRules } : {}),
                 ...(match.function === undefined ? {} : { function: match.function }),
                 ...(decl.impliedUnit ? { impliedUnit: decl.impliedUnit } : {}),
+                ...(decl.unitSuffix ? { unitSuffix: decl.unitSuffix } : {}),
+                ...(decl.numeric ? { numeric: true as const } : {}),
             };
             if (rule.review) {
                 this.result.review.push({ ...item, message: REVIEW_MESSAGES[rule.review] });
