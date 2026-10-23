@@ -6,6 +6,7 @@ import { pkg } from './package-info.ts';
 import { bannerText } from './banner.ts';
 import { registerCheck } from './cli/check.ts';
 import { EXIT } from './cli/errors.ts';
+import { registerFix } from './cli/fix.ts';
 import { registerGenerate } from './cli/generate.ts';
 import { printable } from './cli/print.ts';
 
@@ -24,11 +25,14 @@ Examples:
   $ tokentidy check src/components src/Card.css --json
   $ tokentidy generate --dry-run
   $ tokentidy generate --min-occurrences 3 --extend
+  $ tokentidy fix --dry-run
+  $ tokentidy fix src/components
 
-Exit codes: 0 ok, 1 hardcoded values found (check) or files with syntax errors, 2 usage error.`);
+Exit codes: 0 ok, 1 hardcoded values found (check) or left after fix, or files with syntax errors, 2 usage error.`);
 
 registerCheck(program);
 registerGenerate(program);
+registerFix(program);
 
 // Ponto único de saída: erros vão para stderr e definem o exit code
 async function main(): Promise<void> {

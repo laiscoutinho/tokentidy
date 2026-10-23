@@ -69,6 +69,8 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
                 siblings,
                 selector,
                 ...(binding.impliedUnit ? { impliedUnit: binding.impliedUnit } : {}),
+                ...(binding.numeric ? { numeric: true } : {}),
+                ...(binding.unitSuffix ? { unitSuffix: { offset: this.#base + binding.unitSuffix.offset, endOffset: this.#base + binding.unitSuffix.endOffset } } : {}),
             });
         }
         super.visitElement(element);
@@ -79,7 +81,8 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
         const ast = unwrap(input.value);
         // `[style.font-size.px]="14"`: o Angular já separa o nome da unidade
         if (input.type === BindingType.Style) {
-            return this.#literals(ast, toKebabCase(input.name), input.unit ?? undefined);
+            const found = this.#literals(ast, toKebabCase(input.name), input.unit ?? undefined);
+            return this.#withSuffix(found, ast, input.keySpan.end.offset, input.unit);
         }
         // `[style]="{...}"` e `[ngStyle]="{...}"`: chave (com unidade opcional: `'width.px'`) → valor
         if ((input.name === 'style' || input.name === 'ngStyle') && ast instanceof LiteralMap) {
@@ -88,10 +91,27 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
                     return [];
                 }
                 const [name = '', unit] = key.key.split('.');
-                return this.#literals(ast.values[i]!, toKebabCase(name), unit);
+                const value = ast.values[i]!;
+                // Chave entre aspas (`'width.px'`): a unidade termina antes da aspa de fechamento
+                const keyEnd = key.sourceSpan.end - (key.quoted ? 1 : 0);
+                return this.#withSuffix(this.#literals(value, toKebabCase(name), unit), value, keyEnd, unit);
             });
         }
         return [];
+    }
+
+    /**
+     * Posição da unidade no nome (`.px`), para o autofix tirar junto com o número. Só com um literal único:
+     * num ternário (`a ? 16 : 24`) a unidade vale para os dois lados e não pode sair por causa de um deles.
+     */
+    #withSuffix(bindings: StyleBinding[], ast: AST, nameEnd: number, unit: string | null | undefined): StyleBinding[] {
+        const suffix = `.${unit}`;
+        const only = bindings[0];
+        if (!unit || bindings.length !== 1 || !only?.impliedUnit || !(ast instanceof LiteralPrimitive)
+            || this.#template.slice(nameEnd - suffix.length, nameEnd) !== suffix) {
+            return bindings;
+        }
+        return [{ ...only, unitSuffix: { offset: nameEnd - suffix.length, endOffset: nameEnd } }];
     }
 
     /** Literais de uma expressão: o próprio literal ou os dois lados de um ternário (`ok ? '#000' : '#111'`). */
@@ -105,7 +125,7 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
         const { start, end } = ast.sourceSpan;
         if (typeof ast.value === 'number') {
             const text = this.#template.slice(start, end);
-            return unit ? [{ property, text, offset: start, impliedUnit: unit }] : [{ property, text, offset: start }];
+            return [{ property, text, offset: start, numeric: true, ...(unit ? { impliedUnit: unit } : {}) }];
         }
         if (typeof ast.value !== 'string') {
             return [];
@@ -123,6 +143,10 @@ interface StyleBinding {
     /** Posição no template. */
     offset: number;
     impliedUnit?: string;
+    /** Número da expressão (não string). */
+    numeric?: boolean;
+    /** Posição da unidade no nome do binding (`.px`), no template. */
+    unitSuffix?: { offset: number; endOffset: number };
 }
 
 /** `ASTWithSource` embrulha a expressão; o nó que interessa está em `.ast`. */

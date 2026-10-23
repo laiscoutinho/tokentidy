@@ -1,6 +1,6 @@
 // API pública: o que fica disponível com `import { ... } from 'tokentidy'`.
 export { analyzeDirectory, analyzePaths, analyzeScope, isMinified } from './analyze.ts';
-export type { AnalysisResult, AnalyzeOptions } from './analyze.ts';
+export type { AnalysisResult, AnalyzeOptions, ScopeAnalysisOptions } from './analyze.ts';
 export { findProjectRoot, collectFiles, isInside, ScopeError } from './scope.ts';
 export type { Scope, ScopeOptions } from './scope.ts';
 export { parseIgnoreDirectives, applyIgnores, unusedDirectives, IGNORE_MARKER } from './ignore.ts';
@@ -22,8 +22,17 @@ export type { ValueMatch } from './parsers/css-values.ts';
 export { generateTokens, TOKEN_TYPES } from './generate/generate.ts';
 export type { BelowThreshold, GeneratedToken, GenerationOptions, GenerationResult, OwnToken, ReusedToken, Suggestion } from './generate/generate.ts';
 export type { SemanticAlias } from './generate/semantic.ts';
-export { buildDtcgTree, renderOutput, writeOutput, dtcgValueOf, readDtcgTree, OutputError } from './generate/output.ts';
-export type { OutputFile, WriteOptions } from './generate/output.ts';
+export { buildDtcgTree, renderOutput, writeOutput, dtcgValueOf, readDtcgTree, treeTokensOf, OutputError } from './generate/output.ts';
+export type { OutputFile, TreeOccurrence, TreeToken, WriteOptions } from './generate/output.ts';
+export { reusableDefinitions, usableIn, DTCG_TYPES } from './token-index.ts';
+export type { ReusableDefinition } from './token-index.ts';
+export { fixScope } from './fix/apply.ts';
+export type { FileFix, FixOptions, FixResult } from './fix/apply.ts';
+export { planFixes } from './fix/plan.ts';
+export type { Edit, FilePlan, FixPlan, PlanContext, Replacement, SkippedValue, SkipReason as FixSkipReason } from './fix/plan.ts';
+export { buildTokenIndex } from './fix/candidates.ts';
+export type { Candidate, CandidateForm, CandidateSource, IndexInput, TokenIndex } from './fix/candidates.ts';
+export { applyEdits, unifiedDiff } from './fix/diff.ts';
 export { diagnose, describe as describeDiagnosis } from './generate/diagnosis.ts';
 export type { TypeDiagnosis } from './generate/diagnosis.ts';
 export { normalizeValue, normalizeFinding, colorInfo } from './suggest/normalize.ts';

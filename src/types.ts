@@ -71,6 +71,13 @@ export interface Finding {
     function?: string;
     /** Unidade de um número escrito sem ela, que o host completa (`padding: 8` no React = `px`; `[style.width.rem]="2"` = `rem`). */
     impliedUnit?: string;
+    /**
+     * Trecho da unidade no nome do binding do Angular (`.px` em `[style.width.px]="16"`), quando o valor é um literal só.
+     * O autofix tira a unidade junto: `var(--x)px` não é um valor válido.
+     */
+    unitSuffix?: { offset: number; endOffset: number };
+    /** O valor é um número de JavaScript ou de expressão do Angular (`padding: 8`, `[style.opacity]="0.5"`): o token entra como string. */
+    numeric?: true;
 }
 
 /**

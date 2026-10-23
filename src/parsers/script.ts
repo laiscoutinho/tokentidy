@@ -143,6 +143,7 @@ function jsxStyle(collector: FileCollector, element: t.JSXOpeningElement): void 
             siblings,
             selector,
             ...(value.impliedUnit ? { impliedUnit: value.impliedUnit } : {}),
+            ...(value.numeric ? { numeric: true } : {}),
         });
     }
 }
