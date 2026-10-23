@@ -48,7 +48,9 @@ test('colors inside functions and color functions', () => {
         '5:53 background-image rebeccapurple',
         '6:47 background #fafafa',
         '7:24 padding 16px',
-        '8:17 border-color color-mix(in srgb, red 40%, white)',
+        // `color-mix()` é analisado por dentro: cada cor misturada é uma decisão
+        '8:36 border-color red',
+        '8:45 border-color white',
     ]);
 });
 

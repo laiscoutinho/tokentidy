@@ -4,7 +4,8 @@
  * Tipo de token que um valor pode virar. É a decisão de design que o valor representa:
  * `16px` de `font-size` e `16px` de `line-height` são decisões diferentes e não se misturam.
  * - `size`: largura/altura de elemento quadrado (ícone, avatar, botão redondo);
- * - `container`: largura máxima de um bloco centralizado (conteúdo da página, card, modal).
+ * - `container`: largura máxima de um bloco centralizado (conteúdo da página, card, modal);
+ * - `breakpoint`: medida em condição de `@media`/`@container` (`(min-width: 768px)`).
  */
 export type TokenType =
     | 'color'
@@ -22,7 +23,8 @@ export type TokenType =
     | 'opacity'
     | 'duration'
     | 'easing'
-    | 'z-index';
+    | 'z-index'
+    | 'breakpoint';
 
 /**
  * Linguagem em que o valor está escrito. Diz como um token pode ser usado ali:
@@ -49,6 +51,8 @@ export interface Finding {
     /** Posição logo depois do fim do valor (exclusiva, como em `slice`). */
     endOffset: number;
     type: TokenType;
+    /** Regra que gerou o achado (`color/hardcoded`): é o id usado nos comentários de ignorar. */
+    rule: string;
     /** Propriedade CSS onde o valor está, em kebab-case (ex.: `margin-top`), mesmo vindo de JSX (`marginTop`). */
     property: string;
     value: string;
@@ -67,6 +71,27 @@ export interface Finding {
     function?: string;
     /** Unidade de um número escrito sem ela, que o host completa (`padding: 8` no React = `px`; `[style.width.rem]="2"` = `rem`). */
     impliedUnit?: string;
+}
+
+/**
+ * Valor que pode ser uma decisão de design, mas o contexto não basta para afirmar (`width: 300px` solto).
+ * Aparece na saída para revisão; nunca falha o CI e nunca vira token.
+ */
+export interface ReviewItem extends Omit<Finding, 'type'> {
+    /** Tipo provável, quando há um. */
+    type?: TokenType;
+    /** Por que é revisão e não violação. */
+    message: string;
+}
+
+/** Aviso sobre o próprio uso da ferramenta (comentário de ignorar sem efeito). Não muda o exit code. */
+export interface AnalysisWarning {
+    file: string;
+    line: number;
+    column: number;
+    /** `ignore/unused`, `ignore/unknown-rule`, `ignore/too-broad`. */
+    rule: string;
+    message: string;
 }
 
 /** Sintaxe de uma definição de token já existente no projeto (`dtcg`: arquivo `*.tokens.json`). */
