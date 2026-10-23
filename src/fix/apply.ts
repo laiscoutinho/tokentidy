@@ -1,17 +1,19 @@
-// Execução do `fix`: analisa, planeja, confere as trocas em memória e só então escreve.
-// Cada arquivo passa por quatro portas antes de ser escrito: não é link simbólico, fica dentro do projeto,
-// não mudou desde a leitura e continua com a sintaxe válida depois da troca.
+/**
+ * Execução do `fix`: analisa, planeja, confere as trocas em memória e só então escreve.
+ * Cada arquivo passa por quatro portas antes de ser escrito: não é link simbólico, fica dentro do projeto,
+ * não mudou desde a leitura e continua com a sintaxe válida depois da troca.
+ */
 
 import { existsSync } from 'node:fs';
 import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { analyzeScope } from '../analyze.ts';
-import type { AnalysisResult, ScopeAnalysisOptions } from '../analyze.ts';
-import { assertInsideRoot, OutsideRootError, writeFileAtomic } from '../fs-safe.ts';
-import { readDtcgTree, treeTokensOf } from '../generate/output.ts';
-import { isInside } from '../scope.ts';
-import type { Scope } from '../scope.ts';
+import { analyzeScope } from '../analysis/analyze.ts';
+import type { AnalysisResult, ScopeAnalysisOptions } from '../analysis/analyze.ts';
+import { assertInsideRoot, OutsideRootError, writeFileAtomic } from '../safe-write.ts';
+import { readDtcgTree, treeTokensOf } from '../generate/output/dtcg-tree.ts';
+import { isInside } from '../project/scope.ts';
+import type { Scope } from '../project/scope.ts';
 import type { Finding } from '../types.ts';
 import { buildTokenIndex } from './candidates.ts';
 import { applyEdits, unifiedDiff } from './diff.ts';

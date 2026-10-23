@@ -1,21 +1,26 @@
-// Geração de tokens: agrupa os valores soltos que são EXATAMENTE iguais (depois da normalização),
-// decide quais viram token e dá um nome a cada um.
-// - Só vira token o valor que aparece pelo menos `minOccurrences` vezes no mesmo tipo de token:
-//   valor usado uma vez só não é uma decisão de design repetida;
-// - valor que o projeto já tem como token é reutilizado (mesmo que apareça uma vez só); se o token existente
-//   não funciona onde o valor está (`$cor` num template), vira token CSS com o existente como equivalente;
-// - o que é parecido mas não igual (`15px` e `16px`, `16px` e `1rem`) vira sugestão, nunca grupo.
-// Cada token guarda todas as ocorrências (arquivo, posição, host): é a base do autofix.
+/**
+ * Geração de tokens: agrupa os valores soltos que são EXATAMENTE iguais (depois da normalização),
+ * decide quais viram token e dá um nome a cada um.
+ * - Só vira token o valor que aparece pelo menos `minOccurrences` vezes no mesmo tipo de token:
+ *   valor usado uma vez só não é uma decisão de design repetida;
+ * - valor que o projeto já tem como token é reutilizado (mesmo que apareça uma vez só); se o token existente
+ *   não funciona onde o valor está (`$cor` num template), vira token CSS com o existente como equivalente;
+ * - o que é parecido mas não igual (`15px` e `16px`, `16px` e `1rem`) vira sugestão, nunca grupo.
+ * Cada token guarda todas as ocorrências (arquivo, posição, host): é a base do autofix.
+ */
 
-import { TOKEN_TYPES } from '../rules.ts';
+import { TOKEN_TYPES } from '../analysis/rules.ts';
 import { reusableDefinitions, usableIn } from '../token-index.ts';
-import { DEFAULT_ROOT_FONT_SIZE, colorInfo, formatNumber, lengthInPx, normalizeFinding, parseLength, splitFontFamilies } from '../suggest/normalize.ts';
+import { DEFAULT_ROOT_FONT_SIZE, lengthInPx, normalizeFinding, parseLength, splitFontFamilies } from '../values/normalize.ts';
+import { colorInfo } from '../values/color-info.ts';
 import type { Finding, TokenDefinition, TokenReference, TokenType } from '../types.ts';
 import { diagnose } from './diagnosis.ts';
 import type { TypeDiagnosis } from './diagnosis.ts';
-import { nameGroups } from './naming.ts';
-import type { NamingInput } from './naming.ts';
+import { nameGroups } from './naming/token-names.ts';
+import type { NamingInput } from './naming/token-names.ts';
 import { semanticAliases } from './semantic.ts';
+import { findSuggestions } from './suggestions.ts';
+import type { Suggestion } from './suggestions.ts';
 import type { SemanticAlias } from './semantic.ts';
 
 /** Ordem dos tipos na saída (definida em `rules.ts`, junto dos tipos). */
@@ -58,14 +63,6 @@ export interface BelowThreshold {
     key: string;
     count: number;
     occurrences: Finding[];
-}
-
-export interface Suggestion {
-    kind: 'off-grid' | 'same-size-different-unit';
-    type: TokenType;
-    message: string;
-    /** Valores envolvidos (chaves normalizadas). */
-    values: string[];
 }
 
 export interface GenerationOptions {
@@ -129,8 +126,10 @@ export function generateTokens(findings: readonly Finding[], options: Generation
         if (usable && !kept) {
             reused.push({ definition: usable, type: group.type, key: group.key, count: group.findings.length, occurrences: group.findings });
         } else if (kept || matches.length > 0 || group.findings.length >= options.minOccurrences) {
-            // Com token equivalente no projeto (ex.: `$roxo`, que não funciona em template/JSX), a decisão de design
-            // já existe: vira token CSS mesmo com poucos usos, e o equivalente fica registrado
+            /**
+             * Com token equivalente no projeto (ex.: `$roxo`, que não funciona em template/JSX), a decisão de design
+             * já existe: vira token CSS mesmo com poucos usos, e o equivalente fica registrado
+             */
             accepted.push({ group, equivalents: matches, ...(kept ? { kept } : {}) });
         } else {
             belowThreshold.push({ type: group.type, key: group.key, count: group.findings.length, occurrences: group.findings });
@@ -143,8 +142,10 @@ export function generateTokens(findings: readonly Finding[], options: Generation
     const taken = new Set((options.mode === 'extend' ? options.ownTokens ?? [] : []).map((t) => t.path.join('-')));
 
     const tokens: GeneratedToken[] = accepted.map(({ group, equivalents, kept }, i) => {
-        // Valor de um DTCG escrito à mão: o token CSS leva o caminho dele (`color.primary` → `--color-primary`,
-        // convenção do Style Dictionary), em vez de um segundo nome para a mesma decisão
+        /**
+         * Valor de um DTCG escrito à mão: o token CSS leva o caminho dele (`color.primary` → `--color-primary`,
+         * convenção do Style Dictionary), em vez de um segundo nome para a mesma decisão
+         */
         const dtcg = equivalents.find((d) => d.syntax === 'dtcg' && DTCG_SEGMENTS.test(d.name));
         let path = kept?.path ?? dtcg?.name.split('.') ?? names.get(naming[i] as NamingInput)!;
         if (!kept) {
@@ -172,7 +173,7 @@ export function generateTokens(findings: readonly Finding[], options: Generation
         aliases: options.semanticTokens ? semanticAliases(tokens, options.minOccurrences) : [],
         reused,
         belowThreshold,
-        suggestions: suggest(tokens, belowThreshold, rootFontSize, options.gridBase),
+        suggestions: findSuggestions([...tokens, ...belowThreshold], rootFontSize, options.gridBase),
         diagnosis: diagnose([...tokens, ...reused], belowThreshold, TOKEN_TYPES),
         rootFontSize,
     };
@@ -271,58 +272,3 @@ function compareTokens(rootFontSize: number): (a: GeneratedToken, b: GeneratedTo
 
 /** Caminho DTCG que vira nome CSS sem escape (`color.brand-500`). Outros caracteres: o token recebe um nome gerado. */
 const DTCG_SEGMENTS = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
-
-// ─── Sugestões ──────────────────────────────────────────────────────────────
-
-/**
- * Sugestões que a pessoa decide (nada é mudado sozinho):
- * - espaçamento/tamanho fora da grade (`13px` com grade de 4px);
- * - o mesmo tamanho em unidades diferentes (`16px` e `1rem`, com fonte raiz de 16px).
- */
-function suggest(tokens: readonly GeneratedToken[], below: readonly BelowThreshold[], rootFontSize: number, gridBase: number): Suggestion[] {
-    const suggestions: Suggestion[] = [];
-    const all = [...tokens.map((t) => ({ type: t.type, key: t.key })), ...below.map((b) => ({ type: b.type, key: b.key }))];
-
-    for (const { type, key } of all) {
-        if (type !== 'spacing' && type !== 'size') {
-            continue;
-        }
-        const px = lengthInPx(key, rootFontSize);
-        // Até 2px é linha fina (borda, ajuste óptico): não é espaçamento de layout
-        if (px === undefined || px <= 2 || px % gridBase === 0) {
-            continue;
-        }
-        const lower = Math.floor(px / gridBase) * gridBase;
-        const upper = lower + gridBase;
-        suggestions.push({
-            kind: 'off-grid',
-            type,
-            message: `${key} is off the ${gridBase}px grid (nearest: ${formatNumber(lower)}px or ${formatNumber(upper)}px)`,
-            values: [key],
-        });
-    }
-
-    const byTypeAndPx = new Map<string, Set<string>>();
-    for (const { type, key } of all) {
-        const unit = parseLength(key)?.unit;
-        const px = lengthInPx(key, rootFontSize);
-        if (px === undefined || (unit !== 'px' && unit !== 'rem')) {
-            continue;
-        }
-        const id = `${type}\u0000${formatNumber(px)}`;
-        byTypeAndPx.set(id, (byTypeAndPx.get(id) ?? new Set()).add(key));
-    }
-    for (const [id, keys] of byTypeAndPx) {
-        if (keys.size > 1) {
-            const type = id.split('\u0000')[0] as TokenType;
-            const values = [...keys].sort();
-            suggestions.push({
-                kind: 'same-size-different-unit',
-                type,
-                message: `${values.join(' and ')} are the same ${type} at a ${formatNumber(rootFontSize)}px root font size; consider using one unit`,
-                values,
-            });
-        }
-    }
-    return suggestions;
-}

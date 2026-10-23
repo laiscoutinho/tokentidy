@@ -1,6 +1,8 @@
-// Imports de SCSS/Sass/Less: que arquivos uma folha de estilo já carrega e onde entra um import novo.
-// Leitura por texto, sem resolver caminhos de build (`includePaths`, pacotes): o que não dá para resolver
-// conta como "não carregado", e o `fix` não usa uma variável que talvez não exista.
+/**
+ * Imports de SCSS/Sass/Less: que arquivos uma folha de estilo já carrega e onde entra um import novo.
+ * Leitura por texto, sem resolver caminhos de build (`includePaths`, pacotes): o que não dá para resolver
+ * conta como "não carregado", e o `fix` não usa uma variável que talvez não exista.
+ */
 
 import path from 'node:path';
 

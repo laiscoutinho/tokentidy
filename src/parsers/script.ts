@@ -1,6 +1,8 @@
-// Parser de JS/JSX/TS/TSX: estilo inline do React (`style={{ ... }}`) e componentes Angular
-// (`@Component({ styles, template, templateUrl })`). Usa o parser do Babel: JS puro (sem binário nativo),
-// entende JSX, TypeScript e decorators, e informa a posição de cada nó.
+/**
+ * Parser de JS/JSX/TS/TSX: estilo inline do React (`style={{ ... }}`) e componentes Angular
+ * (`@Component({ styles, template, templateUrl })`). Usa o parser do Babel: JS puro (sem binário nativo),
+ * entende JSX, TypeScript e decorators, e informa a posição de cada nó.
+ */
 
 import { parse } from '@babel/parser';
 import type { ParserPlugin } from '@babel/parser';
@@ -8,7 +10,7 @@ import type * as t from '@babel/types';
 
 import { FileCollector, elementSelector, offsetAt, toKebabCase } from './collector.ts';
 import type { ParseResult } from './collector.ts';
-import { walkStylesheet } from './css.ts';
+import { walkStylesheet } from './css/stylesheet.ts';
 
 /**
  * Propriedades em que o React NÃO completa número com `px` (`lineHeight: 1.5` fica `1.5`).
@@ -44,7 +46,7 @@ export async function parseScript(source: string, file: string): Promise<ParseRe
     }
 
     const component: AngularComponent = { templates: [], templateUrls: [] };
-    visit(program.program, (node) => {
+    walkTree(program.program, (node) => {
         if (node.type === 'JSXOpeningElement') {
             jsxStyle(collector, node);
         } else if (node.type === 'Decorator') {
@@ -76,7 +78,7 @@ function pluginsFor(file: string): ParserPlugin[] {
 }
 
 /** Percorre a árvore do Babel chamando `callback` para cada nó. */
-function visit(node: t.Node, callback: (node: t.Node) => void): void {
+function walkTree(node: t.Node, callback: (node: t.Node) => void): void {
     callback(node);
     for (const key of Object.keys(node) as (keyof t.Node)[]) {
         if (key === 'loc' || key === 'leadingComments' || key === 'trailingComments' || key === 'innerComments') {
@@ -86,11 +88,11 @@ function visit(node: t.Node, callback: (node: t.Node) => void): void {
         if (Array.isArray(child)) {
             for (const item of child) {
                 if (isNode(item)) {
-                    visit(item, callback);
+                    walkTree(item, callback);
                 }
             }
         } else if (isNode(child)) {
-            visit(child, callback);
+            walkTree(child, callback);
         }
     }
 }

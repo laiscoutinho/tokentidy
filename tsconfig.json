@@ -11,6 +11,9 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
+    // Import ou variável sem uso é erro: o código fica só com o que é usado
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
 
     // Só sintaxe que o Node consegue apagar (sem enum, namespace, parameter properties)
     "erasableSyntaxOnly": true,

@@ -1,11 +1,13 @@
-// Comando `fix`: troca valores soltos por tokens com exatamente o mesmo valor.
-// Exit code como o `eslint --fix`: diz se o código ficou limpo, não se algo mudou.
+/**
+ * Comando `fix`: troca valores soltos por tokens com exatamente o mesmo valor.
+ * Exit code como o `eslint --fix`: diz se o código ficou limpo, não se algo mudou.
+ */
 import path from 'node:path';
 import type { Command } from 'commander';
 
-import { CONFIG_FILE, loadConfig } from '../config.ts';
+import { CONFIG_FILE, loadConfig } from '../project/config.ts';
 import type { FixResult } from '../fix/apply.ts';
-import { collectFiles, findProjectRoot } from '../scope.ts';
+import { collectFiles, findProjectRoot } from '../project/scope.ts';
 import { EXIT } from './errors.ts';
 import { display, displayPath, oneLine, printable, printDiagnostics } from './print.ts';
 

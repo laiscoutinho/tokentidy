@@ -1,13 +1,16 @@
-// Planejamento do `fix`, sem tocar no disco: para cada valor solto, qual token entra, como é escrito ali,
-// ou por que fica como está. Mesma entrada, mesma saída.
+/**
+ * Planejamento do `fix`, sem tocar no disco: para cada valor solto, qual token entra, como é escrito ali,
+ * ou por que fica como está. Mesma entrada, mesma saída.
+ */
 
 import path from 'node:path';
 
-import { normalizeFinding } from '../suggest/normalize.ts';
+import { normalizeFinding } from '../values/normalize.ts';
 import type { Finding } from '../types.ts';
 import type { Candidate, CandidateSource, TokenIndex } from './candidates.ts';
 import { importInsertion, loadedFiles, styleId } from './imports.ts';
 import type { LoadedFile, Preprocessor } from './imports.ts';
+import { angularQuote, jsQuote, nextToOperator } from './surrounding-syntax.ts';
 
 /** Troca de um trecho do arquivo: [offset, endOffset) vira `text` (inserção quando os dois são iguais). */
 export interface Edit {
@@ -145,7 +148,7 @@ class FilePlanner {
             return 'no-token';
         }
         if (finding.host === 'angular-template' && finding.impliedUnit && !finding.unitSuffix) {
-            return skip(finding, 'unit-in-binding', 'the unit in the binding name applies to more than one value; edit it by hand');
+            return skippedValue(finding, 'unit-in-binding', 'the unit in the binding name applies to more than one value; edit it by hand');
         }
 
         const buildTime = this.#needsBuildTimeValue(finding);
@@ -167,11 +170,11 @@ class FilePlanner {
             return reason;
         }
         if (buildTime && !this.#language) {
-            return skip(finding, 'inline-style-function', `${describeContext(finding)} runs at build time; var() does not work there and inline styles can't import Sass variables`);
+            return skippedValue(finding, 'inline-style-function', `${describeContext(finding)} runs at build time; var() does not work there and inline styles can't import Sass variables`);
         }
         if (buildTime) {
             const variable = this.#language === 'less' ? '@variable' : '$variable';
-            return skip(finding, 'needs-preprocessor-variable', `${describeContext(finding)} runs at build time, where var() does not work, and no ${variable} with this value is available here`);
+            return skippedValue(finding, 'needs-preprocessor-variable', `${describeContext(finding)} runs at build time, where var() does not work, and no ${variable} with this value is available here`);
         }
         return 'no-token';
     }
@@ -208,7 +211,7 @@ class FilePlanner {
                 return true;
             }
             return buildTime
-                ? skip(finding, 'variable-not-loaded', `${candidate.name} has this value but ${definition.file} is not imported here`)
+                ? skippedValue(finding, 'variable-not-loaded', `${candidate.name} has this value but ${definition.file} is not imported here`)
                 : undefined;
         }
         // Gerado: só onde `var()` não serve; fora disso o `var()` do mesmo token vem antes
@@ -218,7 +221,7 @@ class FilePlanner {
         const tokensFile = candidate.form === 'less' ? this.#context.generatedFiles.less : this.#context.generatedFiles.scss;
         const load = this.#loaded.find((l) => l.id === styleId(tokensFile));
         if (load && !load.global) {
-            return skip(finding, 'variable-not-loaded', `${tokensFile} is loaded with a namespace here; write the token by hand`);
+            return skippedValue(finding, 'variable-not-loaded', `${tokensFile} is loaded with a namespace here; write the token by hand`);
         }
         if (!load) {
             this.#needsImport = true;
@@ -239,7 +242,7 @@ class FilePlanner {
         }
         // Duas trocas no mesmo trecho: a segunda fica de fora (os parsers atuais não geram isso, mas um futuro pode)
         if (edits.some((e) => this.#edits.some((other) => e.offset < other.endOffset && other.offset < e.endOffset))) {
-            this.overlaps.push(skip(finding, 'overlap', 'another replacement already changes this text'));
+            this.overlaps.push(skippedValue(finding, 'overlap', 'another replacement already changes this text'));
             return undefined;
         }
         this.#edits.push(...edits);
@@ -258,7 +261,7 @@ class FilePlanner {
     }
 }
 
-function skip(finding: Finding, reason: SkipReason, message: string): SkippedValue {
+function skippedValue(finding: Finding, reason: SkipReason, message: string): SkippedValue {
     return { finding, reason, message };
 }
 
@@ -272,54 +275,4 @@ function describeContext(finding: Finding): string {
 /** O alias foi criado para esta ocorrência: mesmo arquivo, propriedade e seletor. */
 function sameOccurrence(occurrence: { file: string; property: string; selector?: string }, finding: Finding): boolean {
     return occurrence.file === finding.file && occurrence.property === finding.property && occurrence.selector === finding.selector;
-}
-
-/**
- * Valor ao lado de um operador (`16px * 2`, `$a + 8px`, `12px/1.5`): no SCSS/Less é conta feita no build.
- * O `-` só conta com espaço depois (`$a - 8px`); colado é o sinal do número.
- */
-export function nextToOperator(source: string, start: number, end: number): boolean {
-    let before = start - 1;
-    while (before >= 0 && (source[before] === ' ' || source[before] === '\t')) {
-        before--;
-    }
-    let after = end;
-    while (after < source.length && (source[after] === ' ' || source[after] === '\t')) {
-        after++;
-    }
-    const isOperator = (index: number, minusIsOperator: boolean) => {
-        const char = source[index];
-        return char === '*' || char === '/' || char === '+' || char === '%' || (char === '-' && minusIsOperator);
-    };
-    // Antes do valor: `$a - 16px` é conta, `$a -16px` não chega aqui (o `-` é parte do valor).
-    // Depois: `16px - $a` é conta, `16px -$a` é uma lista de dois valores.
-    const spaceAfter = (index: number) => source[index + 1] === ' ' || source[index + 1] === '\t';
-    return isOperator(before, before < start - 1) || isOperator(after, spaceAfter(after));
-}
-
-/** Aspas mais usadas nos valores de objetos do arquivo (`padding: '8px'`); empate fica com a simples. */
-function jsQuote(source: string): string {
-    const single = source.match(/:\s*'/g)?.length ?? 0;
-    const double = source.match(/:\s*"/g)?.length ?? 0;
-    return double > single ? '"' : "'";
-}
-
-/**
- * Aspas para uma string dentro de uma expressão do Angular. No `[ngStyle]="{'width.px': 16}"`, as mesmas da chave;
- * no `[style.width.px]="16"`, as que não delimitam o atributo.
- */
-function angularQuote(source: string, finding: Finding): string {
-    const afterName = finding.unitSuffix ? source[finding.unitSuffix.endOffset] : undefined;
-    if (afterName === "'" || afterName === '"') {
-        return afterName;
-    }
-    const delimiter = /^\]?\s*=\s*(["'])/.exec(source.slice(finding.unitSuffix?.endOffset ?? finding.offset))?.[1]
-        ?? delimiterBefore(source, finding.offset);
-    return delimiter === "'" ? '"' : "'";
-}
-
-/** Aspas que abrem o atributo em volta de `offset` (sem a unidade no nome, não há outra referência). */
-function delimiterBefore(source: string, offset: number): string | undefined {
-    const equals = source.lastIndexOf('=', offset);
-    return /^=\s*(["'])/.exec(source.slice(equals))?.[1];
 }

@@ -1,13 +1,15 @@
-// Parser de HTML: estilo inline (`style="..."`) e blocos `<style>`.
-// O parse5 segue o algoritmo de parsing do padrão HTML (o mesmo dos navegadores), então nunca falha
-// em HTML "torto" e informa a posição de cada atributo e de cada texto.
+/**
+ * Parser de HTML: estilo inline (`style="..."`) e blocos `<style>`.
+ * O parse5 segue o algoritmo de parsing do padrão HTML (o mesmo dos navegadores), então nunca falha
+ * em HTML "torto" e informa a posição de cada atributo e de cada texto.
+ */
 
 import { parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
 
 import { FileCollector, elementSelector } from './collector.ts';
 import type { ParseResult } from './collector.ts';
-import { walkDeclarationList, walkStylesheet } from './css.ts';
+import { walkDeclarationList, walkStylesheet } from './css/stylesheet.ts';
 
 type Node = DefaultTreeAdapterTypes.Node;
 type Element = DefaultTreeAdapterTypes.Element;
@@ -15,7 +17,7 @@ type Element = DefaultTreeAdapterTypes.Element;
 export function parseHtml(source: string, file: string): ParseResult {
     const collector = new FileCollector(file, source);
     const document = parse(source, { sourceCodeLocationInfo: true });
-    visit(document, (node) => {
+    walkTree(document, (node) => {
         if (!('tagName' in node)) {
             return;
         }
@@ -37,16 +39,16 @@ export function parseHtml(source: string, file: string): ParseResult {
     return collector.result;
 }
 
-function visit(node: Node, callback: (node: Node) => void): void {
+function walkTree(node: Node, callback: (node: Node) => void): void {
     callback(node);
     if ('childNodes' in node) {
         for (const child of node.childNodes) {
-            visit(child, callback);
+            walkTree(child, callback);
         }
     }
     // Conteúdo de `<template>` fica num fragmento à parte
     if ('content' in node && node.content) {
-        visit(node.content, callback);
+        walkTree(node.content, callback);
     }
 }
 

@@ -1,0 +1,28 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+
+import { analyzeDirectory } from '../../src/analysis/analyze.ts';
+import { FIXTURES } from '../helpers.ts';
+
+
+test('analyzes styles, HTML and JSX, ignoring node_modules and dist', async () => {
+    const result = await analyzeDirectory(path.join(FIXTURES, 'basic-project'));
+
+    assert.equal(result.filesAnalyzed, 4);
+    assert.deepEqual(result.findings.map((f) => `${f.file} ${f.host} ${f.value}`), [
+        'src/App.jsx jsx #ff0000',
+        'src/App.scss scss #ff0000',
+        'src/components/Button.css css 12px',
+    ]);
+    assert.deepEqual(result.errors, []);
+});
+
+test('sorts by file and collects syntax errors without stopping', async () => {
+    const result = await analyzeDirectory(path.join(FIXTURES, 'css'));
+    const files = result.findings.map((f) => f.file);
+
+    assert.deepEqual(files, files.toSorted());
+    assert.deepEqual(result.errors.map((e) => e.file), ['broken.css']);
+    assert.ok(result.findings.some((f) => f.file === 'variables.scss'));
+});

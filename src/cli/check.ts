@@ -1,11 +1,11 @@
 // Comando `check`: lista os valores soltos. Violações falham o CI (exit 1); revisões só aparecem.
 import type { Command } from 'commander';
 
-import { analyzePaths } from '../analyze.ts';
-import type { AnalysisResult } from '../analyze.ts';
-import { CONFIG_FILE, loadConfig } from '../config.ts';
-import type { Config } from '../config.ts';
-import { findProjectRoot } from '../scope.ts';
+import { analyzePaths } from '../analysis/analyze.ts';
+import type { AnalysisResult } from '../analysis/analyze.ts';
+import { CONFIG_FILE, loadConfig } from '../project/config.ts';
+import type { Config } from '../project/config.ts';
+import { findProjectRoot } from '../project/scope.ts';
 import { EXIT } from './errors.ts';
 import { display, oneLine, printable, printCheckSummary, printDiagnostics } from './print.ts';
 

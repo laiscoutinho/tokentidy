@@ -1,8 +1,10 @@
-// Leitura de arquivos de tokens no formato DTCG (Design Tokens Community Group, W3C):
-// `{ "color": { "primary": { "$type": "color", "$value": "#4f46e5" } } }`.
-// Cada token vira uma definição, com o valor em texto CSS, para ser comparada com os valores do código.
+/**
+ * Leitura de arquivos de tokens no formato DTCG (Design Tokens Community Group, W3C):
+ * `{ "color": { "primary": { "$type": "color", "$value": "#4f46e5" } } }`.
+ * Cada token vira uma definição, com o valor em texto CSS, para ser comparada com os valores do código.
+ */
 
-import { createPositionLookup } from '../position.ts';
+import { createPositionLookup } from './position.ts';
 import type { AnalysisError, TokenDefinition } from '../types.ts';
 import { offsetAt } from './collector.ts';
 
