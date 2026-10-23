@@ -102,7 +102,7 @@ function printFixSummary(result: FixResult, tokensDir: string): void {
     const parts = [
         `${replaced} ${replaced === 1 ? 'value' : 'values'} ${verb} in ${result.files.length} ${result.files.length === 1 ? 'file' : 'files'}`,
         `${result.skipped.length} skipped`,
-        `${result.withoutToken.length} without a token (run tokentidy generate)`,
+        `${result.withoutToken.length} without a token`,
         `${remaining} ${remaining === 1 ? 'violation remains' : 'violations remain'}`,
     ];
     console.error(parts.join('; '));

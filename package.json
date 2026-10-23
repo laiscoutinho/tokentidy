@@ -1,6 +1,6 @@
 {
   "name": "tokentidy",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Finds hardcoded visual values in front-end code and helps migrate them to design tokens.",
   "keywords": [
     "design-tokens",
