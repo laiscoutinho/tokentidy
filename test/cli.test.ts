@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { copyFixture } from './helpers.ts';
@@ -22,15 +22,15 @@ function runIn(cwd: string, ...args: string[]) {
     return spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', cwd });
 }
 
-test('check prints one finding per line (file:line:column, token type, property, value) and exits with 1', () => {
+test('check prints one finding per line (file:line:column, severity, rule, property, value) and exits with 1', () => {
     const { stdout, stderr, status } = run('check', project);
 
     assert.equal(status, 1);
-    assert.equal(stderr, '');
+    assert.equal(stderr, '3 violations, 0 review in 3 files\n');
     assert.deepEqual(stdout.trim().split('\n'), [
-        `${path.join('basic-project', 'src', 'App.jsx')}:2:32\tcolor\tcolor\t#ff0000`,
-        `${path.join('basic-project', 'src', 'App.scss')}:2:10\tcolor\tcolor\t#ff0000`,
-        `${path.join('basic-project', 'src', 'components', 'Button.css')}:2:12\tspacing\tpadding\t12px`,
+        `${path.join('basic-project', 'src', 'App.jsx')}:2:32\tviolation\tcolor/hardcoded\tcolor\t#ff0000`,
+        `${path.join('basic-project', 'src', 'App.scss')}:2:10\tviolation\tcolor/hardcoded\tcolor\t#ff0000`,
+        `${path.join('basic-project', 'src', 'components', 'Button.css')}:2:12\tviolation\tspacing/hardcoded\tpadding\t12px`,
     ]);
 });
 
@@ -49,7 +49,7 @@ test('check --json prints only valid JSON to stdout', () => {
     assert.equal(data.filesAnalyzed, 4);
     assert.deepEqual(data.findings[1], {
         file: 'src/App.scss', line: 2, column: 10, offset: 16, endOffset: 23,
-        type: 'color', property: 'color', value: '#ff0000', host: 'scss', selector: '.app',
+        type: 'color', rule: 'color/hardcoded', property: 'color', value: '#ff0000', host: 'scss', selector: '.app',
     });
     assert.deepEqual(data.errors, []);
 });
@@ -62,12 +62,12 @@ test('a syntax error goes to stderr without stopping the other files', () => {
     assert.match(stdout, /variables\.scss/);
 });
 
-test('a missing directory goes to stderr and exits with 2', () => {
+test('a missing path goes to stderr and exits with 2', () => {
     const { stdout, stderr, status } = run('check', '/path/that/does/not/exist');
 
     assert.equal(status, 2);
     assert.equal(stdout, '');
-    assert.match(stderr, /Directory not found/);
+    assert.match(stderr, /Path not found: \/path\/that\/does\/not\/exist/);
 });
 
 test('an unknown option is a usage error: exit code 2', () => {
@@ -183,4 +183,58 @@ test('usage errors in generate exit with 2', () => {
     const both = run('generate', 'generate-project', '--extend', '--new');
     assert.equal(both.status, 2);
     assert.match(both.stderr, /--extend and --new cannot be used together/);
+});
+
+test('check on one file inside a project reports paths from where it runs, with the summary on stderr', () => {
+    const { stdout, stderr, status } = runIn(project, 'check', path.join('src', 'App.scss'));
+
+    assert.equal(status, 1);
+    assert.equal(stdout, `${path.join('src', 'App.scss')}:2:10\tviolation\tcolor/hardcoded\tcolor\t#ff0000\n`);
+    assert.equal(stderr, '1 violation, 0 review in 1 file\n');
+});
+
+test('control characters in values are escaped in the text output', async () => {
+    const dir = await copyFixture('clean-project');
+    try {
+        await writeFile(path.join(dir, 'evil.css'), '.a { font-family: "x\u001b[2Jy"; color: red; }\n');
+        const { stdout } = runIn(dir, 'check');
+
+        assert.doesNotMatch(stdout, /\u001b/);
+        assert.match(stdout, /evil\.css:1:\d+\tviolation\tcolor\/hardcoded\tcolor\tred/);
+    } finally {
+        await rm(dir, { recursive: true });
+    }
+});
+
+test('skipped files and comment ignores are listed and counted on stderr', async () => {
+    const dir = await copyFixture('clean-project');
+    try {
+        await writeFile(path.join(dir, 'App.vue'), '<template></template>');
+        await writeFile(path.join(dir, 'b.css'), '.b { color: red; } /* tokentidy-ignore-line color/hardcoded -- brand */\n');
+        const { stdout, stderr, status } = runIn(dir, 'check');
+
+        assert.equal(status, 0);
+        assert.equal(stdout, '');
+        assert.match(stderr, /^App\.vue\tskipped\tunsupported$/m);
+        assert.match(stderr, /0 violations, 0 review in \d+ files; 1 ignored by comment; 1 file skipped/);
+    } finally {
+        await rm(dir, { recursive: true });
+    }
+});
+
+test('generate refuses an output folder outside the project and a corrupted token file (exit 2)', async () => {
+    const dir = await copyFixture('generate-project');
+    try {
+        const outside = runIn(dir, 'generate', '--out', path.join('..', 'elsewhere'));
+        assert.equal(outside.status, 2);
+        assert.match(outside.stderr, /must be inside the project/);
+
+        await mkdir(path.join(dir, 'design-tokens'));
+        await writeFile(path.join(dir, 'design-tokens', 'tokens.tokens.json'), '{ broken');
+        const corrupted = runIn(dir, 'generate', '--extend');
+        assert.equal(corrupted.status, 2);
+        assert.match(corrupted.stderr, /tokens\.tokens\.json.*Fix it or use --out/s);
+    } finally {
+        await rm(dir, { recursive: true });
+    }
 });
