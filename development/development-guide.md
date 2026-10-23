@@ -44,7 +44,7 @@ The phases were not followed strictly in order: after Phase 2, the priority beca
 | 3 | ✅ Done (v0.0.3) | `style={{}}` in JSX/TSX with `@babel/parser` 8, numbers with an implied `px`, inline `style=""` in HTML with `parse5`. Missing: style objects outside the attribute, CSS-in-JS |
 | 4 | ✅ Done (v0.0.3) | `@Component` `styles`, `template` and `templateUrl` with `@angular/compiler` 22: `style=""`, `[style.x.unit]`, `[ngStyle]`, `@if`/`@for` blocks |
 | 5 | 🟡 Partial | DTCG files and existing tokens (`--x`, `$x`, `@x`) are read as definitions and used by `generate`. Missing: `check --tokens` and the value → token index for suggestions |
-| 6 | 🟡 Partial | Normalization done (`src/suggest/normalize.ts`: colors to hex/OKLCH, `pt` → `px`, `s` → `ms`, keyword weights). Decided **not** to merge `px` and `rem` (it becomes a suggestion). Missing: "closest value" with tolerances (ΔE for colors) |
+| 6 | 🟡 Partial | Normalization done (`src/values/normalize.ts`: colors to hex/OKLCH, `pt` → `px`, `s` → `ms`, keyword weights). Decided **not** to merge `px` and `rem` (it becomes a suggestion). Missing: "closest value" with tolerances (ΔE for colors) |
 | 7 | ⏭️ **Next** | The data is ready: every token stores its occurrences (offsets, host, enclosing function, implied unit) in the DTCG extension |
 | 8 | 🟡 Ongoing | 126 tests with `node:test`: per module, all hosts in one fixture, the `slice(offset, endOffset) === value` invariant, the CLI end to end. CI not set up yet |
 | 9 | ✅ Done (v0.0.4) | DTCG 2025.10 output + CSS/SCSS/Less, threshold `minOccurrences`, reuse of existing tokens, scale names, semantic aliases, `--extend`/`--new`, suggestions |

@@ -89,7 +89,7 @@ Projects in `../inspo/`, read only to see how others approached the same problem
 
 ## Plan 0.0.5 to 0.0.8 (2026-10-23)
 
-Research behind [plan-0.0.5-0.0.8.md](plan-0.0.5-0.0.8.md). Rule followed: a Node built-in wins over a dependency when it does the same job.
+Research behind [plan-0.0.5-0.0.8.md](plans/plan-0.0.5-0.0.8.md). Rule followed: a Node built-in wins over a dependency when it does the same job.
 
 ### 10. Coverage floor
 

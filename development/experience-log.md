@@ -72,7 +72,7 @@ Technical record of the gap analysis and the planning discussion (add your own a
 
 ## Implementing 0.0.5 to 0.0.8 (2026-10-23)
 
-Technical record of the implementation of [plan-0.0.5-0.0.8.md](plan-0.0.5-0.0.8.md) (add your own account).
+Technical record of the implementation of [plan-0.0.5-0.0.8.md](plans/plan-0.0.5-0.0.8.md) (add your own account).
 
 - **The expectation fixtures caught the fixture, not the code.** The first run of `test/fixtures/expect/` showed false negatives on rules with only custom properties (`.kk { --x: 4px }`). By design, such a rule is a token block. The fixture lines were wrong; `display: block` was added so they are ordinary rules, and a separate `expect: none` line covers the token-block case. Lesson: the expectation must follow the documented decision, so the decision has to be written before the fixture.
 - **Fixtures needed a project root.** With root detection, a fixture without `package.json` resolved to the TokenTidy repository itself and reported paths like `test/fixtures/css/a.css`. Each fixture now has `{ "private": true }`.
@@ -83,7 +83,7 @@ Technical record of the implementation of [plan-0.0.5-0.0.8.md](plan-0.0.5-0.0.8
 
 ## Implementing 0.0.9: `fix` (2026-10-23)
 
-Technical record of the implementation of [plan-0.0.9.md](plan-0.0.9.md) (add your own account).
+Technical record of the implementation of [plan-0.0.9.md](plans/plan-0.0.9.md) (add your own account).
 
 - **The first smoke test already compiled.** A scratch project with CSS, SCSS (function, arithmetic, `@media`), JSX and HTML was fixed, the SCSS compiled with Dart Sass, and a second `fix --dry-run` found nothing. The plan had already settled the risky part: where `var()` is valid in Sass.
 - **The generated header leaked into the CSS.** `_tokens.scss` started with a `/* */` comment; Sass keeps loud comments, so every file loading the tokens got that line in its output. SCSS/Less token files now use `//`, and generated files are still recognized by either header.

@@ -3,5 +3,5 @@ node_modules/
 dist/
 !test/fixtures/**/dist/
 *.tgz
-docs/CLAUDE.md
+development/CLAUDE.md
 test/.tmp/

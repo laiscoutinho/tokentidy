@@ -1,6 +1,6 @@
 # Roadmap: from 0.0.5 to 0.1.0
 
-> 0.0.5 to 0.0.8 are implemented ([plan](plan-0.0.5-0.0.8.md)); 0.0.9 is `fix` ([plan](plan-0.0.9.md)). `fix` moved up from 0.0.15 and the sizing properties came in as 0.0.10, so the versions after them were renumbered (2026-10-23). The token freshness check came in as 0.0.11 and the later versions moved up one again (2026-10-23).
+> 0.0.5 to 0.0.8 are implemented ([plan](plans/plan-0.0.5-0.0.8.md)); 0.0.9 is `fix` ([plan](plans/plan-0.0.9.md)). `fix` moved up from 0.0.15 and the sizing properties came in as 0.0.10, so the versions after them were renumbered (2026-10-23). The token freshness check came in as 0.0.11 and the later versions moved up one again (2026-10-23).
 >
 > Scope decided on 2026-10-23: the scan covers numeric scale values. `duration`, `easing` and `container` stay. Keyword values such as `position: absolute` are design-independent and are never scanned.
 

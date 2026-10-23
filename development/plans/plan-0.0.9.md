@@ -1,6 +1,6 @@
 # Implementation plan: 0.0.9 (`fix`)
 
-Written on 2026-10-23, before any code change. It turns roadmap 0.0.9 into concrete work. Sources behind each choice are in [research-log.md](research-log.md#2026-10-23-fix-009).
+Written on 2026-10-23, before any code change. It turns roadmap 0.0.9 into concrete work. Sources behind each choice are in [research-log.md](../research-log.md#2026-10-23-fix-009).
 
 ## 1. Scope
 

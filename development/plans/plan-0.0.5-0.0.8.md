@@ -1,6 +1,6 @@
 # Implementation plan: 0.0.5 to 0.0.8
 
-Written on 2026-10-23, before any code change. It turns the first versions of the [roadmap](roadmap.md) into concrete work, plus the `generate` corrections found in the lab. Sources behind each choice are in [research-log.md](research-log.md#plan-005-to-008-2026-10-23).
+Written on 2026-10-23, before any code change. It turns the first versions of the [roadmap](../roadmap.md) into concrete work, plus the `generate` corrections found in the lab. Sources behind each choice are in [research-log.md](../research-log.md#plan-005-to-008-2026-10-23).
 
 ## 1. Scope
 
