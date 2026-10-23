@@ -8,8 +8,10 @@
 // Cada token leva em `$extensions["dev.tokentidy"]` as ocorrências no código: é o que o autofix vai usar.
 
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readdir, readFile, rm, rmdir } from 'node:fs/promises';
 import path from 'node:path';
+
+import { writeFileAtomic } from '../fs-safe.ts';
 
 import { cssValueOf } from '../parsers/dtcg.ts';
 import { colorInfo, cubicBezierOf, lengthInPx, parseLength, parseShadow, splitFontFamilies } from '../suggest/normalize.ts';
@@ -169,33 +171,42 @@ export function buildDtcgTree(result: GenerationResult, existing: DtcgTree | und
     return tree;
 }
 
+// A árvore vem de um JSON do usuário: só propriedades próprias, para `__proto__`/`constructor` não chegarem ao protótipo
 function getAt(tree: DtcgTree, trail: readonly string[]): unknown {
     let node: unknown = tree;
     for (const key of trail) {
-        node = typeof node === 'object' && node !== null ? (node as DtcgTree)[key] : undefined;
+        node = typeof node === 'object' && node !== null && Object.hasOwn(node, key) ? (node as DtcgTree)[key] : undefined;
     }
     return node;
 }
 
 function setAt(tree: DtcgTree, trail: readonly string[], value: DtcgToken): void {
+    const define = (target: DtcgTree, key: string, content: unknown) =>
+        Object.defineProperty(target, key, { value: content, enumerable: true, writable: true, configurable: true });
     let node = tree;
     for (const key of trail.slice(0, -1)) {
-        const next = node[key];
-        if (typeof next !== 'object' || next === null || isTokenNode(next)) {
-            node[key] = {};
+        const next = Object.hasOwn(node, key) ? node[key] : undefined;
+        if (typeof next !== 'object' || next === null || Array.isArray(next) || isTokenNode(next)) {
+            define(node, key, {});
         }
         node = node[key] as DtcgTree;
     }
-    node[trail.at(-1)!] = value;
+    define(node, trail.at(-1)!, value);
 }
 
 function isTokenNode(node: unknown): node is DtcgToken {
-    return typeof node === 'object' && node !== null && '$value' in node;
+    return typeof node === 'object' && node !== null && Object.hasOwn(node, '$value');
+}
+
+/** Extensão do TokenTidy num token, só se for propriedade própria. */
+function extensionOf(token: DtcgToken): unknown {
+    const extensions = token.$extensions;
+    return typeof extensions === 'object' && extensions !== null && Object.hasOwn(extensions, EXTENSION) ? extensions[EXTENSION] : undefined;
 }
 
 /** Todos os tokens de uma árvore, em ordem, com o tipo herdado dos grupos. */
 function* tokensOf(tree: DtcgTree, trail: string[] = [], type?: string): Generator<{ path: string[]; token: DtcgToken; type?: string }> {
-    const ownType = typeof tree['$type'] === 'string' ? tree['$type'] : type;
+    const ownType = Object.hasOwn(tree, '$type') && typeof tree['$type'] === 'string' ? tree['$type'] : type;
     for (const [key, child] of Object.entries(tree)) {
         if (key.startsWith('$') || typeof child !== 'object' || child === null) {
             continue;
@@ -212,7 +223,7 @@ function* tokensOf(tree: DtcgTree, trail: string[] = [], type?: string): Generat
 export function ownTokensOf(tree: DtcgTree): OwnToken[] {
     const own: OwnToken[] = [];
     for (const { path: trail, token } of tokensOf(tree)) {
-        const extension = token.$extensions?.[EXTENSION] as { type?: TokenType; key?: string } | undefined;
+        const extension = extensionOf(token) as { type?: TokenType; key?: string } | undefined;
         if (extension?.type && extension.key !== undefined) {
             own.push({ path: trail, type: extension.type, key: extension.key });
         }
@@ -220,14 +231,30 @@ export function ownTokensOf(tree: DtcgTree): OwnToken[] {
     return own;
 }
 
-/** Lê o `tokens.tokens.json` da pasta de saída, se existir. */
+/** Arquivo de saída que o TokenTidy não consegue ler ou não pode substituir: erro de uso, nada é escrito. */
+export class OutputError extends Error {}
+
+/** Lê o `tokens.tokens.json` da pasta de saída, se existir. Arquivo corrompido é erro claro, não um stack trace. */
 export async function readDtcgTree(outDir: string): Promise<DtcgTree | undefined> {
     const file = path.join(outDir, DTCG_FILE);
     if (!existsSync(file)) {
         return undefined;
     }
-    const json: unknown = JSON.parse(await readFile(file, 'utf8'));
-    return typeof json === 'object' && json !== null && !Array.isArray(json) ? (json as DtcgTree) : undefined;
+    let json: unknown;
+    try {
+        json = JSON.parse(await readFile(file, 'utf8'));
+    } catch (error) {
+        throw new OutputError(`Invalid JSON in ${file}: ${(error as Error).message}. Fix it or use --out to write elsewhere.`);
+    }
+    if (typeof json !== 'object' || json === null || Array.isArray(json)) {
+        throw new OutputError(`${file} is not a DTCG token file (expected a JSON object)`);
+    }
+    return json as DtcgTree;
+}
+
+/** Tokens da árvore sem a extensão do TokenTidy: escritos à mão. */
+function handWritten(tree: DtcgTree): string[] {
+    return [...tokensOf(tree)].filter(({ token }) => extensionOf(token) === undefined).map(({ path: trail }) => trail.join('.'));
 }
 
 // ─── CSS, SCSS e Less ───────────────────────────────────────────────────────
@@ -251,7 +278,7 @@ function flatten(tree: DtcgTree): FlatToken[] {
             flat.push({ name, category, value: '', alias: reference.split('.').join('-') });
             continue;
         }
-        const extension = token.$extensions?.[EXTENSION] as { css?: string } | undefined;
+        const extension = extensionOf(token) as { css?: string } | undefined;
         const value = extension?.css ?? cssValueOf(token.$value, type);
         if (value !== undefined) {
             flat.push({ name, category, value });
@@ -274,6 +301,8 @@ function declarationLine(token: FlatToken, syntax: Syntax): string {
 }
 
 const HEADER = '/* Generated by TokenTidy from tokens.tokens.json. Edit the JSON and run `tokentidy generate` again. */';
+/** Primeira linha do README gerado: é como o TokenTidy reconhece o próprio arquivo antes de apagar ou substituir. */
+const README_MARKER = '<!-- Generated by TokenTidy. Run `tokentidy generate` again to update. -->';
 
 /** Um bloco por categoria, com o nome da categoria em comentário: o arquivo se lê como um índice. */
 function stylesheet(tokens: readonly FlatToken[], syntax: Syntax): string {
@@ -354,7 +383,8 @@ function categoryRank(category: string): number {
 }
 
 function readme(files: readonly string[], count: number): string {
-    return `# Design tokens
+    return `${README_MARKER}
+# Design tokens
 
 Generated by TokenTidy: ${count} tokens.
 
@@ -368,16 +398,57 @@ ${files.map((file) => `- \`${file}\``).join('\n')}
 `;
 }
 
-/** Escreve os arquivos. No modo "começar do zero", apaga antes só os arquivos que o TokenTidy gera. */
-export async function writeOutput(files: readonly OutputFile[], options: WriteOptions): Promise<void> {
-    if (options.mode === 'new') {
-        for (const name of GENERATED_FILES) {
-            await rm(path.join(options.outDir, name), { force: true });
+/** Arquivo que o próprio TokenTidy escreveu (começa com o cabeçalho ou o marcador do README). */
+function isGenerated(content: string): boolean {
+    return content.startsWith(HEADER) || content.startsWith(README_MARKER);
+}
+
+async function readIfExists(file: string): Promise<string | undefined> {
+    return readFile(file, 'utf8').catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') {
+            return undefined;
         }
-        await rm(path.join(options.outDir, SPLIT_DIR), { recursive: true, force: true });
+        throw error;
+    });
+}
+
+/**
+ * Escreve os arquivos, cada um de forma atômica. Nunca substitui nem apaga arquivo de outra pessoa:
+ * - um `tokens.css`/`_tokens.scss`/`README.md` sem o cabeçalho do TokenTidy interrompe tudo antes de escrever;
+ * - no modo "começar do zero", um `tokens.tokens.json` com tokens escritos à mão também;
+ * - sobras de uma geração anterior (`css/color.css` que não existe mais) são apagadas só se forem do TokenTidy.
+ */
+export async function writeOutput(files: readonly OutputFile[], options: WriteOptions): Promise<void> {
+    for (const { file } of files) {
+        const current = await readIfExists(file);
+        if (current === undefined) {
+            continue;
+        }
+        if (path.basename(file) === DTCG_FILE) {
+            const tree = options.mode === 'new' ? await readDtcgTree(path.dirname(file)) : undefined;
+            const manual = tree ? handWritten(tree) : [];
+            if (manual.length > 0) {
+                throw new OutputError(`${file} has tokens not generated by TokenTidy (${manual.slice(0, 3).join(', ')}${manual.length > 3 ? ', ...' : ''}); --new would delete them. Use --extend or --out.`);
+            }
+        } else if (!isGenerated(current)) {
+            throw new OutputError(`${file} was not generated by TokenTidy; not overwriting it. Use --out to write elsewhere.`);
+        }
     }
+
+    // Sobras da geração anterior (o CSS deixou de ser dividido, o projeto parou de usar Less)
+    const keep = new Set(files.map((f) => f.file));
+    const splitDir = path.join(options.outDir, SPLIT_DIR);
+    const split = (await readdir(splitDir).catch(() => [] as string[])).filter((name) => name.endsWith('.css')).map((name) => path.join(SPLIT_DIR, name));
+    for (const name of [...GENERATED_FILES.filter((n) => n !== DTCG_FILE), ...split]) {
+        const file = path.join(options.outDir, name);
+        const current = keep.has(file) ? undefined : await readIfExists(file);
+        if (current !== undefined && isGenerated(current)) {
+            await rm(file, { force: true });
+        }
+    }
+    // Só se ficou vazia: a pasta pode ter arquivos da pessoa
+    await rmdir(splitDir).catch(() => undefined);
     for (const { file, content } of files) {
-        await mkdir(path.dirname(file), { recursive: true });
-        await writeFile(file, content);
+        await writeFileAtomic(file, content);
     }
 }

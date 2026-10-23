@@ -7,6 +7,7 @@
 
 import type { TokenType } from '../types.ts';
 import { colorInfo, cubicBezierOf, formatNumber, lengthInPx, parseLength, parseShadow } from '../suggest/normalize.ts';
+import { PALETTE } from './palette.ts';
 
 /** Grupo de valores iguais, do ponto de vista do nome. */
 export interface NamingInput {
@@ -33,6 +34,7 @@ const CONTAINER: Scale = [
     ['3xs', 256], ['2xs', 288], ['xs', 320], ['sm', 384], ['md', 448], ['lg', 512], ['xl', 576],
     ['2xl', 672], ['3xl', 768], ['4xl', 896], ['5xl', 1024], ['6xl', 1152], ['7xl', 1280],
 ];
+const BREAKPOINT: Scale = [['sm', 640], ['md', 768], ['lg', 1024], ['xl', 1280], ['2xl', 1536]];
 /** Sombras pelo desfoque (blur) da primeira camada: é o que faz uma sombra parecer "maior". */
 const SHADOW_BLUR: Scale = [['2xs', 1], ['xs', 2], ['sm', 3], ['md', 6], ['lg', 15], ['xl', 25], ['2xl', 50]];
 const LINE_HEIGHT: Scale = [['none', 1], ['tight', 1.25], ['snug', 1.375], ['normal', 1.5], ['relaxed', 1.625], ['loose', 2]];
@@ -47,18 +49,16 @@ const EASING: Record<string, string> = {
     'cubic-bezier(0.4, 0, 0.2, 1)': 'in-out',
 };
 
-/** Matiz (graus no OKLCH) no centro de cada família de cor, medido na paleta do Tailwind v4. */
-const HUE_FAMILIES: readonly (readonly [string, number])[] = [
-    ['rose', 12], ['red', 25], ['orange', 50], ['amber', 75], ['yellow', 95], ['lime', 128], ['green', 148],
-    ['emerald', 163], ['teal', 182], ['cyan', 205], ['sky', 235], ['blue', 260], ['indigo', 277],
-    ['violet', 293], ['purple', 303], ['fuchsia', 325], ['pink', 352],
-];
+/** Famílias neutras do Tailwind (cinzas levemente tingidos): no nome do token, todas são `gray`. */
+const NEUTRAL_FAMILIES = new Set(['slate', 'gray', 'zinc', 'neutral', 'stone']);
+/** Paleta em OKLab (a, b cartesianos), onde a distância euclidiana é a diferença de cor percebida (ΔE OK). */
+const PALETTE_OKLAB = [...PALETTE].flatMap(([family, steps]) => steps.map((oklch) => ({ family, lab: oklabOf(oklch) })));
 /** Luminosidade OKLCH de cada degrau (50 é o mais claro). */
 const LIGHTNESS_STEPS: Scale = [
     ['50', 0.975], ['100', 0.945], ['200', 0.9], ['300', 0.83], ['400', 0.71], ['500', 0.6],
     ['600', 0.52], ['700', 0.45], ['800', 0.38], ['900', 0.3], ['950', 0.2],
 ];
-/** Abaixo deste croma a cor é percebida como cinza. */
+/** Abaixo deste croma, nos extremos de luminosidade, a cor é branco ou preto. */
 const GRAY_CHROMA = 0.02;
 
 /**
@@ -92,6 +92,8 @@ function nameType(type: TokenType, groups: readonly NamingInput[], context: Nami
             return simple(groups, (g) => [type, slug(px(g) === undefined ? g.key : formatNumber(px(g)!))]);
         case 'container':
             return byScale(groups, type, CONTAINER, px, Infinity);
+        case 'breakpoint':
+            return byScale(groups, type, BREAKPOINT, px, 0);
         case 'radius': {
             const special = (g: NamingInput) => (g.key === '50%' ? 'circle' : (px(g) ?? 0) >= 999 ? 'full' : undefined);
             const named = simple(groups.filter((g) => special(g) !== undefined), (g) => [type, special(g)!]);
@@ -234,8 +236,12 @@ function nameColors(groups: readonly NamingInput[]): Map<NamingInput, string[]> 
     return names;
 }
 
-/** Família de uma cor pelas coordenadas OKLCH (luminosidade, croma, matiz). */
-export function familyOf([lightness, chroma, hue]: readonly [number, number, number]): string {
+/**
+ * Família de uma cor pelas coordenadas OKLCH (luminosidade, croma, matiz): a da cor mais próxima da paleta
+ * do Tailwind v4. `#111827` (croma 0.034, matiz azulada) é o `gray-900` do Tailwind, e vira `gray`, não `blue`.
+ */
+export function familyOf(oklch: readonly [number, number, number]): string {
+    const [lightness, chroma, hue] = oklch;
     if (chroma < GRAY_CHROMA || Number.isNaN(hue)) {
         if (lightness >= 0.999) {
             return 'white';
@@ -243,20 +249,24 @@ export function familyOf([lightness, chroma, hue]: readonly [number, number, num
         if (lightness <= 0.001) {
             return 'black';
         }
-        return 'gray';
     }
-    let best = HUE_FAMILIES[0]!;
-    for (const family of HUE_FAMILIES) {
-        if (hueDistance(hue, family[1]) < hueDistance(hue, best[1])) {
-            best = family;
+    const lab = oklabOf(oklch);
+    let best = PALETTE_OKLAB[0]!;
+    let bestDistance = Infinity;
+    for (const entry of PALETTE_OKLAB) {
+        const distance = Math.hypot(lab[0] - entry.lab[0], lab[1] - entry.lab[1], lab[2] - entry.lab[2]);
+        if (distance < bestDistance) {
+            best = entry;
+            bestDistance = distance;
         }
     }
-    return best[0];
+    return NEUTRAL_FAMILIES.has(best.family) ? 'gray' : best.family;
 }
 
-function hueDistance(a: number, b: number): number {
-    const d = Math.abs(a - b) % 360;
-    return d > 180 ? 360 - d : d;
+function oklabOf([lightness, chroma, hue]: readonly [number, number, number]): [number, number, number] {
+    // Sem matiz (cinza puro), a e b são zero
+    const radians = Number.isNaN(hue) ? 0 : (hue * Math.PI) / 180;
+    return [lightness, chroma * Math.cos(radians), chroma * Math.sin(radians)];
 }
 
 // ─── Sombras ────────────────────────────────────────────────────────────────

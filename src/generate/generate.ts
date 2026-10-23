@@ -7,20 +7,18 @@
 // - o que é parecido mas não igual (`15px` e `16px`, `16px` e `1rem`) vira sugestão, nunca grupo.
 // Cada token guarda todas as ocorrências (arquivo, posição, host): é a base do autofix.
 
-import { rulesForProperty } from '../rules.ts';
+import { TOKEN_TYPES, rulesForProperty } from '../rules.ts';
 import { DEFAULT_ROOT_FONT_SIZE, colorInfo, formatNumber, lengthInPx, normalizeFinding, normalizeValue, parseLength, splitFontFamilies } from '../suggest/normalize.ts';
 import type { Finding, Host, TokenDefinition, TokenReference, TokenType } from '../types.ts';
+import { diagnose } from './diagnosis.ts';
+import type { TypeDiagnosis } from './diagnosis.ts';
 import { nameGroups } from './naming.ts';
 import type { NamingInput } from './naming.ts';
 import { semanticAliases } from './semantic.ts';
 import type { SemanticAlias } from './semantic.ts';
 
-/** Ordem dos tipos na saída: cores, espaço e tamanho, forma, tipografia, efeitos e movimento, camadas. */
-export const TOKEN_TYPES: readonly TokenType[] = [
-    'color', 'spacing', 'size', 'container', 'radius', 'border-width',
-    'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
-    'shadow', 'opacity', 'duration', 'easing', 'z-index',
-];
+/** Ordem dos tipos na saída (definida em `rules.ts`, junto dos tipos). */
+export { TOKEN_TYPES };
 
 export interface GeneratedToken {
     /** Caminho no DTCG (`['color', 'indigo', '600']`). */
@@ -74,9 +72,12 @@ export interface GenerationOptions {
     gridBase: number;
     rootFontSize?: number;
     semanticTokens: boolean;
-    /** `extend`: reutiliza os tokens do projeto; `new`: ignora os existentes e gera do zero. */
+    /**
+     * `extend`: mantém os nomes que o TokenTidy gerou antes; `new`: esquece a saída anterior do TokenTidy.
+     * Os tokens escritos à mão no projeto são decisões reais: valem nos dois modos.
+     */
     mode: 'extend' | 'new';
-    /** Tokens do projeto (fora da pasta de saída), para reutilizar no modo extend. */
+    /** Tokens do projeto (fora da pasta de saída), para reutilizar. */
     definitions?: readonly TokenDefinition[];
     references?: readonly TokenReference[];
     /** Tokens gerados antes pelo TokenTidy na pasta de saída: mantêm o nome no modo extend. */
@@ -96,6 +97,8 @@ export interface GenerationResult {
     reused: ReusedToken[];
     belowThreshold: BelowThreshold[];
     suggestions: Suggestion[];
+    /** Tamanho e consistência da escala de cada tipo. */
+    diagnosis: TypeDiagnosis[];
     /** Fonte raiz usada para comparar `rem` com `px`. */
     rootFontSize: number;
 }
@@ -110,7 +113,7 @@ interface Group {
 export function generateTokens(findings: readonly Finding[], options: GenerationOptions): GenerationResult {
     const rootFontSize = options.rootFontSize ?? DEFAULT_ROOT_FONT_SIZE;
     const groups = groupFindings(findings);
-    const definitions = options.mode === 'extend' ? reusableDefinitions(options.definitions ?? [], options.references ?? []) : [];
+    const definitions = reusableDefinitions(options.definitions ?? [], options.references ?? []);
     const own = new Map((options.mode === 'extend' ? options.ownTokens ?? [] : []).map((t) => [`${t.type}\u0000${t.key}`, t]));
 
     const reused: ReusedToken[] = [];
@@ -139,7 +142,10 @@ export function generateTokens(findings: readonly Finding[], options: Generation
     const taken = new Set((options.mode === 'extend' ? options.ownTokens ?? [] : []).map((t) => t.path.join('-')));
 
     const tokens: GeneratedToken[] = accepted.map(({ group, equivalents, kept }, i) => {
-        let path = kept?.path ?? names.get(naming[i] as NamingInput)!;
+        // Valor de um DTCG escrito à mão: o token CSS leva o caminho dele (`color.primary` → `--color-primary`,
+        // convenção do Style Dictionary), em vez de um segundo nome para a mesma decisão
+        const dtcg = equivalents.find((d) => d.syntax === 'dtcg' && DTCG_SEGMENTS.test(d.name));
+        let path = kept?.path ?? dtcg?.name.split('.') ?? names.get(naming[i] as NamingInput)!;
         if (!kept) {
             path = freeName(path, taken);
         }
@@ -166,6 +172,7 @@ export function generateTokens(findings: readonly Finding[], options: Generation
         reused,
         belowThreshold,
         suggestions: suggest(tokens, belowThreshold, rootFontSize, options.gridBase),
+        diagnosis: diagnose([...tokens, ...reused], belowThreshold, TOKEN_TYPES),
         rootFontSize,
     };
 }
@@ -267,10 +274,14 @@ interface ReusableDefinition {
     key: string;
 }
 
-const DTCG_TYPES: Record<string, TokenType> = {
-    color: 'color', fontFamily: 'font-family', fontWeight: 'font-weight', duration: 'duration',
-    cubicBezier: 'easing', shadow: 'shadow',
-};
+// Map: `$type` vem de arquivo do usuário, e `constructor`/`__proto__` não podem cair no Object.prototype
+const DTCG_TYPES = new Map<string, TokenType>([
+    ['color', 'color'], ['fontFamily', 'font-family'], ['fontWeight', 'font-weight'], ['duration', 'duration'],
+    ['cubicBezier', 'easing'], ['shadow', 'shadow'],
+]);
+
+/** Caminho DTCG que vira nome CSS sem escape (`color.brand-500`). Outros caracteres: o token recebe um nome gerado. */
+const DTCG_SEGMENTS = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 
 /**
  * Tokens do projeto que podem substituir um valor solto. O tipo vem de onde o token é usado
@@ -295,7 +306,7 @@ function reusableDefinitions(definitions: readonly TokenDefinition[], references
             continue;
         }
         const types = new Set(usedAs.get(definition.name) ?? []);
-        const dtcgType = definition.dtcgType ? DTCG_TYPES[definition.dtcgType] : undefined;
+        const dtcgType = definition.dtcgType ? DTCG_TYPES.get(definition.dtcgType) : undefined;
         if (dtcgType) {
             types.add(dtcgType);
         }
