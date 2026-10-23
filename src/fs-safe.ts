@@ -1,7 +1,7 @@
 // Escrita segura: nada é escrito fora do projeto e nenhum arquivo fica pela metade.
 
 import { randomBytes } from 'node:crypto';
-import { mkdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { isInside } from './scope.ts';
@@ -43,13 +43,19 @@ const RETRIES = 5;
 /**
  * Escreve em um arquivo temporário na mesma pasta e troca de nome: quem lê o arquivo vê o antigo ou o novo,
  * nunca metade (o `rename` na mesma pasta é atômico). Mesmo algoritmo do `write-file-atomic`, sem a dependência.
+ * Ao substituir um arquivo, mantém as permissões dele (como o `write-file-atomic` faz).
  */
 export async function writeFileAtomic(file: string, content: string): Promise<void> {
     await mkdir(path.dirname(file), { recursive: true });
+    const mode = (await stat(file).catch(() => undefined))?.mode;
     const temp = path.join(path.dirname(file), `.${path.basename(file)}.${randomBytes(6).toString('hex')}.tmp`);
     // `wx`: falha se o temporário já existir, em vez de seguir um link deixado ali
     await writeFile(temp, content, { flag: 'wx' });
     try {
+        if (mode !== undefined) {
+            // O `mode` do writeFile passa pela umask; o chmod aplica as permissões exatas
+            await chmod(temp, mode & 0o7777);
+        }
         for (let attempt = 0; ; attempt++) {
             try {
                 await rename(temp, file);

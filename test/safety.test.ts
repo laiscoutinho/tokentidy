@@ -1,7 +1,7 @@
 // Segurança da saída: texto do usuário no terminal e escrita em disco.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, readdir, readFile, rm, symlink } from 'node:fs/promises';
+import { chmod, mkdir, readdir, readFile, rm, stat, symlink } from 'node:fs/promises';
 import path from 'node:path';
 
 import { oneLine, printable } from '../src/cli/print.ts';
@@ -44,5 +44,19 @@ test('the output folder must stay inside the project, also through symlinks', as
     } finally {
         await rm(dir, { recursive: true });
         await rm(outside, { recursive: true });
+    }
+});
+
+test('writeFileAtomic keeps the permissions of the file it replaces', { skip: process.platform === 'win32' }, async () => {
+    const dir = await tempDir();
+    try {
+        const file = path.join(dir, 'run.sh');
+        await writeFileAtomic(file, 'first');
+        await chmod(file, 0o755);
+        await writeFileAtomic(file, 'second');
+
+        assert.equal((await stat(file)).mode & 0o777, 0o755);
+    } finally {
+        await rm(dir, { recursive: true });
     }
 });
