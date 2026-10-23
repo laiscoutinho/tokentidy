@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 # Só leitura: o CI não publica nada
@@ -17,11 +18,13 @@ jobs:
   check:
     name: ${{ matrix.os }} / Node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [22, 24]
+        # 22.20.0 é o mínimo do engines: garante que nada exige uma versão mais nova
+        node: ['22.20.0', 22, 24]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -32,4 +35,41 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+
+  # Instala o pacote como um usuário (npm pack → .tgz) e roda o binário
+  package:
+    name: Package smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm pack
+      - name: Install the .tgz in an empty project
+        run: |
+          mkdir "$RUNNER_TEMP/smoke"
+          mv tokentidy-*.tgz "$RUNNER_TEMP/smoke/"
+          cd "$RUNNER_TEMP/smoke"
+          npm init -y
+          npm install -D ./tokentidy-*.tgz
+          npx tokentidy --version
+          npx tokentidy check "$GITHUB_WORKSPACE/test/fixtures/clean-project"
+
+  audit:
+    name: Audit runtime dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
       - run: npm audit --omit=dev
