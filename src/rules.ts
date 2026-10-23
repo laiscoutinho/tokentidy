@@ -28,6 +28,35 @@ export interface PropertyRule {
     /** Tipo de token dos valores encontrados (o shorthand `font` decide por posição). */
     type: TokenType;
     match: ValueMatcher;
+    /** Id da regra de revisão: o valor vai para `review` (não falha o CI) em vez de ser violação. */
+    review?: ReviewRule;
+}
+
+/**
+ * Regras de revisão: o valor pode ser uma decisão de design, mas o contexto não basta para afirmar.
+ * - `size/no-context`: largura ou altura sem o contexto que diz o papel (container, quadrado);
+ * - `breakpoint/plain-css`: breakpoint em CSS puro, onde `var()` não funciona em media query;
+ * - `custom-property/unknown-use`: custom property local com medida, sem uso que diga o tipo.
+ */
+export type ReviewRule = 'size/no-context' | 'breakpoint/plain-css' | 'custom-property/unknown-use';
+
+export const REVIEW_RULES: readonly ReviewRule[] = ['size/no-context', 'breakpoint/plain-css', 'custom-property/unknown-use'];
+
+/** Ordem dos tipos na saída: cores, espaço e tamanho, forma, tipografia, efeitos e movimento, camadas, breakpoints. */
+export const TOKEN_TYPES: readonly TokenType[] = [
+    'color', 'spacing', 'size', 'container', 'radius', 'border-width',
+    'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
+    'shadow', 'opacity', 'duration', 'easing', 'z-index', 'breakpoint',
+];
+
+/** Ids que um comentário de ignorar pode citar. */
+export function knownRules(): Set<string> {
+    return new Set([...TOKEN_TYPES.map(violationRule), ...REVIEW_RULES]);
+}
+
+/** Id da regra de violação de um tipo de token: `color/hardcoded`. */
+export function violationRule(type: TokenType): string {
+    return `${type}/hardcoded`;
 }
 
 /** Unidades de medida reportadas. `%`, `vw`, `vh` etc. ficam de fora: são relativas ao layout, não valores de design. */
@@ -111,14 +140,43 @@ const FIXED_RULES = new Map<string, readonly PropertyRule[]>([
     ['z-index', [{ type: 'z-index', match: 'z-index' }]],
 ]);
 
+/** Larguras e alturas que viram revisão quando não há contexto (container, quadrado) para decidir o papel. */
+const SIZE_PROPERTIES = new Set([
+    'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+    'inline-size', 'block-size', 'min-inline-size', 'min-block-size', 'max-inline-size', 'max-block-size',
+]);
+
+const SIZE_REVIEW: readonly PropertyRule[] = [{ type: 'size', match: 'length', review: 'size/no-context' }];
+
+/** Prefixos de fabricante: `-webkit-box-shadow` segue a regra de `box-shadow`. */
+const VENDOR_PREFIX = /^-(webkit|moz|ms|o)-/;
+
+/**
+ * Declarações que não são uso de design dentro de certas at-rules:
+ * - `@font-face`: as declarações definem a fonte (`font-family`, `font-weight` do arquivo), não aplicam;
+ * - `@keyframes`: `opacity` entre quadros é coreografia da animação. Cores e medidas continuam valendo.
+ */
+const SKIPPED_IN_AT_RULE = new Map<string, ReadonlySet<string> | 'all'>([
+    ['font-face', 'all'],
+    ['keyframes', new Set(['opacity'])],
+]);
+
+/** A declaração está numa at-rule em que não é uso de design (ver `SKIPPED_IN_AT_RULE`). `atRuleNames` sem `@`. */
+export function isSkippedInAtRule(property: string, atRuleNames: readonly string[]): boolean {
+    return atRuleNames.some((name) => {
+        const skipped = SKIPPED_IN_AT_RULE.get(name.toLowerCase().replace(VENDOR_PREFIX, ''));
+        return skipped === 'all' || (skipped !== undefined && skipped.has(property.toLowerCase().replace(VENDOR_PREFIX, '')));
+    });
+}
+
 /** Larguras que, num bloco centralizado (`margin: 0 auto`), definem a largura de um container. */
 const CONTAINER_PROPERTIES = new Set(['max-width', 'width', 'max-inline-size', 'inline-size']);
 
 /** Largura ↔ altura: com o mesmo valor nas duas, o elemento é quadrado (ícone, avatar). */
-const SQUARE_COUNTERPARTS: Record<string, string> = {
-    'width': 'height', 'height': 'width',
-    'inline-size': 'block-size', 'block-size': 'inline-size',
-};
+const SQUARE_COUNTERPARTS = new Map([
+    ['width', 'height'], ['height', 'width'],
+    ['inline-size', 'block-size'], ['block-size', 'inline-size'],
+]);
 
 /** Declarações da mesma regra (ou do mesmo `style=""`): propriedade em kebab-case → valor. */
 export type Siblings = ReadonlyMap<string, string>;
@@ -131,9 +189,12 @@ export type Siblings = ReadonlyMap<string, string>;
  * fora disso, `width: 300px` pode ser qualquer coisa, e reportar geraria falso positivo:
  * - container: `max-width` (ou `width`) com margem horizontal `auto`;
  * - tamanho: `width` e `height` com o mesmo valor (elemento quadrado).
+ * Sem esse contexto, a medida vai para revisão (`size/no-context`).
+ * Prefixo de fabricante não muda a regra (`-webkit-box-shadow` = `box-shadow`).
  */
 export function rulesForProperty(property: string, siblings: Siblings = new Map()): readonly PropertyRule[] {
-    const prop = property.toLowerCase();
+    const written = property.toLowerCase();
+    const prop = written.replace(VENDOR_PREFIX, '');
     const fixed = FIXED_RULES.get(prop);
     if (fixed) {
         return fixed;
@@ -141,12 +202,12 @@ export function rulesForProperty(property: string, siblings: Siblings = new Map(
     if (CONTAINER_PROPERTIES.has(prop) && isHorizontallyCentered(siblings)) {
         return [{ type: 'container', match: 'length' }];
     }
-    const counterpart = SQUARE_COUNTERPARTS[prop];
-    const value = siblings.get(prop);
+    const counterpart = SQUARE_COUNTERPARTS.get(prop);
+    const value = siblings.get(written);
     if (counterpart && value !== undefined && sameValue(siblings.get(counterpart), value)) {
         return [{ type: 'size', match: 'length' }];
     }
-    return [];
+    return SIZE_PROPERTIES.has(prop) ? SIZE_REVIEW : [];
 }
 
 function sameValue(a: string | undefined, b: string): boolean {

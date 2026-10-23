@@ -23,6 +23,10 @@ export interface Config {
     splitThreshold: number;
     /** Gera aliases semânticos (`color.text.danger` → `color.red.600`) quando o uso é inequívoco. */
     semanticTokens: boolean;
+    /** Padrões glob (relativos à raiz, estilo `.gitignore` sem negação) de arquivos que não são analisados. */
+    ignore: string[];
+    /** Analisa arquivos minificados (`*.min.css` ou linha média longa). Padrão: não. */
+    includeMinified: boolean;
 }
 
 export const DEFAULT_CONFIG: Readonly<Config> = {
@@ -31,6 +35,8 @@ export const DEFAULT_CONFIG: Readonly<Config> = {
     output: 'design-tokens',
     splitThreshold: 60,
     semanticTokens: true,
+    ignore: [],
+    includeMinified: false,
 };
 
 /** Erro de configuração: a CLI mostra a mensagem e sai com código 2 (erro de uso). */
@@ -46,7 +52,7 @@ export async function loadConfig(root: string, file?: string): Promise<{ config:
         if (file) {
             throw new ConfigError(`Config file not found: ${file}`);
         }
-        return { config: { ...DEFAULT_CONFIG } };
+        return { config: { ...DEFAULT_CONFIG, ignore: [] } };
     }
     let raw: unknown;
     try {
@@ -62,7 +68,7 @@ export function validateConfig(raw: unknown, source: string): Config {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
         throw new ConfigError(`${source}: expected a JSON object`);
     }
-    const config: Config = { ...DEFAULT_CONFIG };
+    const config: Config = { ...DEFAULT_CONFIG, ignore: [] };
     for (const [key, value] of Object.entries(raw)) {
         switch (key) {
             case '$schema':
@@ -93,6 +99,18 @@ export function validateConfig(raw: unknown, source: string): Config {
                     throw new ConfigError(`${source}: semanticTokens must be true or false`);
                 }
                 config.semanticTokens = value;
+                break;
+            case 'ignore':
+                if (!Array.isArray(value) || value.some((pattern) => typeof pattern !== 'string' || pattern.trim() === '')) {
+                    throw new ConfigError(`${source}: ignore must be a list of glob patterns (e.g. ["legacy/**"])`);
+                }
+                config.ignore = value.map((pattern: string) => pattern.trim());
+                break;
+            case 'includeMinified':
+                if (typeof value !== 'boolean') {
+                    throw new ConfigError(`${source}: includeMinified must be true or false`);
+                }
+                config.includeMinified = value;
                 break;
             default:
                 throw new ConfigError(`${source}: unknown option "${key}"`);

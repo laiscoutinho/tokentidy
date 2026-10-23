@@ -49,11 +49,15 @@ test('a wrong option fails loudly instead of being ignored', () => {
         [{ rootFontSize: -16 }, /rootFontSize must be a positive number/],
         [{ output: '/abs/path' }, /output must be a folder path relative/],
         [{ semanticTokens: 'yes' }, /semanticTokens must be true or false/],
+        [{ ignore: 'legacy/**' }, /ignore must be a list of glob patterns/],
+        [{ ignore: ['ok', ' '] }, /ignore must be a list of glob patterns/],
+        [{ includeMinified: 1 }, /includeMinified must be true or false/],
     ];
     for (const [raw, message] of invalid) {
         assert.throws(() => validateConfig(raw, 'cfg'), (error: Error) => error instanceof ConfigError && message.test(error.message), JSON.stringify(raw));
     }
     assert.equal(validateConfig({ $schema: 'x', rootFontSize: 10 }, 'cfg').rootFontSize, 10);
+    assert.deepEqual(validateConfig({ ignore: [' legacy/** '], includeMinified: true }, 'cfg'), { ...validateConfig({}, 'cfg'), ignore: ['legacy/**'], includeMinified: true });
 });
 
 test('integerAtLeast accepts numeric strings (CLI options) and rejects the rest', () => {

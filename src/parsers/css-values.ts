@@ -86,7 +86,12 @@ function visit(nodes: ComponentValue[], match: ValueMatcher, report: Report, fn:
             if (IGNORED_FUNCTIONS.has(name)) {
                 continue;
             }
-            // Função de cor completa (`rgb(0 0 0 / .2)`, `color-mix(...)`) vira um valor só
+            // `color-mix()` mistura cores que são decisões separadas: cada uma vira o seu achado
+            if (match === 'color' && name === 'color-mix') {
+                visit(node.value, match, report, name);
+                continue;
+            }
+            // Função de cor completa (`rgb(0 0 0 / .2)`) vira um valor só
             if (match === 'color' && isLiteralColor(node)) {
                 report(...range(node.tokens()), withFunction(fn));
                 continue;

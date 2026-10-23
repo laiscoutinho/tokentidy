@@ -10,9 +10,11 @@ export interface Position {
  * Prepara um conversor de offset → linha/coluna (ambas começando em 1).
  * Guarda o início de cada linha uma vez e depois faz busca binária: O(log n) por consulta.
  * A coluna conta unidades UTF-16, igual aos índices de string do JavaScript.
+ * O BOM do início do arquivo é invisível no editor: não conta na coluna da linha 1 (o offset continua contando).
  */
 export function createPositionLookup(text: string): (offset: number) => Position {
-    const lineStarts = [0];
+    const bom = text.charCodeAt(0) === 0xfeff ? 1 : 0;
+    const lineStarts = [bom];
     for (let i = 0; i < text.length; i++) {
         if (text[i] === '\n') {
             lineStarts.push(i + 1);
@@ -30,6 +32,6 @@ export function createPositionLookup(text: string): (offset: number) => Position
                 high = mid - 1;
             }
         }
-        return { line: low + 1, column: offset - lineStarts[low]! + 1 };
+        return { line: low + 1, column: Math.max(offset - lineStarts[low]!, 0) + 1 };
     };
 }

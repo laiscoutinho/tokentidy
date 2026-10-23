@@ -8,6 +8,7 @@ import { tokenize, isTokenDimension, isTokenPercentage, isTokenWhitespace } from
 import postcss, { CssSyntaxError } from 'postcss';
 import type { AtRule, ChildNode, Container, Declaration as PostcssDeclaration, Node, Root, Rule } from 'postcss';
 
+import { isSkippedInAtRule } from '../rules.ts';
 import { FileCollector, offsetAt } from './collector.ts';
 import type { ParseResult } from './collector.ts';
 import type { Host } from '../types.ts';
@@ -69,6 +70,16 @@ export function walkStylesheet(collector: FileCollector, css: string, baseOffset
             collector.definition(`@${less.name}`, 'less-variable', less.value ?? '', baseOffset + (node.source?.start?.offset ?? 0), selectorOf(node));
             return;
         }
+        if (node.type === 'atrule') {
+            const name = node.name.toLowerCase();
+            if (BREAKPOINT_AT_RULES.has(name)) {
+                const params = paramsOf(node, css);
+                if (params) {
+                    collector.breakpoint(name, params.text, baseOffset + params.offset, host, selectorOf(node));
+                }
+            }
+            return;
+        }
         if (node.type !== 'decl') {
             return;
         }
@@ -78,19 +89,27 @@ export function walkStylesheet(collector: FileCollector, css: string, baseOffset
         }
         const offset = baseOffset + value.offset;
         const prop = node.prop;
+        const selector = selectorOf(node);
+        const atRules = atRulesOf(node);
 
         if (prop.startsWith('--')) {
-            collector.definition(prop, 'custom-property', value.text, baseOffset + (node.source?.start?.offset ?? 0), selectorOf(node));
+            collector.definition(prop, 'custom-property', value.text, baseOffset + (node.source?.start?.offset ?? 0), selector);
+            collector.customProperty({
+                name: prop, value: value.text, offset, host, tokenBlock: isTokenBlock(node, selector),
+                ...(selector === undefined ? {} : { selector }),
+                ...(atRules.length ? { atRules } : {}),
+            });
             return;
         }
         if (prop.startsWith('$')) {
-            collector.definition(prop, 'scss-variable', value.text, baseOffset + (node.source?.start?.offset ?? 0), selectorOf(node));
+            collector.definition(prop, 'scss-variable', value.text, baseOffset + (node.source?.start?.offset ?? 0), selector);
             return;
         }
 
         const property = prop.toLowerCase();
-        const selector = selectorOf(node);
-        const atRules = atRulesOf(node);
+        if (isSkippedInAtRule(property, atRuleNamesOf(node))) {
+            return;
+        }
         if (property === 'font-size' && (selector === 'html' || selector === ':root') && atRules.length === 0) {
             const px = rootFontSizePx(value.text);
             if (px !== undefined) {
@@ -108,6 +127,39 @@ export function walkStylesheet(collector: FileCollector, css: string, baseOffset
             atRules,
         });
     });
+}
+
+/** At-rules cuja condição tem breakpoints (`@media (min-width: 768px)`, `@container (width > 400px)`). */
+const BREAKPOINT_AT_RULES: ReadonlySet<string> = new Set(['media', 'container']);
+
+/** Texto original da condição de uma at-rule e sua posição. `undefined` se a posição não bater com o texto. */
+function paramsOf(node: AtRule, css: string): { text: string; offset: number } | undefined {
+    const start = node.source?.start?.offset;
+    const text = (node.raws as { params?: { raw?: string } }).params?.raw ?? node.params;
+    if (start === undefined || !text) {
+        return undefined;
+    }
+    const offset = start + 1 + node.name.length + (node.raws.afterName?.length ?? 0);
+    // Os parsers de SCSS, Sass e Less guardam a condição de jeitos diferentes: só usa o que bate com o arquivo
+    return css.slice(offset, offset + text.length) === text ? { text, offset } : undefined;
+}
+
+/**
+ * Bloco de tokens: onde uma custom property com valor literal É o token, não um valor solto.
+ * - `:root` e `html`, com ou sem qualificador (`:root[data-theme="dark"]`, `html.dark`);
+ * - regra só com custom properties que não é `:host` (tema por classe: `.dark { --bg: #000 }`).
+ * Declaração fora de regra (topo do arquivo) também conta: não pertence a nenhum componente.
+ */
+function isTokenBlock(node: PostcssDeclaration, selector: string | undefined): boolean {
+    if (selector === undefined) {
+        return true;
+    }
+    const parts = splitSelectors(selector);
+    if (parts.every((part) => /^(:root|html)(?![\w-])/i.test(part))) {
+        return true;
+    }
+    const onlyCustomProperties = (node.parent?.nodes ?? []).every((child) => child.type !== 'decl' || child.prop.startsWith('--'));
+    return onlyCustomProperties && !/:host(?![\w-])/i.test(selector);
 }
 
 /**
@@ -245,6 +297,11 @@ function* ancestors(node: ChildNode): Generator<Node> {
     for (let current = node.parent as Node | undefined; current && current.type !== 'root' && current.type !== 'document'; current = current.parent as Node | undefined) {
         yield current;
     }
+}
+
+/** Nomes das at-rules em volta do nó (`keyframes`, `font-face`), sem o `@`. */
+function atRuleNamesOf(node: ChildNode): string[] {
+    return [...ancestors(node)].filter((current) => current.type === 'atrule').map((current) => (current as AtRule).name);
 }
 
 /** At-rules em volta do nó, de fora para dentro (`@media (max-width: 600px)`). */

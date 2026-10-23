@@ -3,10 +3,18 @@
 // Daqui em diante o caminho é um só: regras → valores → achados.
 
 import { createPositionLookup } from '../position.ts';
-import { rulesForProperty } from '../rules.ts';
-import type { Siblings } from '../rules.ts';
-import type { AnalysisError, DefinitionSyntax, Finding, Host, TokenDefinition, TokenReference } from '../types.ts';
+import { rulesForProperty, violationRule } from '../rules.ts';
+import type { PropertyRule, Siblings } from '../rules.ts';
+import type { AnalysisError, DefinitionSyntax, Finding, Host, ReviewItem, TokenDefinition, TokenReference } from '../types.ts';
 import { findReferences, findValues } from './css-values.ts';
+import type { ValueMatch } from './css-values.ts';
+
+/** Explicação de cada regra de revisão, para quem lê a saída. */
+export const REVIEW_MESSAGES: Readonly<Record<NonNullable<PropertyRule['review']>, string>> = {
+    'size/no-context': 'size without context: a token only if it is a container width or a square element',
+    'breakpoint/plain-css': 'breakpoint in plain CSS: var() does not work in media queries',
+    'custom-property/unknown-use': 'local custom property with a literal; no use tells its token type',
+};
 
 /** Tamanho da fonte raiz definido no projeto (`html { font-size: 62.5% }`), em px. Base para converter `rem`. */
 export interface RootFontSize {
@@ -15,8 +23,29 @@ export interface RootFontSize {
     line: number;
 }
 
+/**
+ * Custom property definida com valor literal (`--gap: 12px`). Se é token do projeto ou valor solto
+ * de um componente depende de outros arquivos (onde o nome é usado e definido): decidido em `local-properties.ts`.
+ */
+export interface CustomPropertyCandidate {
+    name: string;
+    value: string;
+    /** Posição do valor no arquivo. */
+    offset: number;
+    line: number;
+    column: number;
+    file: string;
+    host: Host;
+    selector?: string;
+    atRules?: string[];
+    /** Está num bloco de tokens (`:root`, `html`, ou uma regra só de custom properties que não é `:host`). */
+    tokenBlock: boolean;
+}
+
 export interface ParseResult {
     findings: Finding[];
+    /** Valores que pedem revisão: não falham o CI e não viram token. */
+    review: ReviewItem[];
     errors: AnalysisError[];
     definitions: TokenDefinition[];
     references: TokenReference[];
@@ -25,6 +54,7 @@ export interface ParseResult {
     rootFontSize?: RootFontSize;
     /** Templates externos de componentes Angular (`templateUrl`), relativos à raiz. */
     templateUrls?: string[];
+    customProperties?: CustomPropertyCandidate[];
 }
 
 /** Uma declaração `propriedade: valor`, venha de onde vier. */
@@ -45,7 +75,7 @@ export interface Declaration {
 export class FileCollector {
     readonly file: string;
     readonly source: string;
-    readonly result: ParseResult = { findings: [], errors: [], definitions: [], references: [], declarations: 0 };
+    readonly result: ParseResult = { findings: [], review: [], errors: [], definitions: [], references: [], declarations: 0 };
     readonly #positionOf: ReturnType<typeof createPositionLookup>;
 
     constructor(file: string, source: string) {
@@ -56,7 +86,7 @@ export class FileCollector {
 
     /** Aplica as regras da propriedade ao valor e registra os achados e os usos de tokens. */
     declaration(decl: Declaration): void {
-        const { property, value, offset, host } = decl;
+        const { property, value, offset } = decl;
         this.result.declarations++;
         for (const name of findReferences(value)) {
             this.result.references.push({
@@ -70,23 +100,55 @@ export class FileCollector {
         const text = decl.impliedUnit ? `${value}${decl.impliedUnit}` : value;
 
         for (const rule of rulesForProperty(property, decl.siblings)) {
-            for (const match of findValues(text, rule.match)) {
-                const start = offset + match.start;
-                const end = offset + Math.min(match.end, value.length);
-                this.result.findings.push({
-                    file: this.file,
-                    ...this.#positionOf(start),
-                    offset: start,
-                    endOffset: end,
-                    type: match.type ?? rule.type,
-                    property,
-                    value: this.source.slice(start, end),
-                    host,
-                    ...(decl.selector === undefined ? {} : { selector: decl.selector }),
-                    ...(decl.atRules?.length ? { atRules: decl.atRules } : {}),
-                    ...(match.function === undefined ? {} : { function: match.function }),
-                    ...(decl.impliedUnit ? { impliedUnit: decl.impliedUnit } : {}),
-                });
+            this.#report(decl, rule, findValues(text, rule.match).map((match) => ({
+                ...match, end: Math.min(match.end, value.length),
+            })));
+        }
+    }
+
+    /**
+     * Medidas na condição de `@media`/`@container` (`(min-width: 768px)`): breakpoints.
+     * Em CSS puro vão para revisão: `var()` não funciona em media query, então não há token para usar ainda.
+     */
+    breakpoint(atRule: string, params: string, offset: number, host: Host, selector?: string): void {
+        const rule: PropertyRule = host === 'css'
+            ? { type: 'breakpoint', match: 'length', review: 'breakpoint/plain-css' }
+            : { type: 'breakpoint', match: 'length' };
+        this.#report(
+            { property: `@${atRule}`, value: params, offset, host, siblings: new Map(), ...(selector === undefined ? {} : { selector }) },
+            rule,
+            findValues(params, 'length'),
+        );
+    }
+
+    customProperty(candidate: Omit<CustomPropertyCandidate, 'file' | 'line' | 'column'>): void {
+        (this.result.customProperties ??= []).push({ ...candidate, file: this.file, ...this.#positionOf(candidate.offset) });
+    }
+
+    #report(decl: Declaration, rule: PropertyRule, matches: readonly ValueMatch[]): void {
+        for (const match of matches) {
+            const start = decl.offset + match.start;
+            const end = decl.offset + match.end;
+            const type = match.type ?? rule.type;
+            const item = {
+                file: this.file,
+                ...this.#positionOf(start),
+                offset: start,
+                endOffset: end,
+                type,
+                rule: rule.review ?? violationRule(type),
+                property: decl.property,
+                value: this.source.slice(start, end),
+                host: decl.host,
+                ...(decl.selector === undefined ? {} : { selector: decl.selector }),
+                ...(decl.atRules?.length ? { atRules: decl.atRules } : {}),
+                ...(match.function === undefined ? {} : { function: match.function }),
+                ...(decl.impliedUnit ? { impliedUnit: decl.impliedUnit } : {}),
+            };
+            if (rule.review) {
+                this.result.review.push({ ...item, message: REVIEW_MESSAGES[rule.review] });
+            } else {
+                this.result.findings.push(item);
             }
         }
     }

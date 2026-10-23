@@ -33,9 +33,24 @@ test('ignores out-of-scope properties and token definitions', () => {
     assert.deepEqual(rulesForProperty('$red'), []);
 });
 
-test('width alone is ambiguous and is not analyzed', () => {
-    assert.deepEqual(rulesForProperty('width', siblings({ width: '300px' })), []);
-    assert.deepEqual(rulesForProperty('height', siblings({ width: '20px', height: '24px' })), []);
+test('width alone is ambiguous: it goes to review, not to violations', () => {
+    const review = [{ type: 'size', match: 'length', review: 'size/no-context' }];
+    assert.deepEqual(rulesForProperty('width', siblings({ width: '300px' })), review);
+    assert.deepEqual(rulesForProperty('height', siblings({ width: '20px', height: '24px' })), review);
+    assert.deepEqual(rulesForProperty('max-height', siblings({ 'max-height': '80vh' })), review);
+    assert.deepEqual(rulesForProperty('flex-basis'), []);
+});
+
+test('vendor prefixes follow the unprefixed property', () => {
+    assert.deepEqual(rulesForProperty('-webkit-box-shadow'), rulesForProperty('box-shadow'));
+    assert.deepEqual(rulesForProperty('-moz-border-radius'), rulesForProperty('border-radius'));
+    assert.deepEqual(rulesForProperty('-webkit-tap-highlight-color'), []);
+});
+
+test('user keys never reach Object.prototype', () => {
+    for (const key of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+        assert.deepEqual(rulesForProperty(key, siblings({ [key]: '10px', width: '10px', height: '10px' })), [], key);
+    }
 });
 
 test('width of a horizontally centered block is a container', () => {

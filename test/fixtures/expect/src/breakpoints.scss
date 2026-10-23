@@ -1,0 +1,4 @@
+$wide: 1024px; // expect: none
+@media (min-width: 768px) { .a { color: red; } } // expect: breakpoint/hardcoded, color/hardcoded
+@media (min-width: $wide) { .b { gap: 8px; } } // expect: spacing/hardcoded
+.c { -moz-border-radius: 6px; } // expect: radius/hardcoded
