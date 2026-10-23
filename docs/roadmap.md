@@ -1,6 +1,8 @@
 # Roadmap: from 0.0.5 to 0.1.0
 
-> 0.0.5 to 0.0.8 are implemented ([plan](plan-0.0.5-0.0.8.md)). Inserting 0.0.8 moved every later version one number up.
+> 0.0.5 to 0.0.8 are implemented ([plan](plan-0.0.5-0.0.8.md)); 0.0.9 is `fix` ([plan](plan-0.0.9.md)). `fix` moved up from 0.0.15 and the sizing properties came in as 0.0.10, so the versions after them were renumbered (2026-10-23).
+>
+> Scope decided on 2026-10-23: the scan covers numeric scale values. `duration`, `easing` and `container` stay. Keyword values such as `position: absolute` are design-independent and are never scanned.
 
 Plan agreed on 2026-10-23. It guides the next versions. Decisions behind it are in [CLAUDE.md](CLAUDE.md#principles), the research that supports them is in [research-log.md](research-log.md), and the difficulties found along the way are in [experience-log.md](experience-log.md).
 
@@ -157,14 +159,14 @@ Items without a confirmed answer yet. Each one is investigated and tested in the
 
 | Id | Question | Needed by | First step |
 |---|---|---|---|
-| R1 | How much change in a spacing or radius is noticeable? The guards use orderings and equalities; is a size tolerance also needed? | 0.0.16 | screenshots before/after on lab copies, measure what looks different |
-| R2 | How far to follow JS objects (props passed down, re-exports, spread)? | 0.0.10 | list real patterns from lab and open-source projects; set a depth limit |
-| R3 | Contrast when the background is on an ancestor the stylesheet doesn't name | 0.0.16 | use template/JSX nesting; otherwise check against the nearest known background |
-| R4 | Visual verification in the lab (which screenshot tool, kept outside the package) | 0.0.15 | compare options; it is a lab tool, not a dependency |
-| R5 | `sass-parser` is 0.x: how stable is the expression AST across releases? | 0.0.9 | pin the version, snapshot tests on the AST shapes we read |
-| R6 | Standalone `.svg` files with fixed colors (used via `<img>`, `var()` can't reach them) | 0.0.10 | count them in the lab; candidate: report and fix only when the SVG is inlined |
-| R7 | DTCG Resolver `version` string: draft says `2025.10`, final report differs | 0.0.22 | check the published schema before writing |
-| R8 | Role families for components with different names (`.card`, `.tile`, `.panel`) | 0.0.17 | test on lab projects; the selector word list already exists in `semantic.ts` |
+| R1 | How much change in a spacing or radius is noticeable? The guards use orderings and equalities; is a size tolerance also needed? | 0.0.17 | screenshots before/after on lab copies, measure what looks different |
+| R2 | How far to follow JS objects (props passed down, re-exports, spread)? | 0.0.12 | list real patterns from lab and open-source projects; set a depth limit |
+| R3 | Contrast when the background is on an ancestor the stylesheet doesn't name | 0.0.17 | use template/JSX nesting; otherwise check against the nearest known background |
+| R4 | Visual verification in the lab (which screenshot tool, kept outside the package) | 0.0.17 | compare options; it is a lab tool, not a dependency |
+| R5 | `sass-parser` is 0.x: how stable is the expression AST across releases? | 0.0.11 | pin the version, snapshot tests on the AST shapes we read |
+| R6 | Standalone `.svg` files with fixed colors (used via `<img>`, `var()` can't reach them) | 0.0.12 | count them in the lab; candidate: report and fix only when the SVG is inlined |
+| R7 | DTCG Resolver `version` string: draft says `2025.10`, final report differs | 0.0.23 | check the published schema before writing |
+| R8 | Role families for components with different names (`.card`, `.tile`, `.panel`) | 0.0.18 | test on lab projects; the selector word list already exists in `semantic.ts` |
 
 ## 9. Versions
 
@@ -176,20 +178,21 @@ Each row lists what is delivered and how to check it objectively. `npm run check
 | **0.0.6** ✅ | `check` precision: rule ids, `review`, local custom properties, `color-mix()`, vendor prefixes, `@font-face` as source, breakpoints, minified files listed, BOM column, unsupported files listed | every scenario in `experimentos/lacunas/` (except `other-langs`) is a fixture and passes |
 | **0.0.7** ✅ | Ignore: comment with rule ids (`/* tokentidy-ignore-line color/hardcoded -- reason */`, `tokentidy-ignore-next-line`) and folders/files in the config | an ignored line disappears; an ignore without a rule id is reported as too broad |
 | **0.0.8** ✅ | `generate`: scale diagnosis (§6.3), gray naming by nearest palette color, hand-written DTCG names reused, `--new` forgets only TokenTidy's output, safe writing (atomic, inside the root, never a user file) | `#111827` → `gray`; `--out ..` exits with 2; a corrupted DTCG file is a clear error |
-| **0.0.9** | SCSS/Less expressions with `sass-parser`: mixin arguments and defaults, `mat.*-overrides` maps, build-time functions | `@include btn(#f59e0b, 10px)` gives 2 findings with exact offsets |
-| **0.0.10** | JS/TS: style objects followed by scope and imports, DOM styles, SVG attributes, canvas/chart colors | `resize({ width: 300 })` → nothing; `style={card}` → findings in `card` |
-| **0.0.11** | CSS-in-JS: styled-components, Emotion, `css` prop, MUI `sx` | offsets exact inside template literals; `sx={{ p: 2 }}` → nothing |
-| **0.0.12** | React Native detection: `StyleSheet.create`, inline, `Platform.select`, unitless numbers | RN fixture passes with 0 false positives |
-| **0.0.13** | Angular: `host`, `@HostBinding`, `Renderer2.setStyle`, `[style]` objects | Angular fixture passes |
-| **0.0.14** | Token index: project, DTCG, npm packages, JS themes, theme overrides; `has-token`/`no-token`; `unknown-token` with "did you mean" | `--acme-color-primay` → `did you mean --acme-color-primary` |
-| **0.0.15** | `fix` (exact, web): `var()`, `$x` in Sass functions, JSX strings, Angular unit suffix, imports, theme-context check, `--dry-run` as a unified diff, atomic writes inside the root, reparse after writing | after `fix`: every file parses, `check` reports 0 `has-token`, a second `fix --dry-run` is empty, the lab app builds |
-| **0.0.16** | Element model and coherence guards | each guard has a fixture where it blocks and one where it allows |
-| **0.0.17** | Consolidation in `generate`, `near-token` in `check`, `fix --approximate` with prompt, `--yes`, `--no-input`, `tokentidy.decisions.json` | 15/16/17px on cards → 1 token; `.btn:hover` color is never merged with `.btn`; a rejected group isn't asked again |
-| **0.0.18** | `tokens.ts` module and `fix` for React Native and canvas libraries | RN fixture: `padding: 16` → `spacing[4]` with the import, and it type-checks |
-| **0.0.19** | Micro-frontends: several roots, workspaces, drift, `:root` collisions, design-system versions, `generate --shared` | two-MFE fixture reports the collision and the drift |
-| **0.0.20** | `validate` against the DTCG 2025.10 schema and reference rules (broken aliases, cycles, types) | invalid fixtures fail with the JSON path of the problem |
-| **0.0.21** | Reports: `--summary`, `--format github`, `schemaVersion` in `--json` | GitHub annotations escaped; JSON keeps its schema version |
-| **0.0.22** | Themes (light/dark) with the DTCG Resolver Module | dark-theme fixture produces semantic tokens per mode |
+| **0.0.9** | `fix` (exact values, web): `var()` in CSS and inline styles, `$x`/`@x` where Sass/Less need a build-time value (functions, arithmetic, breakpoints) with the `@use`/`@import` added, JSX numbers and strings, the Angular unit suffix (`[style.width.px]`), theme-override check, `--dry-run` as a unified diff, atomic writes inside the root, reparse before writing | after `fix`: every file still parses, a second `fix --dry-run` is empty, the lab apps still build |
+| **0.0.10** | Sizing properties ([research](research-log.md#19-sizing-properties)): `width`/`height` of a control, icon or avatar → `size`; `min-height`/`min-width` touch targets → `size`; `max-width` of a container or overlay → `container`; `scroll-margin`/`scroll-padding` and `border-spacing` → `spacing`. `text-indent`, `flex-basis`, `column-width` and `outline-offset` stay out | `.btn { height: 40px }` → `size`; `min-height: 44px` → `size`; `.modal { max-width: 560px }` → `container`; `.card { width: 300px }` stays in review |
+| **0.0.11** | SCSS/Less expressions with `sass-parser`: mixin arguments and defaults, `mat.*-overrides` maps, build-time functions | `@include btn(#f59e0b, 10px)` gives 2 findings with exact offsets |
+| **0.0.12** | JS/TS: style objects followed by scope and imports, DOM styles, SVG attributes, canvas/chart colors | `resize({ width: 300 })` → nothing; `style={card}` → findings in `card` |
+| **0.0.13** | CSS-in-JS: styled-components, Emotion, `css` prop, MUI `sx` | offsets exact inside template literals; `sx={{ p: 2 }}` → nothing |
+| **0.0.14** | React Native detection: `StyleSheet.create`, inline, `Platform.select`, unitless numbers | RN fixture passes with 0 false positives |
+| **0.0.15** | Angular: `host`, `@HostBinding`, `Renderer2.setStyle`, `[style]` objects | Angular fixture passes |
+| **0.0.16** | Token index: project, DTCG, npm packages, JS themes, theme overrides; `has-token`/`no-token`; `unknown-token` with "did you mean" | `--acme-color-primay` → `did you mean --acme-color-primary` |
+| **0.0.17** | Element model and coherence guards | each guard has a fixture where it blocks and one where it allows |
+| **0.0.18** | Consolidation in `generate`, `near-token` in `check`, `fix --approximate` with prompt, `--yes`, `--no-input`, `tokentidy.decisions.json` | 15/16/17px on cards → 1 token; `.btn:hover` color is never merged with `.btn`; a rejected group isn't asked again |
+| **0.0.19** | `tokens.ts` module and `fix` for React Native and canvas libraries | RN fixture: `padding: 16` → `spacing[4]` with the import, and it type-checks |
+| **0.0.20** | Micro-frontends: several roots, workspaces, drift, `:root` collisions, design-system versions, `generate --shared` | two-MFE fixture reports the collision and the drift |
+| **0.0.21** | `validate` against the DTCG 2025.10 schema and reference rules (broken aliases, cycles, types) | invalid fixtures fail with the JSON path of the problem |
+| **0.0.22** | Reports: `--summary`, `--format github`, `schemaVersion` in `--json` | GitHub annotations escaped; JSON keeps its schema version |
+| **0.0.23** | Themes (light/dark) with the DTCG Resolver Module | dark-theme fixture produces semantic tokens per mode |
 
 **Growth:** one new runtime dependency (`@babel/traverse`, loaded only for JS). Commands go from 2 to 4 (`check`, `generate`, `fix`, `validate`). The hardest pieces (scope following, element model, consolidation) live in their own folders (`scan/flow/`, `coherence/`, `consolidate/`), with files of at most ~300 lines.
 

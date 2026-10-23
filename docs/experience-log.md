@@ -80,3 +80,16 @@ Technical record of the implementation of [plan-0.0.5-0.0.8.md](plan-0.0.5-0.0.8
 - **`--new` was cleaning only in one mode.** While writing the safe-write rules, it became clear that stale generated files (`css/*.css` after the split goes away) are stale in `--extend` too. Both modes now remove them, and only when the file carries TokenTidy's header.
 - **The palette fixed the family, not the step.** `#111827` is now `gray` (it was `blue`), but its step comes from TokenTidy's lightness table, which gives `gray-950`, not Tailwind's `gray-900`. The family was the bug; the step table is a separate decision, kept as it is.
 - **Out of scope** (decided after this round): `filter: drop-shadow()`, `text-underline-offset`, position offsets (`top`/`left`/`inset`/`translate`) and unitless `stroke-width`. The tool stays on numeric scale values; positional and effect-specific values are not design-scale decisions.
+
+## Implementing 0.0.9: `fix` (2026-10-23)
+
+Technical record of the implementation of [plan-0.0.9.md](plan-0.0.9.md) (add your own account).
+
+- **The first smoke test already compiled.** A scratch project with CSS, SCSS (function, arithmetic, `@media`), JSX and HTML was fixed, the SCSS compiled with Dart Sass, and a second `fix --dry-run` found nothing. The plan had already settled the risky part: where `var()` is valid in Sass.
+- **The generated header leaked into the CSS.** `_tokens.scss` started with a `/* */` comment; Sass keeps loud comments, so every file loading the tokens got that line in its output. SCSS/Less token files now use `//`, and generated files are still recognized by either header.
+- **A doc comment closed itself.** Writing `` `/* */` `` inside a `/** … */` comment ended the comment early and broke the module at runtime (`SILENT_HEADER is not defined`). Eight unrelated tests failed at once, which pointed at a load error, not at logic.
+- **Hand-written variables need a known type.** A `$gap: 16px` that is never used isn't reused, because its type (spacing? size?) comes from where it is used. The tests first expected it to be reused; the rule is the same as in `generate`, so the tests changed, not the rule.
+- **The scanner already skips symlinks inside folders.** The symlink check in `fix` only matters for a link passed by name; the test does exactly that.
+- **`-` is ambiguous in Sass.** `$a - 16px` is subtraction, `$a -16px` and `16px -$a` are lists. The operator check looks at the space after the `-`, matching what Sass does.
+- **`--dry-run` counts what would remain.** The summary and the exit code of a dry run come from analyzing the fixed contents in memory, so they answer "would the code be clean?", the same question CI asks after a real `fix`.
+- **`generate` and `fix` can disagree on a theme variable.** `generate` reuses `--fg` even when a dark theme redefines it; `fix` refuses to use it, because a fixed value replaced by a theme variable would change in dark mode. The value stays hardcoded until the token index (0.0.16) handles theme overrides.

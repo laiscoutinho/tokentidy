@@ -321,6 +321,58 @@ Exit code `0`, `1` if a file has a syntax error (the token set may be incomplete
 
 The same result as JSON: `root`, `filesAnalyzed`, `mode` (`extend`/`new`), `config` (the values in effect), `dryRun`, `files` (paths written or that would be written), `tokens` (each with `path`, `name`, `type`, `key`, `value`, `count`, `spellings`, `occurrences`, and `equivalents`/`kept` when they apply), `aliases`, `reused`, `belowThreshold` (values under the threshold, with their occurrences), `suggestions` (`kind`, `type`, `message`, `values`), `diagnosis` (`type`, `distinct`, `steps`, `uses`, `onStep`, `consistency` 0–1, `singleUse`, `reference`), `rootFontSize`, `errors`, `warnings` and `skipped`.
 
+### 🟢 `tokentidy fix [paths...]`
+
+Replaces each hardcoded value by a token with **exactly the same value** (same type and same normalized key that `generate` uses). Values without such a token are left alone and counted (`run tokentidy generate`). Values that are only close to a token are never touched here (planned: `--approximate`).
+
+```bash
+tokentidy fix --dry-run           # unified diff on stdout, nothing written
+tokentidy fix                     # writes the files, prints the changed paths
+tokentidy fix src/components --tokens tokens/
+```
+
+**Which token, in this order:**
+
+1. a generated **semantic alias** (`--color-text-danger`), only for the occurrence it was created for;
+2. a **hand-written token** of the project: a global custom property (`:root`/`html`/`body`, never redefined with another value by a theme or media query), or a top-level `$x`/`@x` visible in the file (same file, or a file it loads with `@import`/`@use … as *`). Between two, the most used wins;
+3. a **generated token** from the tokens folder (`design-tokens/`, or `output` in the config), when its output file exists: `tokens.css` for `var()`, `_tokens.scss` for `$x`, `_tokens.less` for `@x`.
+
+**How it is written:**
+
+| Where | Written as |
+|---|---|
+| CSS, HTML `style=""`, Angular `style=""`, plain SCSS/Less values, `calc()`, gradients, `color-mix()` | `var(--name)` |
+| SCSS/Sass/Less inside another function (`darken`, `math.div`), next to `* / + % -`, or in `@media` | `$name` / `@name`; a generated one comes with `@use '<path>/tokens' as *;` (Sass: no `;`) or `@import (reference) '<path>/_tokens.less';` |
+| JSX number (`padding: 16`) | `'var(--name)'`, in the quote style the file uses most |
+| JSX string (`'8px 16px'`) | `'8px var(--name)'` |
+| Angular `[style.padding.px]="16"` / `{'gap.px': 16}` | `[style.padding]="'var(--name)'"` / `{'gap': 'var(--name)'}` |
+
+**Skipped, with the reason** (`stderr`: `file:line:col<TAB>skipped<TAB>reason<TAB>value<TAB>message`):
+
+| Reason | When |
+|---|---|
+| `needs-preprocessor-variable` | Sass/Less need the value at build time and no `$x`/`@x` with it is available |
+| `inline-style-function` | the same, in an Angular inline `styles:` (it can't import Sass variables) |
+| `variable-not-loaded` | the tokens file is loaded with a namespace (`@use … as t`), or a variable with the value exists but isn't imported |
+| `unit-in-binding` | `[style.width.px]="a ? 16 : 24"`: the unit in the name belongs to both values |
+| `overlap` | two replacements on the same text |
+| `breaks-syntax` | the fixed file would have a syntax error (it is analyzed again in memory before writing) |
+| `changed-on-disk` | the file changed while the command was running |
+| `symlink`, `outside-root` | the file is a symbolic link or resolves outside the project |
+
+**Safety:** files inside the tokens folder are never edited; every file is re-read right before writing and written atomically, keeping its permissions; edits are made by position, so line endings, BOM and the rest of the file stay as they were.
+
+**Summary** on `stderr`: `N values replaced in M files; K skipped; X without a token (run tokentidy generate); R violations remain`. When generated tokens were written as `var()`, a reminder that the app must load `design-tokens/tokens.css`.
+
+**Exit code** (same idea as `eslint --fix`): `0` when no violations or syntax errors remain, `1` when some remain (also in `--dry-run`, counted as if the fix were applied), `2` for usage errors.
+
+| Option | What it does |
+|---|---|
+| `--tokens <dir>` | Folder with the generated tokens (default: `output` in the config, `design-tokens`) |
+| `--config <file>` | Config file (default `tokentidy.config.json` in the project) |
+| `--dry-run` | Prints a unified diff (`git apply` accepts it) instead of writing |
+| `--json` | `root`, `dryRun`, `files` (each with `replacements`: line, column, type, property, value, token, source, text; plus `diff` in a dry run), `skippedValues`, `withoutToken`, `remaining`, `errors`, `warnings`, `skipped` |
+
 ### 🟢 Configuration file: `tokentidy.config.json`
 
 Optional, at the root of the analyzed project (or another path with `--config`). Priority: command-line option > config file > default.
@@ -359,6 +411,7 @@ Shows the "TokenTidy" banner, the list of commands, the options and usage exampl
 tokentidy --help
 tokentidy check --help
 tokentidy generate --help
+tokentidy fix --help
 ```
 
 ### 🟢 `tokentidy --version`
@@ -373,23 +426,25 @@ Order and acceptance criteria in [roadmap.md](roadmap.md#9-versions).
 
 | Command | Version | What it will do |
 |---|---|---|
-| ⚪ `has-token` / `no-token` / `unknown-token` | 0.0.14 | `check` says whether a token already exists for the value, and catches references to tokens that don't exist (`did you mean …?`) |
-| ⚪ `tokentidy fix <path...> --dry-run` | 0.0.15 | Show, as a unified diff, what `fix` would replace, without changing any file |
-| ⚪ `tokentidy fix <path...>` | 0.0.15 | Replace exact values by their token: `var(--x)` in CSS and inline styles, `$x`/`@x` inside Sass/Less functions, strings in JSX, the Angular unit suffix; add imports |
-| ⚪ `tokentidy fix <path...> --approximate` | 0.0.17 | Also replace values that are only close to a token (`15px` → the `16px` token), after the coherence guards. Asks per group in a terminal; `--yes` applies all that pass the guards, `--no-input` only lists them. Answers saved in `tokentidy.decisions.json` |
-| ⚪ `near-token` in `check` | 0.0.17 | Values close to an existing token, with the distance |
-| ⚪ React Native and canvas fixes | 0.0.18 | `generate` writes `tokens.ts`; `fix` replaces `padding: 16` with `spacing[4]` and adds the import |
-| ⚪ `tokentidy check app1 app2 …` / `generate --shared <dir>` | 0.0.19 | Micro-frontends: drift, `:root` collisions, design-system versions, a shared token package |
-| ⚪ `tokentidy validate <file>` | 0.0.20 | Check a DTCG file against the 2025.10 schema, broken aliases and cycles |
-| ⚪ `--summary`, `--format github` | 0.0.21 | Totals per rule and type; GitHub annotations for CI |
-| ⚪ Themes (light/dark) | 0.0.22 | Semantic tokens per mode with the DTCG Resolver Module |
+| ⚪ Sizing properties | 0.0.10 | `width`/`height` of controls, icons and avatars as `size`, containers, `min-height` |
+| ⚪ SCSS/Less expressions | 0.0.11 | Mixin arguments and defaults, `mat.*-overrides` maps |
+| ⚪ JS/TS style objects, CSS-in-JS | 0.0.12–0.0.13 | Objects followed to their destination; styled-components, Emotion, `sx` |
+| ⚪ React Native, more Angular | 0.0.14–0.0.15 | `StyleSheet.create`; `host`, `@HostBinding`, `Renderer2.setStyle` |
+| ⚪ `has-token` / `no-token` / `unknown-token` | 0.0.16 | `check` says whether a token already exists for the value, and catches references to tokens that don't exist (`did you mean …?`) |
+| ⚪ `tokentidy fix <path...> --approximate` | 0.0.18 | Also replace values that are only close to a token (`15px` → the `16px` token), after the coherence guards (0.0.17). Asks per group in a terminal; `--yes` applies all that pass the guards, `--no-input` only lists them. Answers saved in `tokentidy.decisions.json` |
+| ⚪ `near-token` in `check` | 0.0.18 | Values close to an existing token, with the distance |
+| ⚪ React Native and canvas fixes | 0.0.19 | `generate` writes `tokens.ts`; `fix` replaces `padding: 16` with `spacing[4]` and adds the import |
+| ⚪ `tokentidy check app1 app2 …` / `generate --shared <dir>` | 0.0.20 | Micro-frontends: drift, `:root` collisions, design-system versions, a shared token package |
+| ⚪ `tokentidy validate <file>` | 0.0.21 | Check a DTCG file against the 2025.10 schema, broken aliases and cycles |
+| ⚪ `--summary`, `--format github` | 0.0.22 | Totals per rule and type; GitHub annotations for CI |
+| ⚪ Themes (light/dark) | 0.0.23 | Semantic tokens per mode with the DTCG Resolver Module |
 
 ### 🟢 Exit codes
 
 | Code | Meaning |
 |---|---|
-| `0` | All good: no violations (`check`; review items and warnings don't count), tokens generated (`generate`) |
-| `1` | Hardcoded values were found (`check`), or a file has a syntax error |
+| `0` | All good: no violations (`check`; review items and warnings don't count), tokens generated (`generate`), nothing left to fix (`fix`) |
+| `1` | Hardcoded values were found (`check`) or remain after `fix`, or a file has a syntax error |
 | `2` | Usage or execution error: missing path, unknown option, invalid config, output folder outside the project, corrupted token file, existing token files without `--extend`/`--new` outside a terminal |
 
 This is what makes `check` usable in CI and pre-commit hooks: the step fails when a hardcoded value shows up. To see the exit code in the terminal: `tokentidy check ./src; echo $?`.

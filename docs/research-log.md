@@ -168,7 +168,55 @@ Research behind [plan-0.0.5-0.0.8.md](plan-0.0.5-0.0.8.md). Rule followed: a Nod
   - [@carbon/layout containers](https://tessl.io/registry/tessl/npm-carbon--layout/files/docs/containers.md): container02 to 04 = 2, 2.5, 3rem.
 - **Findings:** design systems tokenize sizes of controls, icons, avatars and overlays, not arbitrary layout widths. A `width` is a token when its context says what it sizes.
 - **Candidates:** `width`/`height` with a control, icon or avatar context (selector words, `button`/`input`/`img`/`svg`); `min-height`/`min-width` touch targets; `max-width` as container or overlay width; `scroll-margin`/`scroll-padding` and `border-spacing` as spacing. `text-indent`, `flex-basis` and `column-width` stay out: layout values with no scale in the systems above.
-- **Decision:** pending.
+- **Decision (2026-10-23):** the candidates above become roadmap 0.0.10. `container`, `duration` and `easing` stay. "Position" means keyword values (`position: absolute`), which only the developer can judge and which are not numeric, so they are never scanned.
+
+## 2026-10-23: `fix` (0.0.9)
+
+### 20. Exit codes and output of a fixing command
+
+- **Difficulty:** after `fix`, what does the exit code say: that something was changed, or that something is still wrong?
+- **Source:** [ESLint CLI](https://eslint.org/docs/latest/use/command-line-interface): `--fix` writes the fixes and reports only what remains; exit 0 when nothing remains, 1 when errors remain, 2 on configuration or internal errors. `--fix-dry-run` computes the fixes without writing.
+- **Decision:** same model. `fix` exits 1 if violations or syntax errors remain, 0 if none remain, 2 on usage errors. `--dry-run` computes the same result without writing and prints a unified diff.
+
+### 21. Keeping the file mode on rewrite
+
+- **Difficulty:** `writeFileAtomic` writes a new file and renames it over the old one, so the new file gets the default mode (an executable script or a read-only group permission would change).
+- **Source:** [npm/write-file-atomic](https://github.com/npm/write-file-atomic): by default it reuses the mode and owner of the existing file.
+- **Decision:** `writeFileAtomic` copies the mode of the file it replaces (`chmod` on the temporary file before the rename). The owner is not changed: the tool runs as the developer, who already owns the files.
+
+### 22. Where `var()` breaks Sass
+
+- **Difficulty:** `var(--x)` is a CSS runtime value; Sass functions run at build time.
+- **Sources:**
+  - [Sass special functions](https://sass-lang.com/documentation/syntax/special-functions/): `calc()`, `clamp()`, `min()`, `max()` are parsed as calculations since Dart Sass 1.40, so `var()` inside them is kept.
+  - Local experiment with Dart Sass 1.106 (`node_modules/sass`), compiling each case with `--x` defined as a hex color:
+
+    | Input | Result |
+    |---|---|
+    | `calc(var(--x) * 2)`, `min(var(--x), 10px)` | kept as is |
+    | `linear-gradient(var(--x), red)`, `color-mix(in srgb, var(--x), red)` | kept as is |
+    | `rgba(var(--x), .5)` | compiles to `rgba(var(--x), 0.5)`: invalid CSS when `--x` is a hex color |
+    | `darken(var(--x), 10%)` | build error: "is not a color" |
+    | `math.div(var(--x), 2)` | compiles to `var(--x)/2`: wrong value |
+    | a project `@function rem($px)` called with `var(--x)` | build error |
+    | `@include m(var(--x))` where the mixin only prints it | kept |
+    | a mixin that darkens its argument | build error |
+    | `var(--x) * 2` | build error ("Undefined operation") |
+    | `var(--x) + 8px` | compiles to `var(--x)8px`: wrong value |
+    | `var(--x)/1.5 Inter` (font shorthand) | kept as is |
+- **Decision:** in SCSS, Sass and Less, `var()` is written only outside functions or inside the CSS-native ones (`calc`, `clamp`, `min`, `max`, the gradients, `color-mix`, `light-dark`), and never next to an arithmetic operator or in a media query. Everywhere else the preprocessor variable is written (`$x`, `@x`), with the `@use`/`@import` of the generated file added, or the value is skipped with the reason.
+
+### 23. Unified diff format for `--dry-run`
+
+- **Difficulty:** the preview must be readable by people and by tools (`git apply`, `patch`, editors).
+- **Source:** the unified format as `git diff` writes it: `--- a/file` / `+++ b/file`, hunks `@@ -start,count +start,count @@` (the count is omitted when it is 1), 3 lines of context, and `\ No newline at end of file` when the last line has no line break. The GNU diffutils manual page could not be fetched (HTTP 429); the format was checked against `git diff` output instead.
+- **Decision:** own generator, no dependency. The edits are known exactly (offsets), so the hunks are built from the changed lines instead of running a general diff algorithm.
+
+### 24. Angular binding positions
+
+- **Difficulty:** `[style.width.px]="16"` cannot become `[style.width.px]="'var(--x)'"` (that would be `var(--x)px`); the `.px` suffix has to go too.
+- **Source:** local probe of `@angular/compiler`: `TmplAstBoundAttribute.keySpan` covers `style.width.px` and `LiteralMapPropertyKey.sourceSpan` covers `'width.px'` with the quotes, both as absolute template offsets.
+- **Decision:** the parser records the position of the unit suffix in the finding (`unitSuffix`) when the binding value is a single literal. `fix` removes the suffix and writes the token as a string. A ternary (`a ? 16 : 24`) keeps its suffix and is skipped.
 
 ---
 

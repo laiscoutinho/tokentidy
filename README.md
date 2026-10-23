@@ -2,7 +2,7 @@
 
 A command-line tool built as my **undergraduate capstone project (TCC)** to help keep front-end code **faithful to the design system**. It finds hardcoded visual values in the code (such as `#4f46e5`, `17px` or `font-family: Arial`), points out which **design token** should be used instead, fixes the code safely and, when the project has no tokens yet, helps create them.
 
-> ⚠️ Work in progress (version `0.0.x`: each feature is a patch release; `0.1.0` will be the first with every planned feature). Today the CLI finds hardcoded values in CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) and Angular, and generates design tokens (DTCG + CSS/SCSS/Less) from the repeated ones. Automatic fixes are next. See the [roadmap](#️-roadmap).
+> ⚠️ Work in progress (version `0.0.x`: each feature is a patch release; `0.1.0` will be the first with every planned feature). Today the CLI finds hardcoded values in CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) and Angular, generates design tokens (DTCG + CSS/SCSS/Less) from the repeated ones and replaces hardcoded values with tokens of exactly the same value (`tokentidy fix`). See the [roadmap](#️-roadmap).
 
 ---
 
@@ -125,6 +125,8 @@ tokentidy check src/Card.css   # only some files or folders
 tokentidy check --json         # the same result as JSON, for scripts and CI
 tokentidy generate .           # turn repeated values into tokens in design-tokens/
 tokentidy generate . --dry-run # show the token files without writing them
+tokentidy fix --dry-run        # show, as a diff, which values would become tokens
+tokentidy fix                  # replace values that have a token with exactly the same value
 tokentidy --version
 ```
 
@@ -236,7 +238,8 @@ The base projects are the same to-do list app built with plain HTML + JavaScript
 | Token generation (DTCG + CSS/SCSS/Less, scale names, semantic aliases) | 🟢 |
 | Project configuration (`tokentidy.config.json`) | 🟢 |
 | Context-aware detection (page container vs. icon size, see [above](#-what-makes-it-different-context)) | 🟡 |
-| Automatic fixes (`--fix`, `--dry-run`) | 🟡 next |
+| Automatic fixes of exact values (`fix`, `--dry-run`) | 🟢 |
+| Fixes of values close to a token (`fix --approximate`) | ⚪ |
 | Suggesting the exact or closest token (`check --tokens`) | ⚪ |
 | Near-duplicate colors and renaming existing tokens | ⚪ |
 | Style objects outside `style={{}}` and CSS-in-JS | ⚪ |
@@ -274,7 +277,7 @@ tokentidy/
 │   ├── suggest/        # value normalization (closest token comes next)
 │   ├── generate/       # token generation: grouping, names, semantic aliases, output files
 │   ├── tokens/         # token index for check --tokens (planned)
-│   └── fix/            # automatic fixes (next)
+│   └── fix/            # automatic fixes: token candidates, plan, diff, safe apply
 ├── test/               # automated tests and sample projects (fixtures)
 └── docs/               # development guide, commands and logs
 ```
