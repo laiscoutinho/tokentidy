@@ -108,7 +108,7 @@ Files considered: `.css`, `.scss`, `.sass`, `.less`, `.html`, `.js`, `.jsx`, `.m
 
 ## 🚀 Installation and usage
 
-Requirement: **Node.js 22.17 or later**.
+Requirement: **Node.js 22.20 or later**.
 
 The package is not on npm yet, so install it straight from GitHub as a dev dependency of your project:
 
@@ -120,27 +120,31 @@ npx tokentidy --help
 ### Available commands
 
 ```bash
-tokentidy check ./src          # list hardcoded values
-tokentidy check ./src --json   # the same result as JSON, for scripts and CI
+tokentidy check                # list hardcoded values in the current project
+tokentidy check src/Card.css   # only some files or folders
+tokentidy check --json         # the same result as JSON, for scripts and CI
 tokentidy generate .           # turn repeated values into tokens in design-tokens/
 tokentidy generate . --dry-run # show the token files without writing them
 tokentidy --version
 ```
 
-`check` follows the UNIX philosophy: only data, one hardcoded value per line (`file:line:column`, token type, property and value, tab-separated). That makes it work with other terminal tools:
+`check` follows the UNIX philosophy: only data on `stdout`, one item per line (`file:line:column`, severity, rule, property and value, tab-separated), and the summary on `stderr`. That makes it work with other terminal tools:
 
 ```
-src/App.jsx:29:28	color	color	#4f46e5
-src/App.jsx:29:93	spacing	margin-bottom	24
-src/App.scss:8:8	spacing	gap	10px
+src/App.jsx:29:28	violation	color/hardcoded	color	#4f46e5
+src/App.jsx:29:93	violation	spacing/hardcoded	margin-bottom	24
+src/App.jsx:31:12	review	size/no-context	width	120
+src/App.scss:8:8	violation	spacing/hardcoded	gap	10px
 ```
 
 ```bash
-tokentidy check ./src | awk -F'\t' '$2 == "color"'            # colors only
-tokentidy check ./src | cut -f4 | sort | uniq -c | sort -rn  # most repeated values
+tokentidy check ./src | awk -F'\t' '$3 == "color/hardcoded"'  # colors only
+tokentidy check ./src | cut -f5 | sort | uniq -c | sort -rn    # most repeated values
 ```
 
-`generate` writes `tokens.tokens.json` (DTCG) and `tokens.css`, plus `_tokens.scss`/`_tokens.less` when the project uses them. A value becomes a token when it is used at least twice (configurable in `tokentidy.config.json`); tokens the project already has are reused; names follow familiar scales (`spacing-2`, `radius-lg`, `color-indigo-600`).
+*Review* items are what the code alone can't decide (a lone `width: 120px`): they are shown but never fail CI. An intentional value is ignored with its rule and a reason: `/* tokentidy-ignore-line color/hardcoded -- partner brand */`.
+
+`generate` writes `tokens.tokens.json` (DTCG) and `tokens.css`, plus `_tokens.scss`/`_tokens.less` when the project uses them. A value becomes a token when it is used at least twice (configurable in `tokentidy.config.json`); tokens the project already has are reused; names follow familiar scales (`spacing-2`, `radius-lg`, `color-indigo-600`). It also prints a diagnosis of each scale (how many different values, how many uses already fall on a token). Files are written atomically, only inside the project, and never over a file TokenTidy didn't generate.
 
 Exit code: `0` ok, `1` hardcoded values found (or a file with a syntax error), `2` usage error. Errors go to `stderr`. The full list of commands, options and configuration is in [docs/commands.md](docs/commands.md).
 
@@ -238,8 +242,11 @@ The base projects are the same to-do list app built with plain HTML + JavaScript
 | Style objects outside `style={{}}` and CSS-in-JS | ⚪ |
 | Mapping `var()` fallback values (e.g. `var(--space, 12px)`) | ⚪ |
 | Relative units (`%`, `vw`, `vh`): compare with absolute values used in the same role and unify them into one token | ⚪ |
-| Ignore comments and ignored folders | ⚪ |
-| CI usage and npm release | ⚪ |
+| Files and folders as input, project root detection | 🟢 |
+| Rule ids, *review* items, local custom properties, breakpoints | 🟢 |
+| Ignore comments and ignored folders | 🟢 |
+| Scale diagnosis in `generate`, safe writing | 🟢 |
+| CI usage and npm release | 🟡 CI on Linux/Windows/macOS |
 | Comparative evaluation on the base projects | ⚪ |
 | Writing the TCC text | ⚪ |
 
@@ -251,12 +258,16 @@ The base projects are the same to-do list app built with plain HTML + JavaScript
 tokentidy/
 ├── src/
 │   ├── cli.ts          # entry point (enables the compile cache and loads program.ts)
-│   ├── program.ts      # command-line interface (arguments, output, exit code)
+│   ├── program.ts      # builds the command-line program
+│   ├── cli/            # one module per command, plus output helpers and exit codes
 │   ├── index.ts        # public API, to use TokenTidy as a library
 │   ├── types.ts        # shared types (e.g. Finding, a hardcoded value found)
 │   ├── config.ts       # tokentidy.config.json
-│   ├── scanner.ts      # finds the files to analyze
+│   ├── scope.ts        # paths → project root + files to analyze
+│   ├── scanner.ts      # classifies files (supported, token, minified, unsupported)
 │   ├── analyze.ts      # ties it together: reads each file and calls the parser for its extension
+│   ├── ignore.ts       # tokentidy-ignore comments
+│   ├── fs-safe.ts      # atomic writes inside the project
 │   ├── rules.ts        # what counts as a violation: properties, units and exceptions
 │   ├── position.ts     # converts an offset into line and column
 │   ├── parsers/        # CSS/SCSS/Sass/Less, HTML, JSX/TSX, Angular and DTCG
@@ -268,13 +279,13 @@ tokentidy/
 └── docs/               # development guide, commands and logs
 ```
 
-The CLI (`cli.ts` and `program.ts`) only handles input and output; all analysis lives in separate modules that can be tested without a terminal.
+The CLI (`cli.ts`, `program.ts` and `cli/`) only handles input and output; all analysis lives in separate modules that can be tested without a terminal.
 
 ---
 
 ## 🛠️ Development
 
-Written in **TypeScript** (ESM), with Node.js **22.18 or later** for development: Node runs the `.ts` files directly, with no build step. The build only happens to produce the package (`dist/`, with JavaScript and types).
+Written in **TypeScript** (ESM), with Node.js **22.20 or later**: Node runs the `.ts` files directly, with no build step. The build only happens to produce the package (`dist/`, with JavaScript and types).
 
 ```bash
 git clone https://github.com/laiscoutinho/tokentidy.git

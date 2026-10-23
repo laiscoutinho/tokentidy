@@ -49,3 +49,34 @@ Technical record of what happened in this version (add your own account).
 - **Nothing waits for a person.** With existing token files, `generate` needs a choice between extending and starting over. In a terminal it asks; in CI, a hook or a pipe it exits with `2` and names the flags (`--extend`/`--new`).
 - **TypeScript checked the fixtures.** Fixture `.tsx` files and `@angular/core` imports broke `tsc`. Fixtures are sample projects, not code to compile, so `test/fixtures` was excluded from `tsconfig.json`. `Map.groupBy` required moving `target`/`lib` to `es2024`.
 - **Lab results.** `check` went from 17 / 7 / 19 values (v0.0.2) to 27 / 13 / 30 (basic / React / Angular), mostly from inline styles, JSX, Angular templates, `border-radius` and context-based `width`. `generate` proposed 5 / 3 / 7 tokens, every one used at least twice or needed as a CSS equivalent of a Sass variable.
+
+## Planning 0.0.5 to 0.1.0 (2026-10-23)
+
+Technical record of the gap analysis and the planning discussion (add your own account). The plan is in [roadmap.md](roadmap.md); the sources are in [research-log.md](research-log.md).
+
+- **Simulating real scenarios showed the gaps.** Folders with edge cases were created in `tcc-labs/testar-tokentidy/v0.0.4/experimentos/lacunas/` (CSS edge cases, advanced SCSS, real React, real Angular with Material, dark theme, an existing design system in `node_modules`, robustness). What v0.0.4 got wrong:
+  - **silent:** `.pcss`/`.styl` files ignored with exit 0; `check` refuses a single file (`Not a directory`);
+  - **noise:** an unnamed minified vendor bundle produced 9,750 of 9,754 findings and polluted `generate`;
+  - **false positives:** `font-family`/`font-weight` inside `@font-face`, `opacity` inside `@keyframes`;
+  - **false negatives:** local custom properties (`--local-gap: 12px`, `--mat-sys-primary: #e53935`), `-webkit-box-shadow`, `@include` arguments and mixin defaults, `mat.*-overrides` maps, `@media` breakpoints, style objects in variables, styled-components, Emotion, `sx`, vanilla-extract, SVG `fill`/`stroke`, `'--x'` keys in style objects, Angular `host: {}` and `@HostBinding`;
+  - **wrong output:** `color-mix()` reported whole; a typo in a token reference (`--acme-color-primay`) not caught; the design system's tokens in `node_modules` invisible, so `generate` duplicated them; an existing DTCG token not reused; `15px`/`17px` became their own tokens (`spacing-3_75`, `spacing-4_25`); `#111827` named blue instead of gray; dark theme produced no semantic aliases; the BOM shifted column 1 by one.
+  - The offset invariant held: 0 mismatches across 9,858 findings, including BOM, CRLF, emoji and paths with spaces.
+- **"Skip it" was rejected as a solution.** The first plan skipped React Native (no `var()`), Sass functions and breakpoints. The decision was that every hard case needs a real solution, and a case without a known solution becomes a research item, not a removal. Hence the `tokens.ts` module for React Native and canvas libraries, `$x` inside Sass functions, and consolidation of the literal in plain-CSS media queries.
+- **Too many tokens is a symptom.** A project with 27 different spacings doesn't need 27 tokens; it needs to know it has no pattern. Consolidation and the scale-health summary came from this.
+- **"Close values" needed a definition.** Different cards may have different paddings on purpose. The line drawn: two on-grid values are two decisions; an off-grid value next to an on-grid one is inconsistency. For colors, the CSS Color 4 just noticeable difference (ΔEOK 0.02), with the most used color as representative.
+- **A value can't be judged alone.** Changing `15px` to `16px` is harmless alone, but can turn a "squish" button square, merge a hover color into its base color, or break the nested radius of a card. This led to the element model and the coherence guards. There is no single standard for "looks odd", so the guards keep relationships (orders, equalities, contrast thresholds) instead of guessing sizes, and the size tolerance is an open research item (R1).
+- **Review had to stay small.** Sending every uncertain case to review would avoid false positives but make the certain set too small. Review is now limited to two reasons the code can't answer, and its share is a metric per version.
+- **JavaScript needs data flow.** Reporting every object with style-like keys catches `resize({ width: 300 })`; reporting only `style={{}}` misses most real code. Following each object to its destination (Babel scope analysis) solves both.
+- **Authorization without breaking automation.** Approximate changes need a "yes", but `check`/`fix` must run in CI. A prompt only in a terminal, `--yes`/`--no-input` outside it, and saved answers so a team isn't asked twice.
+- **Vue and Svelte left the scope.** Their files are listed as unsupported in the summary, never silently dropped.
+
+## Implementing 0.0.5 to 0.0.8 (2026-10-23)
+
+Technical record of the implementation of [plan-0.0.5-0.0.8.md](plan-0.0.5-0.0.8.md) (add your own account).
+
+- **The expectation fixtures caught the fixture, not the code.** The first run of `test/fixtures/expect/` showed false negatives on rules with only custom properties (`.kk { --x: 4px }`). By design, such a rule is a token block. The fixture lines were wrong; `display: block` was added so they are ordinary rules, and a separate `expect: none` line covers the token-block case. Lesson: the expectation must follow the documented decision, so the decision has to be written before the fixture.
+- **Fixtures needed a project root.** With root detection, a fixture without `package.json` resolved to the TokenTidy repository itself and reported paths like `test/fixtures/css/a.css`. Each fixture now has `{ "private": true }`.
+- **The coverage floor failed at first** (branches 82.7% < 85%). The gaps were new modules without their own tests (`ignore.ts`, `fs-safe.ts`, `print.ts`, `diagnosis.ts`). After adding them, 154 tests, 94% lines and 86% branches. The floor did its job: it made untested safety code visible.
+- **`--new` was cleaning only in one mode.** While writing the safe-write rules, it became clear that stale generated files (`css/*.css` after the split goes away) are stale in `--extend` too. Both modes now remove them, and only when the file carries TokenTidy's header.
+- **The palette fixed the family, not the step.** `#111827` is now `gray` (it was `blue`), but its step comes from TokenTidy's lightness table, which gives `gray-950`, not Tailwind's `gray-900`. The family was the bug; the step table is a separate decision, kept as it is.
+- **Out of scope** (decided after this round): `filter: drop-shadow()`, `text-underline-offset`, position offsets (`top`/`left`/`inset`/`translate`) and unitless `stroke-width`. The tool stays on numeric scale values; positional and effect-specific values are not design-scale decisions.
