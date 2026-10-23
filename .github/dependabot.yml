@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # Só as actions do CI; dependências npm são atualizadas à mão (parsers fixados de propósito)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

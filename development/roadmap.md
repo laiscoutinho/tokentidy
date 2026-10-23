@@ -108,6 +108,12 @@ Before any approximate substitution (and before `generate` consolidates), TokenT
 
 A blocked substitution is shown with its reason (`blocked: merges .btn:hover with .btn`) and is not applied. It is not review: the decision is made, and explained.
 
+**States written in code**, not only pseudo-classes, count for the distinct-states guard ([research](research-log.md#25-absorbing-the-token-gap-literature)). Iris's repairs failed where the color depended on state, so the model must see every state the code can tell:
+
+- both branches of a ternary (`isActive ? '#4f46e5' : '#6366f1'`) are two states of one slot;
+- Angular `[ngClass]` and `[class.x]="cond"` bindings, and a React `className` built from a condition, link the base rule with the class turned on;
+- modifier classes on the same block (`.btn--active`, `.is-open`, `.has-error`) are states of `.btn`, decided by the state words already in `semantic.ts`. A class that isn't on that list is a variant, not a state (guard *Variants*).
+
 ### 6.3 Token count as a diagnosis
 
 `generate` prints, per category, how many distinct values exist, how many steps the scale becomes, and the **consistency** (share of uses already exactly on a step):
@@ -159,7 +165,7 @@ Items without a confirmed answer yet. Each one is investigated and tested in the
 
 | Id | Question | Needed by | First step |
 |---|---|---|---|
-| R1 | How much change in a spacing or radius is noticeable? The guards use orderings and equalities; is a size tolerance also needed? | 0.0.18 | screenshots before/after on lab copies, measure what looks different |
+| R1 | How much change in a spacing or radius is noticeable? The guards use orderings and equalities; is a size tolerance also needed? | 0.0.18 | screenshots before/after on lab copies, measure what looks different. Same lab run: a script that runs consolidation with `colorTolerance` 0.01 / 0.02 / 0.03 and the grid at 4 / 8, and lists which groups change, to calibrate the defaults (lab only, never in the CLI output) |
 | R2 | How far to follow JS objects (props passed down, re-exports, spread)? | 0.0.13 | list real patterns from lab and open-source projects; set a depth limit |
 | R3 | Contrast when the background is on an ancestor the stylesheet doesn't name | 0.0.18 | use template/JSX nesting; otherwise check against the nearest known background |
 | R4 | Visual verification in the lab (which screenshot tool, kept outside the package) | 0.0.18 | compare options; it is a lab tool, not a dependency |
@@ -179,6 +185,7 @@ Each row lists what is delivered and how to check it objectively. `npm run check
 | **0.0.7** ✅ | Ignore: comment with rule ids (`/* tokentidy-ignore-line color/hardcoded -- reason */`, `tokentidy-ignore-next-line`) and folders/files in the config | an ignored line disappears; an ignore without a rule id is reported as too broad |
 | **0.0.8** ✅ | `generate`: scale diagnosis (§6.3), gray naming by nearest palette color, hand-written DTCG names reused, `--new` forgets only TokenTidy's output, safe writing (atomic, inside the root, never a user file) | `#111827` → `gray`; `--out ..` exits with 2; a corrupted DTCG file is a clear error |
 | **0.0.9** | `fix` (exact values, web): `var()` in CSS and inline styles, `$x`/`@x` where Sass/Less need a build-time value (functions, arithmetic, breakpoints) with the `@use`/`@import` added, JSX numbers and strings, the Angular unit suffix (`[style.width.px]`), theme-override check, `--dry-run` as a unified diff, atomic writes inside the root, reparse before writing | after `fix`: every file still parses, a second `fix --dry-run` is empty, the lab apps still build |
+| *before 0.0.10* | **Compile tests** (a `test:` commit, no version of its own). The reparse before writing checks syntax, not the build: `darken(var(--x))` parses and fails in Sass ([§22](research-log.md#22-where-var-breaks-sass)). `sass` and `less` become **devDependencies only** (not shipped, not in users' `npm audit`); tests compile the SCSS/Sass/Less fixtures after `fix`, plus the generated `_tokens.scss` and `_tokens.less`, on the 3 CI systems. The `tokens.ts` type-check stays in 0.0.20 | every fixture fixed by `fix` compiles with Dart Sass and Less; a test with `darken(var(--x))` written on purpose fails |
 | **0.0.10** | Sizing properties ([research](research-log.md#19-sizing-properties)): `width`/`height` of a control, icon or avatar → `size`; `min-height`/`min-width` touch targets → `size`; `max-width` of a container or overlay → `container`; `scroll-margin`/`scroll-padding` and `border-spacing` → `spacing`. `text-indent`, `flex-basis`, `column-width` and `outline-offset` stay out | `.btn { height: 40px }` → `size`; `min-height: 44px` → `size`; `.modal { max-width: 560px }` → `container`; `.card { width: 300px }` stays in review |
 | **0.0.11** | Token freshness in `fix` and `check`: the values left without a token are split in two, *used once* (below the `generate` threshold, no token by design) and *repeated without a token* (the code changed after `generate`). The second group means the tokens folder is out of date: the summary says how many and to run `tokentidy generate --extend`; `--json` lists them. Same rule and threshold as `generate`, so the two commands always agree | after adding a second `margin: 20px` to a fixed lab copy, `fix` reports `1 repeated value has no token yet`; right after `generate`, it reports 0 |
 | **0.0.12** | SCSS/Less expressions with `sass-parser`: mixin arguments and defaults, `mat.*-overrides` maps, build-time functions | `@include btn(#f59e0b, 10px)` gives 2 findings with exact offsets |
@@ -186,14 +193,23 @@ Each row lists what is delivered and how to check it objectively. `npm run check
 | **0.0.14** | CSS-in-JS: styled-components, Emotion, `css` prop, MUI `sx` | offsets exact inside template literals; `sx={{ p: 2 }}` → nothing |
 | **0.0.15** | React Native detection: `StyleSheet.create`, inline, `Platform.select`, unitless numbers | RN fixture passes with 0 false positives |
 | **0.0.16** | Angular: `host`, `@HostBinding`, `Renderer2.setStyle`, `[style]` objects | Angular fixture passes |
-| **0.0.17** | Token index: project, DTCG, npm packages, JS themes, theme overrides; `has-token`/`no-token`; `unknown-token` with "did you mean" | `--acme-color-primay` → `did you mean --acme-color-primary` |
-| **0.0.18** | Element model and coherence guards | each guard has a fixture where it blocks and one where it allows |
+| **0.0.17** | Token index: project, DTCG, npm packages, JS themes, theme overrides; `has-token`/`no-token`; `unknown-token` with "did you mean". **Deprecated tokens:** `$deprecated` (boolean or string, DTCG 2025.10) is read, and `check` warns on each `var()`/reference to one, with the explanation string when there is one; `fix` never replaces it automatically (the string explains, it doesn't point to a replacement). **Primitive where a semantic alias exists:** `.error { color: var(--color-red-500) }` while `color.text.danger → {color.red.500}` exists becomes a suggestion (never fails, `fix` doesn't touch existing references), with the same unambiguous-role rule as the aliases. **Provenance in `fix --json`:** each replacement gets `definedAt` (file:line of the token) and `reason` (`same value; most used of 2 project tokens`); the diff and the text output don't change | `--acme-color-primay` → `did you mean --acme-color-primary`; a `$deprecated` token used in CSS → 1 warning, 0 edits; `fix --json` has `definedAt` on every replacement |
+| **0.0.18** | Element model and coherence guards, with states written in code (ternaries, `[ngClass]`/`[class.x]`, conditional `className`, modifier classes; [§6.2](#62-coherence-guards)) | each guard has a fixture where it blocks and one where it allows; `isActive ? a : b` with close colors is blocked |
 | **0.0.19** | Consolidation in `generate`, `near-token` in `check`, `fix --approximate` with prompt, `--yes`, `--no-input`, `tokentidy.decisions.json` | 15/16/17px on cards → 1 token; `.btn:hover` color is never merged with `.btn`; a rejected group isn't asked again |
 | **0.0.20** | `tokens.ts` module and `fix` for React Native and canvas libraries | RN fixture: `padding: 16` → `spacing[4]` with the import, and it type-checks |
 | **0.0.21** | Micro-frontends: several roots, workspaces, drift, `:root` collisions, design-system versions, `generate --shared` | two-MFE fixture reports the collision and the drift |
 | **0.0.22** | `validate` against the DTCG 2025.10 schema and reference rules (broken aliases, cycles, types) | invalid fixtures fail with the JSON path of the problem |
 | **0.0.23** | Reports: `--summary`, `--format github`, `schemaVersion` in `--json` | GitHub annotations escaped; JSON keeps its schema version |
 | **0.0.24** | Themes (light/dark) with the DTCG Resolver Module | dark-theme fixture produces semantic tokens per mode |
+
+**Considered and left out** (2026-10-23, [research](research-log.md#25-absorbing-the-token-gap-literature)):
+
+| Idea | Why not |
+|---|---|
+| Role mismatch: a background token used in `color` | real false positives: a primary button uses `var(--color-bg)` as its text color on purpose, and hand-written names vary (`--surface`, `--fundo`, `--on-primary`) |
+| Clustering sensitivity shown in the CLI | noise for the user; the 0.0.19 prompt already shows each distance. It becomes the R1 lab script |
+| Evaluation on a project's commit history | discarded |
+| Figma/design-file sync, LLM extraction from documents, knowledge graphs, deep-learning smell detection | out of scope: no AI and no design tools ([§3](#3-closed-scope)) |
 
 **Growth:** one new runtime dependency (`@babel/traverse`, loaded only for JS). Commands go from 2 to 4 (`check`, `generate`, `fix`, `validate`). The hardest pieces (scope following, element model, consolidation) live in their own folders (`scan/flow/`, `coherence/`, `consolidate/`), with files of at most ~300 lines.
 
