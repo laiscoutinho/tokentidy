@@ -14,7 +14,7 @@ Format of each entry: **difficulty** → what was searched → sources (link + w
 - **Searched:** the official DTCG JSON Schema and the Resolver Module.
 - **Sources:**
   - [DTCG 2025.10 format schema](https://www.designtokens.org/schemas/2025.10/format.json): official JSON Schema (draft-07). `validate` will check against it instead of writing our own rules for the structure.
-  - [DTCG Resolver Module 2025.10, final report](https://www.w3.org/community/reports/design-tokens/CG-FINAL-resolver-20251028/) and [draft](https://www.designtokens.org/tr/drafts/resolver/): describes themes and modes as *sets* and *modifiers* combined by a `resolutionOrder`. Basis for 0.0.21 (themes).
+  - [DTCG Resolver Module 2025.10, final report](https://www.w3.org/community/reports/design-tokens/CG-FINAL-resolver-20251028/) and [draft](https://www.designtokens.org/tr/drafts/resolver/): describes themes and modes as *sets* and *modifiers* combined by a `resolutionOrder`. Basis for 0.0.24 (themes).
   - [Terrazzo: resolver contexts](https://terrazzo.app/docs/guides/resolver-contexts/): an existing tool's implementation of the resolver, used to understand how modifiers are applied in practice.
 - **Inconclusive:** the draft says version `2025.10` and the final report carries a different date string. Open item R7 in the roadmap.
 

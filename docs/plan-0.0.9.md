@@ -9,9 +9,9 @@ Written on 2026-10-23, before any code change. It turns roadmap 0.0.9 into concr
 **Out (later versions):**
 
 - creating tokens (that is `generate`);
-- values that are only close to a token (`15px` → the `16px` token): 0.0.18, after the coherence guards;
-- tokens from npm packages or JS themes (token index, 0.0.16);
-- React Native and canvas (`tokens.ts`, 0.0.19);
+- values that are only close to a token (`15px` → the `16px` token): 0.0.19, after the coherence guards;
+- tokens from npm packages or JS themes (token index, 0.0.17);
+- React Native and canvas (`tokens.ts`, 0.0.20);
 - values that `check` doesn't report yet (mixin arguments, CSS-in-JS).
 
 ## 2. Research-backed choices
@@ -88,7 +88,7 @@ Line endings and BOM stay as they are: edits are applied by offset on the origin
 
 ## 6. Completeness
 
-- Every finding ends up in one of three places: replaced, skipped with a reason, or without a token (`run tokentidy generate`).
+- Every finding ends up in one of three places: replaced, skipped with a reason, or without a token (counted in the summary).
 - Skip reasons: `needs-preprocessor-variable`, `inline-style-function`, `variable-not-loaded` (added during implementation: a variable with the value exists but isn't loaded, or the tokens file is loaded with a namespace), `unit-in-binding`, `overlap`, `breaks-syntax`, `changed-on-disk`, `symlink`, `outside-root` (a file under a symlinked folder).
 - Files inside the tokens folder are never edited.
 - Review items are never replaced: they are not violations.

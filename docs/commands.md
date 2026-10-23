@@ -323,7 +323,7 @@ The same result as JSON: `root`, `filesAnalyzed`, `mode` (`extend`/`new`), `conf
 
 ### 🟢 `tokentidy fix [paths...]`
 
-Replaces each hardcoded value by a token with **exactly the same value** (same type and same normalized key that `generate` uses). Values without such a token are left alone and counted (`run tokentidy generate`). Values that are only close to a token are never touched here (planned: `--approximate`).
+Replaces each hardcoded value by a token with **exactly the same value** (same type and same normalized key that `generate` uses). Values without such a token are left alone and counted; when the project has no tokens at all, `fix` says to run `tokentidy generate` first. Values that are only close to a token are never touched here (planned: `--approximate`).
 
 ```bash
 tokentidy fix --dry-run           # unified diff on stdout, nothing written
@@ -362,7 +362,7 @@ tokentidy fix src/components --tokens tokens/
 
 **Safety:** files inside the tokens folder are never edited; every file is re-read right before writing and written atomically, keeping its permissions; edits are made by position, so line endings, BOM and the rest of the file stay as they were.
 
-**Summary** on `stderr`: `N values replaced in M files; K skipped; X without a token (run tokentidy generate); R violations remain`. When generated tokens were written as `var()`, a reminder that the app must load `design-tokens/tokens.css`.
+**Summary** on `stderr`: `N values replaced in M files; K skipped; X without a token; R violations remain`. When generated tokens were written as `var()`, a reminder that the app must load `design-tokens/tokens.css`.
 
 **Exit code** (same idea as `eslint --fix`): `0` when no violations or syntax errors remain, `1` when some remain (also in `--dry-run`, counted as if the fix were applied), `2` for usage errors.
 
@@ -427,17 +427,18 @@ Order and acceptance criteria in [roadmap.md](roadmap.md#9-versions).
 | Command | Version | What it will do |
 |---|---|---|
 | ⚪ Sizing properties | 0.0.10 | `width`/`height` of controls, icons and avatars as `size`, containers, `min-height` |
-| ⚪ SCSS/Less expressions | 0.0.11 | Mixin arguments and defaults, `mat.*-overrides` maps |
-| ⚪ JS/TS style objects, CSS-in-JS | 0.0.12–0.0.13 | Objects followed to their destination; styled-components, Emotion, `sx` |
-| ⚪ React Native, more Angular | 0.0.14–0.0.15 | `StyleSheet.create`; `host`, `@HostBinding`, `Renderer2.setStyle` |
-| ⚪ `has-token` / `no-token` / `unknown-token` | 0.0.16 | `check` says whether a token already exists for the value, and catches references to tokens that don't exist (`did you mean …?`) |
-| ⚪ `tokentidy fix <path...> --approximate` | 0.0.18 | Also replace values that are only close to a token (`15px` → the `16px` token), after the coherence guards (0.0.17). Asks per group in a terminal; `--yes` applies all that pass the guards, `--no-input` only lists them. Answers saved in `tokentidy.decisions.json` |
-| ⚪ `near-token` in `check` | 0.0.18 | Values close to an existing token, with the distance |
-| ⚪ React Native and canvas fixes | 0.0.19 | `generate` writes `tokens.ts`; `fix` replaces `padding: 16` with `spacing[4]` and adds the import |
-| ⚪ `tokentidy check app1 app2 …` / `generate --shared <dir>` | 0.0.20 | Micro-frontends: drift, `:root` collisions, design-system versions, a shared token package |
-| ⚪ `tokentidy validate <file>` | 0.0.21 | Check a DTCG file against the 2025.10 schema, broken aliases and cycles |
-| ⚪ `--summary`, `--format github` | 0.0.22 | Totals per rule and type; GitHub annotations for CI |
-| ⚪ Themes (light/dark) | 0.0.23 | Semantic tokens per mode with the DTCG Resolver Module |
+| ⚪ Token freshness in `fix`/`check` | 0.0.11 | Values left without a token split into *used once* and *repeated without a token*; the second means the tokens folder is out of date (`run tokentidy generate --extend`) |
+| ⚪ SCSS/Less expressions | 0.0.12 | Mixin arguments and defaults, `mat.*-overrides` maps |
+| ⚪ JS/TS style objects, CSS-in-JS | 0.0.13–0.0.14 | Objects followed to their destination; styled-components, Emotion, `sx` |
+| ⚪ React Native, more Angular | 0.0.15–0.0.16 | `StyleSheet.create`; `host`, `@HostBinding`, `Renderer2.setStyle` |
+| ⚪ `has-token` / `no-token` / `unknown-token` | 0.0.17 | `check` says whether a token already exists for the value, and catches references to tokens that don't exist (`did you mean …?`) |
+| ⚪ `tokentidy fix <path...> --approximate` | 0.0.19 | Also replace values that are only close to a token (`15px` → the `16px` token), after the coherence guards (0.0.18). Asks per group in a terminal; `--yes` applies all that pass the guards, `--no-input` only lists them. Answers saved in `tokentidy.decisions.json` |
+| ⚪ `near-token` in `check` | 0.0.19 | Values close to an existing token, with the distance |
+| ⚪ React Native and canvas fixes | 0.0.20 | `generate` writes `tokens.ts`; `fix` replaces `padding: 16` with `spacing[4]` and adds the import |
+| ⚪ `tokentidy check app1 app2 …` / `generate --shared <dir>` | 0.0.21 | Micro-frontends: drift, `:root` collisions, design-system versions, a shared token package |
+| ⚪ `tokentidy validate <file>` | 0.0.22 | Check a DTCG file against the 2025.10 schema, broken aliases and cycles |
+| ⚪ `--summary`, `--format github` | 0.0.23 | Totals per rule and type; GitHub annotations for CI |
+| ⚪ Themes (light/dark) | 0.0.24 | Semantic tokens per mode with the DTCG Resolver Module |
 
 ### 🟢 Exit codes
 
