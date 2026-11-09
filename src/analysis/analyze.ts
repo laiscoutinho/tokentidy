@@ -197,6 +197,11 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
         }
     }
 
+    if (results.some((r) => r.mixinCalls || r.styleLinks)) {
+        const { linkAcrossFiles } = await import('./cross-file.ts');
+        linkAcrossFiles(results);
+    }
+
     const references = results.flatMap((r) => r.references);
     const local = resolveLocalProperties(results.flatMap((r) => r.customProperties ?? []), references);
     const definitionKey = (d: { file: string; name: string; selector?: string }) => `${d.file}\0${d.name}\0${d.selector ?? ''}`;

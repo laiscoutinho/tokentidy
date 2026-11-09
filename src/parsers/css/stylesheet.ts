@@ -15,6 +15,8 @@ import { FileCollector, offsetAt } from '../collector.ts';
 import type { ParseResult } from '../collector.ts';
 import type { Host } from '../../types.ts';
 import { atRuleNamesOf, atRulesOf, selectorOf, splitSelectors } from './declaration-context.ts';
+import { recordInclude, recordMixin } from './mixins.ts';
+import type { MixinContext } from './mixins.ts';
 
 export type StyleSyntax = 'css' | 'scss' | 'sass' | 'less';
 
@@ -54,7 +56,7 @@ export function parseCss(source: string, file: string, syntax: StyleSyntax): Par
 }
 
 /** Analisa uma folha de estilo que começa na posição `baseOffset` do arquivo (o arquivo todo ou um `<style>`). */
-export function walkStylesheet(collector: FileCollector, css: string, baseOffset: number, syntax: StyleSyntax): void {
+export function walkStylesheet(collector: FileCollector, css: string, baseOffset: number, syntax: StyleSyntax, hostOverride?: Host): void {
     let root: Root;
     try {
         root = parserFor(syntax)(css);
@@ -67,7 +69,7 @@ export function walkStylesheet(collector: FileCollector, css: string, baseOffset
         return;
     }
 
-    const host: Host = syntax;
+    const host: Host = hostOverride ?? syntax;
     const siblingsCache = new Map<Container, Map<string, string>>();
 
     root.walk((node) => {
@@ -83,6 +85,23 @@ export function walkStylesheet(collector: FileCollector, css: string, baseOffset
                 const params = paramsOf(node, css);
                 if (params) {
                     collector.breakpoint(name, params.text, baseOffset + params.offset, host, selectorOf(node));
+                }
+            }
+            if ((name === 'include' || name === 'mixin') && (syntax === 'scss' || syntax === 'sass') && host !== 'css-in-js') {
+                const params = paramsOf(node, css);
+                if (params) {
+                    const selector = selectorOf(node);
+                    const context: MixinContext = {
+                        collector, host, baseOffset, atRules: atRulesOf(node),
+                        ...(selector === undefined ? {} : { selector }),
+                        siblingsOf: (declaration) => siblingsOf(declaration.parent, css, syntax, siblingsCache),
+                        valueOf: (declaration) => valueOf(declaration, css, syntax)?.text,
+                    };
+                    if (name === 'mixin') {
+                        recordMixin(node, params, context);
+                    } else {
+                        recordInclude(params, context);
+                    }
                 }
             }
             return;

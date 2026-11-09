@@ -10,12 +10,14 @@ import type { PropertyRule, Siblings } from '../analysis/rules.ts';
 import type { AnalysisError, DefinitionSyntax, Finding, Host, ReviewItem, TokenDefinition, TokenReference } from '../types.ts';
 import { findReferences, findValues } from './css/values.ts';
 import type { ValueMatch } from './css/values.ts';
+import type { MixinCall, MixinDefinition } from './css/mixins.ts';
 
 /** Explicação de cada regra de revisão, para quem lê a saída. */
 export const REVIEW_MESSAGES: Readonly<Record<NonNullable<PropertyRule['review']>, string>> = {
     'size/no-context': 'size without context: a token only if it is a container width or a square element',
     'breakpoint/plain-css': 'breakpoint in plain CSS: var() does not work in media queries',
     'custom-property/unknown-use': 'local custom property with a literal; no use tells its token type',
+    'value/unknown-destination': 'measure passed to a mixin that could not be followed',
 };
 
 /** Tamanho da fonte raiz definido no projeto (`html { font-size: 62.5% }`), em px. Base para converter `rem`. */
@@ -57,6 +59,26 @@ export interface ParseResult {
     /** Templates externos de componentes Angular (`templateUrl`), relativos à raiz. */
     templateUrls?: string[];
     customProperties?: CustomPropertyCandidate[];
+    /** Mixins definidas e chamadas neste arquivo: a definição pode estar em outro (`analysis/cross-file.ts`). */
+    mixins?: MixinDefinition[];
+    mixinCalls?: MixinCall[];
+    /** Objetos de estilo importados e exportados por este arquivo. */
+    styleLinks?: StyleLinks;
+}
+
+/** Pedido para analisar um objeto exportado por outro arquivo. */
+export interface StyleRequest {
+    source: string;
+    name: string;
+    path: string[];
+    selector?: string;
+    kind: 'style' | 'css-object' | 'sx' | 'dom';
+}
+
+export interface StyleLinks {
+    file: string;
+    imports: StyleRequest[];
+    emit: (request: StyleRequest) => void;
 }
 
 /** Uma declaração `propriedade: valor`, venha de onde vier. */
@@ -74,7 +96,12 @@ export interface Declaration {
     impliedUnit?: string;
     unitSuffix?: { offset: number; endOffset: number };
     numeric?: boolean;
+    /** Expressão que envolve o valor quando o parser de valores não a vê (`@include`): o `fix` a trata como função do build. */
+    enclosing?: string;
 }
+
+const COLOR_LITERAL = /^(#[0-9a-f]{3,8}$|(rgb|hsl|hwb|oklch|oklab|lab|lch)a?\()/i;
+const MEASURE_LITERAL = /^-?(\d+\.?\d*|\.\d+)(px|rem|em)$/i;
 
 export class FileCollector {
     readonly file: string;
@@ -118,7 +145,8 @@ export class FileCollector {
      * Em CSS puro vão para revisão: `var()` não funciona em media query, então não há token para usar ainda.
      */
     breakpoint(atRule: string, params: string, offset: number, host: Host, selector?: string): void {
-        const rule: PropertyRule = host === 'css'
+        // CSS-in-JS: também não há como escrever um `$x` ali; `var()` não funciona em media query
+        const rule: PropertyRule = host === 'css' || host === 'css-in-js'
             ? { type: 'breakpoint', match: 'length', review: 'breakpoint/plain-css' }
             : { type: 'breakpoint', match: 'length' };
         this.#report(
@@ -126,6 +154,24 @@ export class FileCollector {
             rule,
             findValues(params, 'length'),
         );
+    }
+
+    /**
+     * Valor cujo destino não dá para seguir: uma cor é visual em qualquer lugar;
+     * uma medida fica para revisão, porque pode não ser visual.
+     */
+    unknownDestination(text: string, offset: number, host: Host, selector: string | undefined, enclosing: string): void {
+        const decl: Declaration = {
+            property: enclosing, value: text, offset, host, siblings: new Map(), enclosing,
+            ...(selector === undefined ? {} : { selector }),
+        };
+        if (COLOR_LITERAL.test(text)) {
+            for (const rule of rulesForProperty('color', new Map(), selector)) {
+                this.#report(decl, rule, findValues(text, rule.match));
+            }
+        } else if (MEASURE_LITERAL.test(text)) {
+            this.#report(decl, { type: 'size', match: 'length', review: 'value/unknown-destination' }, findValues(text, 'length'));
+        }
     }
 
     customProperty(candidate: Omit<CustomPropertyCandidate, 'file' | 'line' | 'column'>): void {
@@ -149,7 +195,7 @@ export class FileCollector {
                 host: decl.host,
                 ...(decl.selector === undefined ? {} : { selector: decl.selector }),
                 ...(decl.atRules?.length ? { atRules: decl.atRules } : {}),
-                ...(match.function === undefined ? {} : { function: match.function }),
+                ...(match.function === undefined ? (decl.enclosing === undefined ? {} : { function: decl.enclosing }) : { function: match.function }),
                 ...(decl.impliedUnit ? { impliedUnit: decl.impliedUnit } : {}),
                 ...(decl.unitSuffix ? { unitSuffix: decl.unitSuffix } : {}),
                 ...(decl.numeric ? { numeric: true as const } : {}),

@@ -52,6 +52,7 @@ test('HTML: <style> is CSS and style="" is inline, with the element as selector'
 
 test('JSX: style={{}} with camelCase, numbers in px, ternaries and unitless properties', () => {
     assert.deepEqual(summary('src/Card.tsx'), [
+        '1:23 jsx spacing gap 12 +px span',
         '5:45 jsx spacing padding 8 +px div.card',
         '5:60 jsx spacing margin-top 16px div.card',
         '5:81 jsx color color #111827 div.card',
