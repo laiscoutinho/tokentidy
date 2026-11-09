@@ -18,7 +18,7 @@
 .q { content: "#fff"; } /* expect: none */
 .r { fill: none; stroke: #222; } /* expect: color/hardcoded */
 .s { box-shadow: inset 0 0 0 1px #ddd; } /* expect: shadow/hardcoded */
-.t { min-height: 44px; min-width: 44px; } /* expect: size/no-context */
+.t { min-height: 44px; min-width: 44px; } /* expect: size/hardcoded */
 .u { accent-color: #4f46e5; caret-color: #4f46e5; scrollbar-color: #ccc #fff; } /* expect: color/hardcoded */
 .v { column-rule: 1px solid #eee; } /* expect: border-width/hardcoded, color/hardcoded */
 .w { &:hover { color: #4f46e5; } & .x { margin-top: 24px; } } /* expect: color/hardcoded, spacing/hardcoded */

@@ -105,7 +105,7 @@ export class FileCollector {
          */
         const text = decl.impliedUnit ? `${value}${decl.impliedUnit}` : value;
 
-        for (const rule of rulesForProperty(property, decl.siblings)) {
+        for (const rule of rulesForProperty(property, decl.siblings, decl.selector)) {
             this.#report(decl, rule, findValues(text, rule.match).map((match) => ({
                 ...match, end: Math.min(match.end, value.length),
             })));

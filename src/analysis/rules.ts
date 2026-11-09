@@ -113,6 +113,8 @@ const FIXED_RULES = new Map<string, readonly PropertyRule[]>([
 
     ...['margin', 'padding', ...SIDES.flatMap((side) => [`margin-${side}`, `padding-${side}`]),
         'gap', 'row-gap', 'column-gap', 'grid-gap', 'grid-row-gap', 'grid-column-gap',
+        'border-spacing', 'scroll-margin', 'scroll-padding',
+        ...SIDES.flatMap((side) => [`scroll-margin-${side}`, `scroll-padding-${side}`]),
     ].map((prop): [string, readonly PropertyRule[]] => [prop, [{ type: 'spacing', match: 'length' }]]),
 
     ...['border-radius', ...CORNERS.map((corner) => `border-${corner}-radius`)]
@@ -180,6 +182,22 @@ const SQUARE_COUNTERPARTS = new Map([
     ['inline-size', 'block-size'], ['block-size', 'inline-size'],
 ]);
 
+/** Palavras de seletor de elementos que têm tamanho de sistema: controles, ícones e avatares. */
+const CONTROL_WORDS = new Set([
+    'btn', 'button', 'input', 'select', 'textarea', 'control', 'checkbox', 'radio', 'switch', 'toggle',
+    'icon', 'avatar', 'img', 'svg',
+]);
+
+/** Palavras de seletor de blocos com largura de sistema: containers e camadas sobrepostas. */
+const CONTAINER_WORDS = new Set(['container', 'wrapper', 'modal', 'dialog', 'drawer', 'popover', 'overlay', 'tooltip', 'dropdown']);
+
+const CONTROL_PROPERTIES = new Set(['width', 'height', 'inline-size', 'block-size']);
+const MAX_WIDTH_PROPERTIES = new Set(['max-width', 'max-inline-size']);
+const TOUCH_TARGET_PROPERTIES = new Set(['min-width', 'min-height', 'min-inline-size', 'min-block-size']);
+
+/** Faixa de área de toque: de 24px (mínimo da WCAG 2.2) a 64px; acima disso, `min-height` é layout. */
+const TOUCH_TARGET_PX: readonly [number, number] = [24, 64];
+
 /** Declarações da mesma regra (ou do mesmo `style=""`): propriedade em kebab-case → valor. */
 export type Siblings = ReadonlyMap<string, string>;
 
@@ -190,11 +208,13 @@ export type Siblings = ReadonlyMap<string, string>;
  * Largura e altura só entram quando as declarações vizinhas deixam o papel claro;
  * fora disso, `width: 300px` pode ser qualquer coisa, e reportar geraria falso positivo:
  * - container: `max-width` (ou `width`) com margem horizontal `auto`;
- * - tamanho: `width` e `height` com o mesmo valor (elemento quadrado).
+ * - tamanho: `width` e `height` com o mesmo valor (elemento quadrado), medida de controle, ícone ou avatar
+ *   (pelo nome no seletor) ou área de toque (`min-height: 44px`);
+ * - largura máxima de container ou camada sobreposta (`.modal { max-width: 560px }`).
  * Sem esse contexto, a medida vai para revisão (`size/no-context`).
  * Prefixo de fabricante não muda a regra (`-webkit-box-shadow` = `box-shadow`).
  */
-export function rulesForProperty(property: string, siblings: Siblings = new Map()): readonly PropertyRule[] {
+export function rulesForProperty(property: string, siblings: Siblings = new Map(), selector?: string): readonly PropertyRule[] {
     const written = property.toLowerCase();
     const prop = written.replace(VENDOR_PREFIX, '');
     const fixed = FIXED_RULES.get(prop);
@@ -209,7 +229,40 @@ export function rulesForProperty(property: string, siblings: Siblings = new Map(
     if (counterpart && value !== undefined && sameValue(siblings.get(counterpart), value)) {
         return [{ type: 'size', match: 'length' }];
     }
+    if (CONTROL_PROPERTIES.has(prop) && selectorHasWord(selector, CONTROL_WORDS)) {
+        return [{ type: 'size', match: 'length' }];
+    }
+    if (TOUCH_TARGET_PROPERTIES.has(prop) && value !== undefined && isTouchTarget(value)) {
+        return [{ type: 'size', match: 'length' }];
+    }
+    if (MAX_WIDTH_PROPERTIES.has(prop) && selectorHasWord(selector, CONTAINER_WORDS)) {
+        return [{ type: 'container', match: 'length' }];
+    }
     return SIZE_PROPERTIES.has(prop) ? SIZE_REVIEW : [];
+}
+
+function isTouchTarget(value: string): boolean {
+    const match = /^\s*(\d*\.?\d+)(px|rem)\s*$/i.exec(value);
+    if (!match) {
+        return false;
+    }
+    const px = Number(match[1]) * (match[2]!.toLowerCase() === 'rem' ? 16 : 1);
+    return px >= TOUCH_TARGET_PX[0] && px <= TOUCH_TARGET_PX[1];
+}
+
+/**
+ * Todas as partes do seletor têm a palavra no elemento estilizado: o último composto, e nele o que vem
+ * depois de `__` (`.btn .label` e `.btn__label` não são o botão; `.btn:hover` e `input[type=text]` são).
+ */
+function selectorHasWord(selector: string | undefined, words: ReadonlySet<string>): boolean {
+    if (selector === undefined) {
+        return false;
+    }
+    return selector.split(',').every((part) => {
+        const compound = part.trim().split(/[\s>+~]+/).at(-1) ?? '';
+        const element = compound.replace(/::?[\w-]+(\([^)]*\))?|\[[^\]]*\]/g, '').split('__').at(-1) ?? '';
+        return element.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase().split(/[^a-z0-9]+/).some((word) => words.has(word));
+    });
 }
 
 function sameValue(a: string | undefined, b: string): boolean {

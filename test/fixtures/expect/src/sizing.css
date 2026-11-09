@@ -1,0 +1,17 @@
+.btn { height: 40px; } /* expect: size/hardcoded */
+.btn-primary:hover { height: 44px; } /* expect: size/hardcoded */
+.primaryButton { width: 120px; } /* expect: size/hardcoded */
+input[type=text] { height: 36px; } /* expect: size/hardcoded */
+.user-avatar { width: 48px; } /* expect: size/hardcoded */
+.btn .label { width: 200px; } /* expect: size/no-context */
+.btn__label { width: 200px; } /* expect: size/no-context */
+.btn, .card { width: 200px; } /* expect: size/no-context */
+.tap { min-height: 44px; } /* expect: size/hardcoded */
+.tap-rem { min-width: 2.75rem; } /* expect: size/hardcoded */
+.hero { min-height: 480px; } /* expect: size/no-context */
+.modal { max-width: 560px; } /* expect: container/hardcoded */
+.page-container { max-width: 1200px; } /* expect: container/hardcoded */
+.card { width: 300px; } /* expect: size/no-context */
+.sticky { scroll-margin-top: 80px; scroll-padding: 16px; } /* expect: spacing/hardcoded */
+table { border-spacing: 2px; } /* expect: spacing/hardcoded */
+.out { text-indent: 16px; flex-basis: 200px; column-width: 120px; outline-offset: 2px; } /* expect: none */
