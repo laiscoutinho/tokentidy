@@ -55,6 +55,25 @@ Dois detalhes para o CI:
 - O `generate` nunca espera uma resposta fora de um terminal: quando já existem arquivos de tokens, passe `--extend` ou `--new`.
 - O `fix --dry-run` termina com `1` quando sobrariam violações, então também pode ser uma verificação no CI.
 
+## Anotações no pull request
+
+Com `--format github`, cada violação e erro de sintaxe vira uma anotação de erro na linha do diff, e cada item de revisão vira um aviso:
+
+```yaml
+      - run: npx tokentidy check --format github
+```
+
+O código de saída é o mesmo, então a etapa continua falhando quando há violações. Os caminhos são relativos à pasta atual, que no Actions é a raiz do repositório.
+
+## Em um projeto que já tem violações
+
+Salve um [baseline](check.md#adotar-em-um-projeto-que-já-tem-violações) e faça commit dele, para o build falhar só em violações novas:
+
+```bash
+npx tokentidy check --print-baseline > tokentidy.baseline.json
+npx tokentidy check --baseline tokentidy.baseline.json
+```
+
 ## Antes de cada commit
 
 Para verificar só os arquivos que estão indo no commit, passe-os como caminhos. Com o [lint-staged](https://github.com/lint-staged/lint-staged), por exemplo:
@@ -68,3 +87,5 @@ Para verificar só os arquivos que estão indo no commit, passe-os como caminhos
 ```
 
 Um arquivo passado pelo nome sempre é analisado, mesmo um arquivo de teste que a varredura de uma pasta pularia.
+
+Só os arquivos do commit são informados, e eles são julgados com o projeto inteiro em vista ([Analisando parte de um projeto](check.md#analisando-parte-de-um-projeto)), então a resposta é a mesma de uma execução completa. O custo é ler o projeto a cada commit.

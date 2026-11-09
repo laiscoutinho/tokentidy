@@ -14,8 +14,8 @@ npx tokentidy generate --min-occurrences 3  # mais exigente: só valores usados 
 
 | Arquivo | Quando |
 |---|---|
-| `tokens.tokens.json` | Sempre. A fonte da verdade, no formato [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/format/) |
-| `tokens.css` | Sempre. `:root { --x: ... }`, gerado a partir do JSON |
+| `tokens.tokens.json` | Quando há pelo menos um token. A fonte da verdade, no formato [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/format/) |
+| `tokens.css` | Quando há pelo menos um token. `:root { --x: ... }`, gerado a partir do JSON |
 | `_tokens.scss` | Quando o projeto tem arquivos `.scss` ou `.sass` |
 | `_tokens.less` | Quando o projeto tem arquivos `.less` |
 | `css/<categoria>.css` + `README.md` | Quando há mais de `splitThreshold` tokens (padrão 60): o `tokens.css` vira um índice com `@import` |
@@ -74,6 +74,8 @@ Com `--dry-run`, cada arquivo aparece como `==> arquivo <==` seguido do conteúd
 - Se o token existente não funciona em algum lugar (uma variável `$scss`, mas o valor também aparece em JSX ou em um template Angular), um token CSS é criado mesmo com um uso só, e a variável SCSS fica registrada como equivalente.
 - Um valor já definido em um arquivo DTCG escrito à mão mantém o caminho dele como nome (`color.primary` → `--color-primary`).
 
+**Quais tokens contam como existentes:** uma custom property só conta se for global (`:root`, `html`, `body`, mesmo numa lista como `:root, [data-theme=light]`) e nenhum tema der outro valor a ela. `$x`/`@x` só contam em nível de arquivo. É a mesma regra do [`fix`](fix.md#qual-token-é-usado), então um valor nunca fica sem token novo e sem troca.
+
 ## Rodando de novo
 
 Se a pasta de saída já tem um `tokens.tokens.json`, o `generate` precisa de uma decisão:
@@ -94,7 +96,7 @@ Se a pasta de saída já tem um `tokens.tokens.json`, o `generate` precisa de um
 
 ## O que o JSON guarda
 
-Cada token no `tokens.tokens.json` guarda, em `$extensions["dev.tokentidy"]`, o valor normalizado, quantas vezes é usado, todas as grafias encontradas, os equivalentes e cada **ocorrência** (arquivo, linha, coluna, propriedade, seletor…). É isso que o [`fix`](fix.md) usa para trocar os valores.
+Cada token no `tokens.tokens.json` guarda, em `$extensions["dev.tokentidy"]`, o valor normalizado, quantas vezes é usado, todas as grafias encontradas, os equivalentes e cada **ocorrência** (arquivo, linha, coluna, propriedade, seletor…). O [`fix`](fix.md) analisa o código de novo para encontrar os valores; das ocorrências, ele só lê as dos aliases semânticos, para saber onde cada alias vale.
 
 ## Gravação segura
 

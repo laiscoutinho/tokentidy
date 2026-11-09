@@ -39,6 +39,7 @@ New to the command line or to design tokens? Read in this order; each page cover
 | 13 | [Scripts and CI](docs/ci-and-scripts.md) | npm scripts, GitHub Actions and pre-commit checks |
 | 14 | [JSON output](docs/json-output.md) | Reading the results from another program |
 | 15 | [How it works](docs/how-it-works.md) | The steps inside TokenTidy and its principles |
+| 16 | [Examples](docs/examples.md) | Real runs of each command, from the first analysis to scripts |
 
 ---
 
@@ -76,8 +77,9 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 | Analyzes | Out of scope (by design) |
 |---|---|
 | CSS, SCSS, Sass (indented) and Less | Tailwind and other utility-class approaches |
-| React inline styles (`style={{...}}` in JSX/TSX) | CSS-in-JS libraries |
-| Angular: component styles, style files and templates (`[style.x]`, `[ngStyle]`) | Dynamic styles computed only at runtime |
+| JS/TS: `style={{...}}`, style objects, DOM styles, SVG colors, canvas and charts | Dynamic styles computed only at runtime |
+| CSS-in-JS: styled-components, Emotion, `css` prop, MUI `sx` | React Native |
+| Angular: component styles, style files, templates, `host`, `@HostBinding`, `Renderer2.setStyle` | |
 | HTML (`<style>` and `style=""`) | Artificial intelligence and external services |
 | Design token files in the [DTCG](https://www.designtokens.org/) format | |
 
@@ -105,13 +107,17 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 | Ignore comments and ignored folders | 🟢 |
 | Scale diagnosis in `generate`, safe writing | 🟢 |
 | Automatic fixes of exact values (`fix`, `--dry-run`) | 🟢 |
-| Context-aware detection (page container vs. icon size) | 🟡 |
+| Context-aware detection (page container vs. icon size, controls, touch targets) | 🟢 |
+| Exact and closest token in `check`, near-duplicate colors | 🟢 |
+| Warnings about tokens: unknown names, `$deprecated`, `var()` fallbacks that disagree, unused tokens | 🟢 |
+| Baseline for projects that already have violations | 🟢 |
 | CI usage and npm release | 🟡 CI on Linux/Windows/macOS |
 | Fixes of values close to a token (`fix --approximate`) | ⚪ |
-| Suggesting the exact or closest token (`check --tokens`) | ⚪ |
-| Near-duplicate colors and renaming existing tokens | ⚪ |
-| Style objects outside `style={{}}` and CSS-in-JS | ⚪ |
-| Mapping `var()` fallback values (e.g. `var(--space, 12px)`) | ⚪ |
+| SCSS mixin arguments and defaults, `mat.*-overrides` maps | 🟢 |
+| Style objects outside `style={{}}`, DOM styles, canvas and charts | 🟢 |
+| CSS-in-JS (styled-components, Emotion, `sx`) | 🟢 |
+| Angular `host`, `@HostBinding`, `Renderer2.setStyle` | 🟢 |
+| Reports: `check --summary`, `--format github`, `schemaVersion` | 🟢 |
 | Relative units (`%`, `vw`, `vh`): compare with absolute values used in the same role | ⚪ |
 | Comparative evaluation on the base projects | ⚪ |
 | Writing the TCC text | ⚪ |

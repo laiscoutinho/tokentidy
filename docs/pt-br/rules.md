@@ -11,9 +11,9 @@ A regra de uma violação é `<tipo>/hardcoded` (`color/hardcoded`, `spacing/har
 | Tipo | Propriedades | Valores |
 |---|---|---|
 | `color` | `color`, `background*`, `border*-color`, `outline*`, `fill`, `stroke`, `text-decoration*` e outras | Qualquer sintaxe de cor: `#fff`, `red`, `rgb()`, `hsl()`, `oklch()`, `color-mix()`… Uma função de cor conta como um valor |
-| `spacing` | `margin*`, `padding*` (incluindo as lógicas), `gap`, `row-gap`, `column-gap` | Medidas em `px`, `rem`, `em`, `pt` |
-| `size` | `width` e `height` com o **mesmo valor** na mesma regra (ícone, avatar) | Medidas |
-| `container` | `width`, `max-width`, `inline-size` de um bloco centralizado na horizontal (`margin: 0 auto`) | Medidas |
+| `spacing` | `margin*`, `padding*` (incluindo as lógicas), `gap`, `row-gap`, `column-gap`, `scroll-margin*`, `scroll-padding*`, `border-spacing` | Medidas em `px`, `rem`, `em`, `pt` |
+| `size` | `width` e `height` com o **mesmo valor** na mesma regra; `width`/`height` de controle, ícone ou avatar, pelo seletor (`.btn`, `.user-avatar`, `input`); `min-width`/`min-height` de 24 a 64px (área de toque) | Medidas |
+| `container` | `width`, `max-width`, `inline-size` de um bloco centralizado na horizontal (`margin: 0 auto`); `max-width` de container ou camada sobreposta, pelo seletor (`.page-container`, `.modal`) | Medidas |
 | `radius` | `border-radius` e cada canto | Medidas e `%` |
 | `border-width` | `border*-width`, e a largura em `border`, `outline` | Medidas |
 | `font-family` | `font-family`, e a família em `font` | A lista de fontes inteira, a não ser que tenha só famílias genéricas |
@@ -39,9 +39,10 @@ Itens de revisão são o que o código sozinho não consegue decidir. Eles são 
 
 | Regra | Quando |
 |---|---|
-| `size/no-context` | `width`, `height`, `min-*`, `max-*`, `inline-size`, `block-size` com uma medida que não é um container centralizado nem um elemento quadrado |
+| `size/no-context` | `width`, `height`, `min-*`, `max-*`, `inline-size`, `block-size` com uma medida que não se encaixa em nenhum dos contextos de `size` e `container` acima |
 | `breakpoint/plain-css` | Uma medida em uma condição de `@media`/`@container` em CSS puro, onde `var()` não funciona |
 | `custom-property/unknown-use` | Uma custom property local cujo papel não dá para descobrir pelos usos nem pelo valor |
+| `value/unknown-destination` | Uma medida passada a uma mixin que não deu para seguir. Uma cor na mesma posição é uma violação normal: cor é visual em qualquer lugar |
 
 ## Avisos sobre comentários de ignore
 
@@ -55,10 +56,12 @@ Vão para a saída de erro e nunca mudam o código de saída. Veja [Comentários
 
 ## O que não é informado
 
-- Valores que já usam um token: `var(--x)` (incluindo o valor reserva em `var(--x, 12px)`), `$x` e `@x`; uma sombra com `var()` em qualquer camada.
+- Valores que já usam um token: `var(--x)`, `$x` e `@x`, com um [aviso](check.md#avisos-sobre-tokens) se o valor reserva em `var(--x, 12px)` discordar do token; uma sombra com `var()` em qualquer camada.
 - As próprias definições de tokens: `--color: #fff`, `$color: #fff`, `@color: #fff`.
 - `0`, `auto`, `inherit`, `transparent`, `currentColor`, `normal`, porcentagens e unidades de viewport (`%`, `vw`, `vh`), e `z-index` de `-1`, `0` e `1`.
 - Declarações dentro de `@font-face` (a definição da fonte) e `opacity` dentro de `@keyframes` (coreografia de animação).
-- Interpolação SCSS (`#{...}`), parâmetros de `@include`, chamadas de mixin do Less e comentários.
-- Ainda não: objetos de estilo fora do `style={{}}` (`const styles = { gap: 12 }`), CSS-in-JS (styled-components) e arquivos Vue/Svelte (listados como pulados).
+- Interpolação SCSS (`#{...}`), chamadas de mixin do Less e comentários. Os argumentos de `@include` do SCSS **são** lidos.
+- Números e valores que não são cor em objetos passados a funções que o TokenTidy não conhece: `resize({ width: 300 })` não é estilo.
+- Props repassadas entre componentes, objetos reexportados (`export { a } from './b'`) e `${...}` dentro de um valor.
+- Ainda não: arquivos Vue/Svelte (listados como pulados).
 - Fora do escopo: `filter`/`backdrop-filter`, `transform`/`translate`, deslocamentos de posição (`top`, `right`, `bottom`, `left`, `inset`), `outline-offset`, `text-underline-offset` e `stroke-width` sem unidade. Eles posicionam ou afetam um elemento; não são decisões de escala.

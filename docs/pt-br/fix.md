@@ -19,7 +19,7 @@ Se o projeto não tem nenhum token, o `fix` pede para rodar o [`generate`](gener
 Nesta ordem:
 
 1. um **alias semântico** gerado (`--color-text-danger`), só onde ele foi criado;
-2. um **token escrito à mão** no projeto: uma custom property global (`:root`/`html`/`body`, nunca redefinida com outro valor por um tema ou media query), ou um `$x`/`@x` de nível superior visível no arquivo (no mesmo arquivo, ou em um arquivo que ele carrega com `@import`/`@use … as *`). Entre dois, vence o mais usado;
+2. um **token escrito à mão** no projeto: uma custom property global (`:root`/`html`/`body`, nunca redefinida com outro valor por um tema ou media query), ou um `$x`/`@x` de nível superior visível no arquivo (no mesmo arquivo, ou em um arquivo que ele carrega com `@import`/`@use … as *`). Entre dois, vence o mais usado, e um empate é pulado como `ambiguous-token`;
 3. um **token gerado** da pasta de tokens (`design-tokens/`, ou `output` na configuração), quando o arquivo dele existe: `tokens.css` para `var()`, `_tokens.scss` para `$x`, `_tokens.less` para `@x`.
 
 ## Como o token é escrito
@@ -45,7 +45,10 @@ src/App.scss:12:10	skipped	needs-preprocessor-variable	16px	…
 | `needs-preprocessor-variable` | O Sass/Less precisa do valor na hora do build e não há um `$x`/`@x` com ele disponível |
 | `inline-style-function` | O mesmo, em um `styles:` inline do Angular (ele não consegue importar variáveis Sass) |
 | `variable-not-loaded` | O arquivo de tokens é carregado com namespace (`@use … as t`), ou existe uma variável com o valor mas ela não é importada |
-| `unit-in-binding` | `[style.width.px]="a ? 16 : 24"`: a unidade no nome vale para os dois valores |
+| `unit-in-binding` | `[style.width.px]="a ? 16 : 24"`: a unidade no nome vale para os dois valores. Também um número em `host: { '[style.width.px]': '16' }` |
+| `needs-token-module` | O valor é lido por JavaScript (canvas, gráfico ou função desconhecida), onde `var()` não funciona: edite à mão |
+| `svg-attribute` | O valor está num atributo de apresentação do SVG (`fill="#fff"`). Os navegadores não concordam sobre `var()` ali, e a especificação ainda está em discussão: passe para `style` ou edite à mão |
+| `ambiguous-token` | Dois tokens do projeto têm este valor e são igualmente usados: escolher um seria palpite |
 | `overlap` | Duas trocas no mesmo trecho de texto |
 | `breaks-syntax` | O arquivo corrigido teria um erro de sintaxe (ele é analisado de novo em memória antes de gravar) |
 | `changed-on-disk` | O arquivo mudou enquanto o comando rodava |

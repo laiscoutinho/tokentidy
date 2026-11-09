@@ -11,9 +11,9 @@ A violation's rule is `<type>/hardcoded` (`color/hardcoded`, `spacing/hardcoded`
 | Type | Properties | Values |
 |---|---|---|
 | `color` | `color`, `background*`, `border*-color`, `outline*`, `fill`, `stroke`, `text-decoration*` and others | Any color syntax: `#fff`, `red`, `rgb()`, `hsl()`, `oklch()`, `color-mix()`… A color function counts as one value |
-| `spacing` | `margin*`, `padding*` (including logical ones), `gap`, `row-gap`, `column-gap` | Lengths in `px`, `rem`, `em`, `pt` |
-| `size` | `width` and `height` with the **same value** in the same rule (icon, avatar) | Lengths |
-| `container` | `width`, `max-width`, `inline-size` of a horizontally centered block (`margin: 0 auto`) | Lengths |
+| `spacing` | `margin*`, `padding*` (including logical ones), `gap`, `row-gap`, `column-gap`, `scroll-margin*`, `scroll-padding*`, `border-spacing` | Lengths in `px`, `rem`, `em`, `pt` |
+| `size` | `width` and `height` with the **same value** in the same rule; `width`/`height` of a control, icon or avatar, by the selector (`.btn`, `.user-avatar`, `input`); `min-width`/`min-height` from 24 to 64px (touch target) | Lengths |
+| `container` | `width`, `max-width`, `inline-size` of a horizontally centered block (`margin: 0 auto`); `max-width` of a container or overlay, by the selector (`.page-container`, `.modal`) | Lengths |
 | `radius` | `border-radius` and each corner | Lengths and `%` |
 | `border-width` | `border*-width`, and the width in `border`, `outline` | Lengths |
 | `font-family` | `font-family`, and the family in `font` | The whole font list, unless it has only generic families |
@@ -39,9 +39,10 @@ Review items are what the code alone can't decide. They are printed and counted,
 
 | Rule | When |
 |---|---|
-| `size/no-context` | `width`, `height`, `min-*`, `max-*`, `inline-size`, `block-size` with a length that isn't a centered container or a square element |
+| `size/no-context` | `width`, `height`, `min-*`, `max-*`, `inline-size`, `block-size` with a length that matches none of the `size` and `container` contexts above |
 | `breakpoint/plain-css` | A length in a `@media`/`@container` condition in plain CSS, where `var()` doesn't work |
 | `custom-property/unknown-use` | A local custom property whose role can't be told from its uses or its value |
+| `value/unknown-destination` | A measure passed to a mixin that couldn't be followed. A color in the same position is a normal violation: a color is visual wherever it goes |
 
 ## Warnings about ignore comments
 
@@ -55,10 +56,12 @@ These go to the error output and never change the exit code. See [Ignore comment
 
 ## What is not reported
 
-- Values that already use a token: `var(--x)` (including the fallback in `var(--x, 12px)`), `$x` and `@x`; a shadow with `var()` in any layer.
+- Values that already use a token: `var(--x)`, `$x` and `@x`, with a [warning](check.md#warnings-about-tokens) if the fallback in `var(--x, 12px)` disagrees with the token; a shadow with `var()` in any layer.
 - Token definitions themselves: `--color: #fff`, `$color: #fff`, `@color: #fff`.
 - `0`, `auto`, `inherit`, `transparent`, `currentColor`, `normal`, percentages and viewport units (`%`, `vw`, `vh`), and `z-index` of `-1`, `0` and `1`.
 - Declarations inside `@font-face` (the font's definition) and `opacity` inside `@keyframes` (animation choreography).
-- SCSS interpolation (`#{...}`), `@include` parameters, Less mixin calls and comments.
-- Not yet: style objects outside `style={{}}` (`const styles = { gap: 12 }`), CSS-in-JS (styled-components) and Vue/Svelte files (listed as skipped).
+- SCSS interpolation (`#{...}`), Less mixin calls and comments. SCSS `@include` arguments **are** read.
+- Numbers and non-color values in objects passed to functions TokenTidy doesn't know: `resize({ width: 300 })` is not a style.
+- Props passed down through components, re-exported objects (`export { a } from './b'`), and `${...}` inside a value.
+- Not yet: Vue/Svelte files (listed as skipped).
 - Out of scope: `filter`/`backdrop-filter`, `transform`/`translate`, position offsets (`top`, `right`, `bottom`, `left`, `inset`), `outline-offset`, `text-underline-offset` and unitless `stroke-width`. They place or affect one element; they are not scale decisions.

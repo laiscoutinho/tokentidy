@@ -39,6 +39,7 @@ Novo na linha de comando ou em design tokens? Leia nesta ordem; cada página tra
 | 13 | [Scripts e CI](ci-and-scripts.md) | Scripts do npm, GitHub Actions e verificação antes do commit |
 | 14 | [Saída JSON](json-output.md) | Ler os resultados a partir de outro programa |
 | 15 | [Como funciona](how-it-works.md) | As etapas dentro do TokenTidy e os princípios dele |
+| 16 | [Exemplos](examples.md) | Execuções reais de cada comando, da primeira análise até scripts |
 
 ---
 
@@ -76,8 +77,9 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | Analisa | Fora do escopo (por decisão) |
 |---|---|
 | CSS, SCSS, Sass (indentado) e Less | Tailwind e outras abordagens de classes utilitárias |
-| Estilos inline do React (`style={{...}}` em JSX/TSX) | Bibliotecas de CSS-in-JS |
-| Angular: estilos de componentes, arquivos de estilo e templates (`[style.x]`, `[ngStyle]`) | Estilos dinâmicos calculados só em tempo de execução |
+| JS/TS: `style={{...}}`, objetos de estilo, estilos no DOM, cores de SVG, canvas e gráficos | Estilos dinâmicos calculados só em tempo de execução |
+| CSS-in-JS: styled-components, Emotion, prop `css`, `sx` do MUI | React Native |
+| Angular: estilos de componentes, arquivos de estilo, templates, `host`, `@HostBinding`, `Renderer2.setStyle` | |
 | HTML (`<style>` e `style=""`) | Inteligência artificial e serviços externos |
 | Arquivos de design tokens no formato [DTCG](https://www.designtokens.org/) | |
 
@@ -104,13 +106,17 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | Comentários de ignore e pastas ignoradas | 🟢 |
 | Diagnóstico de escala no `generate`, gravação segura | 🟢 |
 | Correção automática de valores exatos (`fix`, `--dry-run`) | 🟢 |
-| Detecção com contexto (container da página vs. tamanho de ícone) | 🟡 |
+| Detecção com contexto (container da página vs. tamanho de ícone, controles, áreas de toque) | 🟢 |
+| Token exato e mais próximo no `check`, cores quase duplicadas | 🟢 |
+| Avisos sobre tokens: nomes desconhecidos, `$deprecated`, valores reserva do `var()` que discordam, tokens sem uso | 🟢 |
+| Baseline para projetos que já têm violações | 🟢 |
 | Uso no CI e publicação no npm | 🟡 CI em Linux/Windows/macOS |
 | Correção de valores próximos de um token (`fix --approximate`) | ⚪ |
-| Sugerir o token exato ou o mais próximo (`check --tokens`) | ⚪ |
-| Cores quase duplicadas e renomeação de tokens existentes | ⚪ |
-| Objetos de estilo fora do `style={{}}` e CSS-in-JS | ⚪ |
-| Mapear valores reserva do `var()` (ex.: `var(--space, 12px)`) | ⚪ |
+| Argumentos e padrões de mixin do SCSS, mapas `mat.*-overrides` | 🟢 |
+| Objetos de estilo fora do `style={{}}`, estilos no DOM, canvas e gráficos | 🟢 |
+| CSS-in-JS (styled-components, Emotion, `sx`) | 🟢 |
+| `host`, `@HostBinding` e `Renderer2.setStyle` do Angular | 🟢 |
+| Relatórios: `check --summary`, `--format github`, `schemaVersion` | 🟢 |
 | Unidades relativas (`%`, `vw`, `vh`): comparar com valores absolutos usados no mesmo papel | ⚪ |
 | Avaliação comparativa nos projetos base | ⚪ |
 | Escrita do texto do TCC | ⚪ |

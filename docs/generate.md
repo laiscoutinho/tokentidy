@@ -14,8 +14,8 @@ npx tokentidy generate --min-occurrences 3  # stricter: only values used 3+ time
 
 | File | When |
 |---|---|
-| `tokens.tokens.json` | Always. The source of truth, in the [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/format/) format |
-| `tokens.css` | Always. `:root { --x: ... }`, generated from the JSON |
+| `tokens.tokens.json` | When there is at least one token. The source of truth, in the [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/format/) format |
+| `tokens.css` | When there is at least one token. `:root { --x: ... }`, generated from the JSON |
 | `_tokens.scss` | When the project has `.scss` or `.sass` files |
 | `_tokens.less` | When the project has `.less` files |
 | `css/<category>.css` + `README.md` | When there are more than `splitThreshold` tokens (default 60): `tokens.css` becomes an index with `@import` |
@@ -74,6 +74,8 @@ With `--dry-run`, each file is printed as `==> file <==` followed by its content
 - If the existing token doesn't work in some place (a `$scss` variable, but the value is also used in JSX or an Angular template), a CSS token is created even for a single use, and the SCSS variable is recorded as its equivalent.
 - A value already defined in a hand-written DTCG file keeps its path as the name (`color.primary` → `--color-primary`).
 
+**Which tokens count as existing:** a custom property counts only if it's global (`:root`, `html`, `body`, even in a list like `:root, [data-theme=light]`) and no theme gives it another value. `$x`/`@x` count only at file level. It's the same rule [`fix`](fix.md#which-token-is-used) uses, so a value is never left with neither a new token nor a replacement.
+
 ## Running it again
 
 If the output folder already has a `tokens.tokens.json`, `generate` needs a decision:
@@ -94,7 +96,7 @@ If the output folder already has a `tokens.tokens.json`, `generate` needs a deci
 
 ## What the JSON keeps
 
-Each token in `tokens.tokens.json` keeps, in `$extensions["dev.tokentidy"]`, its normalized value, how many times it is used, every spelling found, its equivalents and every **occurrence** (file, line, column, property, selector…). That is what [`fix`](fix.md) uses to replace the values.
+Each token in `tokens.tokens.json` keeps, in `$extensions["dev.tokentidy"]`, its normalized value, how many times it is used, every spelling found, its equivalents and every **occurrence** (file, line, column, property, selector…). [`fix`](fix.md) analyzes the code again to find the values; from the occurrences, it only reads those of the semantic aliases, to know where each alias applies.
 
 ## Safe writing
 

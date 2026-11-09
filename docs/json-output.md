@@ -4,12 +4,16 @@
 
 With `--json`, each command prints its result as one JSON object, for another program to read (a script, a CI step, another tool). While TokenTidy is in version `0.x`, the format may change.
 
+Every `--json` output starts with `schemaVersion` (currently `1`). It goes up when a field changes or is removed; a new field doesn't change it.
+
 ## `check --json`
 
 ```json
 {
+  "schemaVersion": 1,
   "root": "/home/you/todo-list-react",
   "filesAnalyzed": 7,
+  "partial": false,
   "findings": [
     {
       "file": "src/App.jsx",
@@ -22,7 +26,8 @@ With `--json`, each command prints its result as one JSON object, for another pr
       "property": "color",
       "value": "#4f46e5",
       "host": "jsx",
-      "selector": "h1"
+      "selector": "h1",
+      "suggestion": { "token": "--color-primary", "match": "exact" }
     }
   ],
   "review": [{ "file": "src/App.jsx", "line": 31, "column": 12, "type": "size", "rule": "size/no-context", "property": "width", "value": "120", "message": "size without context: …" }],
@@ -32,29 +37,37 @@ With `--json`, each command prints its result as one JSON object, for another pr
   "skipped": [{ "file": "src/App.vue", "reason": "unsupported" }],
   "unmatched": [],
   "definitions": [{ "name": "$roxo", "syntax": "scss-variable", "value": "#4f46e5", "file": "src/App.scss", "line": 2, "column": 1 }],
-  "references": [{ "name": "$roxo", "property": "accent-color", "file": "src/App.scss", "line": 16, "selector": ".tarefa input[type=\"checkbox\"]" }],
+  "references": [{ "name": "$roxo", "property": "accent-color", "file": "src/App.scss", "line": 16, "column": 17, "selector": ".tarefa input[type=\"checkbox\"]" }],
   "styleLanguages": ["css", "scss"],
-  "tokenFiles": []
+  "tokenFiles": [],
+  "repeatedWithoutToken": [],
+  "unusedTokens": []
 }
 ```
 
 | Field | Meaning |
 |---|---|
 | `root` | The project root |
+| `partial` | `true` when only part of the project was requested: definitions and uses still cover the whole project |
 | `findings` | The violations. `file` is relative to `root` and always uses `/`, also on Windows |
+| `suggestion` | Optional, on a finding: `token`, `match` (`exact` or `near`), `distance` on `near` (px difference, or ΔEOK for colors), `alternatives` on a tie ([check](check.md#which-token-fits)) |
 | `offset`, `endOffset` | The exact slice of the value in the file (starting at 0, end not included) |
-| `host` | Where the value was written: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template` |
+| `host` | Where the value was written: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `js-value`, `svg-attribute` |
 | `selector` | The CSS selector, or `tag.class` for inline styles |
 | `atRules`, `function`, `impliedUnit` | Optional: the at-rules around the rule (`@media (...)`), the function around the value (`darken`), the unit implied by the code (`px` for `padding: 8` in JSX, `rem` for `[style.gap.rem]`) |
 | `review` | Review items: the same fields as a finding, plus `message` |
 | `ignored` | How many values ignore comments removed |
 | `errors` | Files with syntax errors (`file`, `line`, `column`, `message`) |
-| `warnings` | Ignore comment problems (`file`, `line`, `column`, `rule`, `message`) |
+| `warnings` | Ignore comment problems and [token warnings](check.md#warnings-about-tokens) (`file`, `line`, `column`, `rule`, `message`) |
 | `skipped` | Files not analyzed (`file`, `reason`: `minified`, `unsupported`, `ignored`) |
 | `unmatched` | Paths with nothing to analyze |
-| `definitions`, `references` | The tokens the project already defines, and where it uses them |
+| `definitions`, `references` | The tokens the project already defines, and where it uses them. A reference has the `fallback` of `var(--x, 12px)` when there is one; a definition has `deprecated` when the DTCG file says so |
 | `tokenFiles` | Files dedicated to tokens |
 | `rootFontSize` | Present when the project sets `html { font-size }` |
+| `repeatedWithoutToken` | Values `generate` would turn into tokens and that have none: the tokens folder is out of date. Empty without tokens |
+| `unusedTokens` | Custom properties nobody uses (`name`, `file`, `line`). Empty on a partial run |
+| `baselined` | With `--baseline`: how many violations the baseline covered |
+| `summary` | With `--summary`: one item per token type (`type`, `hardcoded`, `tokenized`) |
 
 ## `generate --json`
 
@@ -78,9 +91,10 @@ With `--json`, each command prints its result as one JSON object, for another pr
 | Field | Meaning |
 |---|---|
 | `root`, `dryRun` | As above |
-| `files` | Each changed file, with its `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`) and, with `--dry-run`, its `diff` |
-| `skippedValues` | Values not replaced, with the reason ([fix](fix.md#values-it-skips)) |
+| `files` | Each changed file, with its `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason`, and `definedAt`/`alternatives` when they apply) and, with `--dry-run`, its `diff` |
+| `skippedValues` | Values not replaced, with the reason ([fix](fix.md#values-it-skips)); `alternatives` lists the tokens in a tie |
 | `withoutToken` | Values with no token of the same value |
+| `repeatedWithoutToken` | The part of those that `generate` would turn into tokens: the tokens folder is out of date |
 | `remaining` | Violations left after the fix |
 | `errors`, `warnings`, `skipped` | As in `check` |
 

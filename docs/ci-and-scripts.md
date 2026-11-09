@@ -55,6 +55,25 @@ Two details for CI:
 - `generate` never waits for an answer outside a terminal: when token files already exist, pass `--extend` or `--new`.
 - `fix --dry-run` ends with `1` when violations would remain, so it can also be a CI check.
 
+## Annotations on the pull request
+
+With `--format github`, each violation and syntax error becomes an error annotation on the line of the diff, and each review item becomes a notice:
+
+```yaml
+      - run: npx tokentidy check --format github
+```
+
+The exit code is the same, so the step still fails when there are violations. Paths are relative to the current folder, which in Actions is the repository root.
+
+## In a project that already has violations
+
+Save a [baseline](check.md#adopting-it-in-a-project-that-already-has-violations) and commit it, so the build only fails on new violations:
+
+```bash
+npx tokentidy check --print-baseline > tokentidy.baseline.json
+npx tokentidy check --baseline tokentidy.baseline.json
+```
+
 ## Before each commit
 
 To check only the files being committed, pass them as paths. With [lint-staged](https://github.com/lint-staged/lint-staged), for example:
@@ -68,3 +87,5 @@ To check only the files being committed, pass them as paths. With [lint-staged](
 ```
 
 A file named explicitly is always analyzed, even a test file a folder scan would skip.
+
+Only the committed files are reported, and they are judged with the whole project in view ([Analyzing part of a project](check.md#analyzing-part-of-a-project)), so the answer matches a full run. The cost is reading the project on each commit.

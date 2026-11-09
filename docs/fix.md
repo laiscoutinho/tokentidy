@@ -19,7 +19,7 @@ If the project has no tokens at all, `fix` says to run [`generate`](generate.md)
 In this order:
 
 1. a generated **semantic alias** (`--color-text-danger`), only where it was created for;
-2. a **hand-written token** of the project: a global custom property (`:root`/`html`/`body`, never redefined with another value by a theme or media query), or a top-level `$x`/`@x` visible in the file (same file, or a file it loads with `@import`/`@use … as *`). Between two, the most used wins;
+2. a **hand-written token** of the project: a global custom property (`:root`/`html`/`body`, never redefined with another value by a theme or media query), or a top-level `$x`/`@x` visible in the file (same file, or a file it loads with `@import`/`@use … as *`). Between two, the most used wins, and a tie is skipped as `ambiguous-token`;
 3. a **generated token** from the tokens folder (`design-tokens/`, or `output` in the config), when its file exists: `tokens.css` for `var()`, `_tokens.scss` for `$x`, `_tokens.less` for `@x`.
 
 ## How the token is written
@@ -45,7 +45,10 @@ src/App.scss:12:10	skipped	needs-preprocessor-variable	16px	…
 | `needs-preprocessor-variable` | Sass/Less need the value at build time and no `$x`/`@x` with it is available |
 | `inline-style-function` | The same, in an Angular inline `styles:` (it can't import Sass variables) |
 | `variable-not-loaded` | The tokens file is loaded with a namespace (`@use … as t`), or a variable with the value exists but isn't imported |
-| `unit-in-binding` | `[style.width.px]="a ? 16 : 24"`: the unit in the name belongs to both values |
+| `unit-in-binding` | `[style.width.px]="a ? 16 : 24"`: the unit in the name belongs to both values. Also a number in `host: { '[style.width.px]': '16' }` |
+| `needs-token-module` | The value is read by JavaScript (canvas, chart or unknown function), where `var()` doesn't work: edit it by hand |
+| `svg-attribute` | The value is in an SVG presentation attribute (`fill="#fff"`). Browsers don't agree on `var()` there, and the specification is still under discussion: move it to `style` or edit it by hand |
+| `ambiguous-token` | Two tokens of the project have this value and are used equally: picking one would be a guess |
 | `overlap` | Two replacements on the same text |
 | `breaks-syntax` | The fixed file would have a syntax error (it is analyzed again in memory before writing) |
 | `changed-on-disk` | The file changed while the command was running |
