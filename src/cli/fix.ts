@@ -8,7 +8,8 @@ import type { Command } from 'commander';
 import { CONFIG_FILE, loadConfig } from '../project/config.ts';
 import type { FixResult } from '../fix/apply.ts';
 import { collectFiles, findProjectRoot } from '../project/scope.ts';
-import { EXIT } from './errors.ts';
+import { normalizeFinding } from '../values/normalize.ts';
+import { EXIT, JSON_SCHEMA_VERSION } from './errors.ts';
 import { display, displayPath, oneLine, printable, printDiagnostics } from './print.ts';
 
 interface FixCommandOptions {
@@ -39,27 +40,35 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
     const tokensDir = options.tokens ? path.resolve(options.tokens) : path.resolve(root, config.output);
 
     const { fixScope } = await import('../fix/apply.ts');
-    const result = await fixScope(scope, { ...scopeOptions, tokensDir, dryRun: options.dryRun === true });
+    const result = await fixScope(scope, { ...scopeOptions, tokensDir, dryRun: options.dryRun === true, minOccurrences: config.minOccurrences });
     const { after } = result;
     process.exitCode = after.findings.length > 0 || after.errors.length > 0 ? EXIT.findings : EXIT.ok;
 
     if (options.json) {
         console.log(JSON.stringify({
+            schemaVersion: JSON_SCHEMA_VERSION,
             root: result.root,
             dryRun: result.dryRun,
             files: result.files.map(({ file, replacements, diff }) => ({
                 file,
-                replacements: replacements.map(({ finding, token, source, text }) => ({
+                replacements: replacements.map(({ finding, token, source, text, reason, definedAt, alternatives }) => ({
                     line: finding.line, column: finding.column, type: finding.type, property: finding.property,
-                    value: finding.value, token, source, text,
+                    value: finding.value, token, source, text, reason,
+                    ...(definedAt ? { definedAt } : {}),
+                    ...(alternatives ? { alternatives } : {}),
                 })),
                 ...(result.dryRun ? { diff } : {}),
             })),
-            skippedValues: result.skipped.map(({ finding, reason, message }) => ({
+            skippedValues: result.skipped.map(({ finding, reason, message, alternatives }) => ({
                 file: finding.file, line: finding.line, column: finding.column, type: finding.type,
                 property: finding.property, value: finding.value, reason, message,
+                ...(alternatives ? { alternatives } : {}),
             })),
             withoutToken: result.withoutToken.length,
+            repeatedWithoutToken: result.repeatedWithoutToken.map((finding) => ({
+                file: finding.file, line: finding.line, column: finding.column, type: finding.type,
+                property: finding.property, value: finding.value,
+            })),
             remaining: after.findings,
             errors: after.errors,
             warnings: after.warnings,
@@ -108,6 +117,10 @@ function printFixSummary(result: FixResult, tokensDir: string): void {
         `${remaining} ${remaining === 1 ? 'violation remains' : 'violations remain'}`,
     ];
     console.error(parts.join('; '));
+    if (result.tokens > 0 && result.repeatedWithoutToken.length > 0) {
+        const values = new Set(result.repeatedWithoutToken.map((f) => `${f.type}\u0000${normalizeFinding(f)}`)).size;
+        console.error(`${values} repeated ${values === 1 ? 'value has' : 'values have'} no token yet; run tokentidy generate --extend`);
+    }
     // `var(--x)` de um token gerado só resolve se o `tokens.css` estiver carregado na página
     const generatedVar = result.files.some((f) => f.replacements.some((r) => r.source !== 'project' && r.token.startsWith('--')));
     if (generatedVar) {

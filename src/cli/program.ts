@@ -36,6 +36,12 @@ registerFix(program);
 
 // Ponto único de saída: erros vão para stderr e definem o exit code
 async function main(): Promise<void> {
+    // `tokentidy --help | head -1`: quem lê fechou o pipe; não é erro nosso, e o exit code continua valendo
+    process.stdout.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'EPIPE') {
+            throw error;
+        }
+    });
     // Sem nenhum comando, mostra o banner e a ajuda
     if (process.argv.length <= 2) {
         program.outputHelp();
@@ -50,7 +56,8 @@ async function main(): Promise<void> {
             return;
         }
         const message = error instanceof Error ? error.message : String(error);
-        console.error(styleText('red', `Error: ${printable(message)}`, { stream: process.stderr }));
+        // Linha a linha: a mensagem pode ter mais de uma, e `printable` escaparia a quebra
+        console.error(styleText('red', `Error: ${message.split('\n').map(printable).join('\n')}`, { stream: process.stderr }));
         process.exitCode = EXIT.error;
     }
 }

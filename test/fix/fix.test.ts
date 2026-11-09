@@ -5,9 +5,11 @@ import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { analyzePaths } from '../../src/analysis/analyze.ts';
+import { generateTokens } from '../../src/generate/generate.ts';
 import { fixScope } from '../../src/fix/apply.ts';
 import type { FixResult } from '../../src/fix/apply.ts';
-import { buildTokenIndex } from '../../src/fix/candidates.ts';
+import { buildTokenIndex } from '../../src/token-lookup.ts';
 import { applyEdits, unifiedDiff } from '../../src/fix/diff.ts';
 import { importInsertion, loadedFiles } from '../../src/fix/imports.ts';
 import { planFixes } from '../../src/fix/plan.ts';
@@ -360,4 +362,58 @@ test('imports: what a stylesheet loads, and where the tokens import goes', () =>
     assert.deepEqual(importInsertion('﻿.a {}\r\n', 'scss', '_tokens.scss', 'a.scss'), { offset: 1, text: "@use './tokens' as *;\r\n" });
     assert.deepEqual(importInsertion('@import "x";', 'less', 't/_tokens.less', 'a.less'), { offset: 12, text: "\n@import (reference) './t/_tokens.less';\n" });
     assert.deepEqual(importInsertion('@use "x"\n.a\n  b: c\n', 'sass', '_tokens.scss', 'a.sass'), { offset: 9, text: "@use './tokens' as *\n" });
+});
+
+// Um valor com token "reutilizado" pelo generate precisa ser trocado pelo fix
+for (const [name, css, replaced] of [
+    ['global', ':root { --black: #000; }', true],
+    ['global with a theme selector', ':root, [data-t=light] { --black: #000; }', true],
+    ['only inside a rule', '.g-3 { --black: #000; }', false],
+    ['redefined in a theme', ':root { --black: #000; }\n[data-t=dark] { --black: #fff; }', false],
+] as const) {
+    test(`generate and fix agree on a token ${name}`, async () => {
+        const dir = await project({ 'src/theme.css': `${css}\n`, 'src/a.css': '.a { color: #000; }\n.b { color: #000; }\n' });
+        try {
+            const analysis = await analyzePaths([dir], { root: dir });
+            const generation = generateTokens(analysis.findings, { minOccurrences: 2, gridBase: 4, semanticTokens: false, mode: 'new', definitions: analysis.definitions, references: analysis.references });
+            assert.equal(generation.reused.some((r) => r.key === '#000000'), replaced);
+            assert.equal(generation.tokens.some((t) => t.key === '#000000'), !replaced);
+            const result = await fix(dir);
+            assert.equal(result.files.flatMap((f) => f.replacements).length, replaced ? 2 : 0);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+}
+
+test('fix on one folder uses the tokens defined in the rest of the project', async () => {
+    const dir = await project({ 'src/theme/t.css': ':root { --brand: #4f46e5; }\n', 'src/comp/a.css': '.a { color: #4f46e5; }\n' });
+    try {
+        const result = await fix(dir, { paths: [path.join(dir, 'src/comp')] });
+        assert.equal(await read(dir, 'src/comp/a.css'), '.a { color: var(--brand); }\n');
+        assert.equal(result.files.length, 1);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('values repeated after generate are told apart from values used once', async () => {
+    const dir = await project({ 'src/a.css': '.a { padding: 16px; margin: 20px; }\n.b { margin: 20px; gap: 13px; }\n' });
+    try {
+        const result = await fix(dir);
+        assert.deepEqual(result.withoutToken.map((f) => f.value), ['20px', '20px', '13px']);
+        assert.deepEqual(result.repeatedWithoutToken.map((f) => f.value), ['20px', '20px']);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('nothing is reported as repeated right after generate', async () => {
+    const dir = await project({ 'src/a.css': '.a { margin: 16px; }\n.b { margin: 16px; gap: 13px; }\n' });
+    try {
+        const result = await fix(dir);
+        assert.deepEqual(result.repeatedWithoutToken, []);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });

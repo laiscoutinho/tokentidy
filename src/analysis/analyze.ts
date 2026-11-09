@@ -17,6 +17,8 @@ export interface AnalysisResult {
     root: string;
     /** Quantos arquivos foram de fato analisados. */
     filesAnalyzed: number;
+    /** Só parte do projeto foi pedida: definições e usos vêm do projeto todo, os achados só dessa parte. */
+    partial: boolean;
     /** Violações: falham o CI e alimentam o `generate`. */
     findings: Finding[];
     /** Valores para revisão: aparecem na saída, mas não falham o CI nem viram token. */
@@ -24,7 +26,7 @@ export interface AnalysisResult {
     /** Achados e revisões ignorados por comentário (`tokentidy-ignore-line`). */
     ignored: number;
     errors: AnalysisError[];
-    /** Avisos sobre comentários de ignorar sem efeito. */
+    /** Avisos que não mudam o exit code: comentários de ignorar sem efeito e uso de tokens (nome errado, depreciado, fallback divergente). */
     warnings: AnalysisWarning[];
     /** Arquivos encontrados e não analisados (minificados, linguagens sem suporte, ignorados pela configuração). */
     skipped: SkippedFile[];
@@ -56,7 +58,7 @@ type Parser = (source: string, file: string) => ParseResult | Promise<ParseResul
 const STYLE_SYNTAX = new Map<string, StyleSyntax>([
     ['.css', 'css'], ['.pcss', 'css'], ['.postcss', 'css'], ['.scss', 'scss'], ['.sass', 'sass'], ['.less', 'less'],
 ]);
-const SCRIPT_EXTENSIONS = new Set(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx']);
+const SCRIPT_EXTENSIONS = new Set(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts']);
 
 /** Linha média acima disto: arquivo minificado (regra `minified_files?` do GitHub Linguist). */
 const MINIFIED_AVERAGE_LINE = 110;
@@ -124,12 +126,20 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
     const results: ParseResult[] = [];
     const directives = new Map<string, IgnoreDirective[]>();
     const warnings: AnalysisWarning[] = [];
+    // Em execução parcial, o resto do projeto é lido só para saber o que ele define e usa
+    const reported = new Set([...scope.files, ...scope.tokenFiles]);
+    const isReported = (item: { file: string }) => reported.has(item.file);
+    const allFiles = [...scope.files, ...(scope.context?.files ?? [])].sort();
+    const allTokenFiles = [...scope.tokenFiles, ...(scope.context?.tokenFiles ?? [])].sort();
+    let filesAnalyzed = 0;
 
     async function run(file: string, kind: string): Promise<ParseResult | undefined> {
         const source = await read(file);
         // Bundle gerado com outro nome (`vendor.css`): o conteúdo denuncia
         if (!options.includeMinified && isMinified(source)) {
-            skipped.push({ file, reason: 'minified' });
+            if (reported.has(file)) {
+                skipped.push({ file, reason: 'minified' });
+            }
             return undefined;
         }
         let parse = loaded.get(kind);
@@ -139,9 +149,12 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
         }
         const result = await parse(source, file);
         results.push(result);
-        const ignore = parseIgnoreDirectives(source, file);
-        directives.set(file, ignore.directives);
-        warnings.push(...ignore.warnings);
+        if (reported.has(file)) {
+            filesAnalyzed++;
+            const ignore = parseIgnoreDirectives(source, file);
+            directives.set(file, ignore.directives);
+            warnings.push(...ignore.warnings);
+        }
         return result;
     }
 
@@ -150,7 +163,7 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
      * e precisam do parser do Angular (`[style.x]`, `@if`) em vez do parser de HTML comum.
      */
     const angularTemplates = new Set<string>();
-    for (const file of scope.files.filter((f) => SCRIPT_EXTENSIONS.has(path.extname(f).toLowerCase()))) {
+    for (const file of allFiles.filter((f) => SCRIPT_EXTENSIONS.has(path.extname(f).toLowerCase()))) {
         const result = await run(file, 'script');
         for (const url of result?.templateUrls ?? []) {
             angularTemplates.add(path.posix.normalize(path.posix.join(path.posix.dirname(file), url)));
@@ -159,13 +172,13 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
 
     const styleLanguages = new Set<StyleSyntax>();
     const tokenFiles: string[] = [];
-    for (const file of scope.files) {
+    for (const file of allFiles) {
         const ext = path.extname(file).toLowerCase();
         const syntax = STYLE_SYNTAX.get(ext);
         if (syntax) {
             styleLanguages.add(syntax);
             const result = await run(file, ext);
-            if (result && result.definitions.length > 0 && result.declarations === 0) {
+            if (result && result.definitions.length > 0 && result.declarations === 0 && reported.has(file)) {
                 tokenFiles.push(file);
             }
         } else if (ext === '.html') {
@@ -173,12 +186,14 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
         }
     }
 
-    if (scope.tokenFiles.length > 0) {
+    if (allTokenFiles.length > 0) {
         const { parseDtcg } = await import('../parsers/dtcg.ts');
-        for (const file of scope.tokenFiles) {
+        for (const file of allTokenFiles) {
             const { definitions, errors } = parseDtcg(await read(file), file);
             results.push({ findings: [], review: [], errors, definitions, references: [], declarations: 0 });
-            tokenFiles.push(file);
+            if (reported.has(file)) {
+                tokenFiles.push(file);
+            }
         }
     }
 
@@ -195,9 +210,14 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
             ignored += applied.ignored;
             return applied.kept;
         });
-    const findings = filtered([...results.flatMap((r) => r.findings), ...local.findings]);
-    const review = filtered([...results.flatMap((r) => r.review), ...local.review]);
+    const findings = filtered([...results.flatMap((r) => r.findings), ...local.findings].filter(isReported));
+    const review = filtered([...results.flatMap((r) => r.review), ...local.review].filter(isReported));
     warnings.push(...unusedDirectives([...directives.values()].flat()));
+    if (references.length > 0) {
+        const { tokenWarnings } = await import('./token-health.ts');
+        // Com as definições locais: `var(--x)` de uma custom property local não é nome desconhecido
+        warnings.push(...tokenWarnings(references, results.flatMap((r) => r.definitions), isReported));
+    }
 
     const byPosition = (a: { file: string; line: number; column: number }, b: { file: string; line: number; column: number }) =>
         (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || a.line - b.line || a.column - b.column;
@@ -205,11 +225,12 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
     const rootFontSize = results.map((r) => r.rootFontSize).find((size) => size !== undefined);
     return {
         root,
-        filesAnalyzed: results.length - scope.tokenFiles.length,
+        filesAnalyzed,
+        partial: scope.context !== undefined,
         findings: findings.sort(byPosition),
         review: review.sort(byPosition),
         ignored,
-        errors: results.flatMap((r) => r.errors).sort(byPosition),
+        errors: results.flatMap((r) => r.errors).filter(isReported).sort(byPosition),
         warnings: warnings.sort(byPosition),
         skipped: skipped.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0)),
         unmatched: scope.unmatched,
@@ -217,7 +238,7 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
         definitions: results.flatMap((r) => r.definitions)
             .filter((d) => !(d.syntax === 'custom-property' && localDefinition.has(definitionKey(d))))
             .sort(byPosition),
-        references: references.sort((a, b) => byPosition({ ...a, column: 0 }, { ...b, column: 0 })),
+        references: references.sort(byPosition),
         ...(rootFontSize ? { rootFontSize } : {}),
         styleLanguages: [...styleLanguages].sort(),
         tokenFiles: tokenFiles.sort(),

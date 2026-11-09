@@ -7,7 +7,7 @@ import path from 'node:path';
  * `.pcss`/`.postcss` são CSS com plugins do PostCSS: a sintaxe é a do CSS.
  */
 export const SUPPORTED_EXTENSIONS = [
-    '.css', '.pcss', '.postcss', '.scss', '.sass', '.less', '.html', '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx',
+    '.css', '.pcss', '.postcss', '.scss', '.sass', '.less', '.html', '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts',
 ] as const;
 
 export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number];

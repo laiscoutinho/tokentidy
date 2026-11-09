@@ -92,10 +92,11 @@ export class FileCollector {
     declaration(decl: Declaration): void {
         const { property, value, offset } = decl;
         this.result.declarations++;
-        for (const name of findReferences(value)) {
+        for (const { name, start, fallback } of findReferences(value)) {
             this.result.references.push({
-                name, property, file: this.file, line: this.#positionOf(offset).line,
+                name, property, file: this.file, ...this.#positionOf(offset + start),
                 ...(decl.selector === undefined ? {} : { selector: decl.selector }),
+                ...(fallback === undefined ? {} : { fallback }),
             });
         }
 

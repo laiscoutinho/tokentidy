@@ -28,6 +28,11 @@ export interface Scope {
     skipped: SkippedFile[];
     /** Caminhos passados que não tinham nenhum arquivo suportado (como foram escritos). */
     unmatched: string[];
+    /**
+     * Só em execução parcial: o resto do projeto. Estes arquivos não geram achados; deles vêm as definições,
+     * os usos e os `templateUrl`, porque o veredito de um arquivo depende do que o projeto define e usa.
+     */
+    context?: { files: string[]; tokenFiles: string[] };
 }
 
 /** Caminho que não existe: erro de uso (exit 2), não "nada encontrado". */
@@ -121,6 +126,25 @@ export async function collectFiles(paths: readonly string[], root: string, optio
         }
     }
 
+    let context: Scope['context'];
+    if (!paths.some((given) => path.resolve(given) === root)) {
+        const others = { files: [] as string[], tokenFiles: [] as string[] };
+        for await (const relative of listFiles(root)) {
+            const absolute = path.join(root, relative);
+            const file = toPosix(absolute);
+            const kind = classifyFile(absolute, false);
+            if (files.has(file) || tokenFiles.has(file) || ignored(file)) {
+                continue;
+            }
+            if (kind === 'supported' || (kind === 'minified' && options.includeMinified)) {
+                others.files.push(file);
+            } else if (kind === 'token') {
+                others.tokenFiles.push(file);
+            }
+        }
+        context = { files: others.files.sort(), tokenFiles: others.tokenFiles.sort() };
+    }
+
     // Ordem estável: o glob não garante ordem, e a saída precisa ser a mesma em toda execução
     return {
         root,
@@ -128,5 +152,6 @@ export async function collectFiles(paths: readonly string[], root: string, optio
         tokenFiles: [...tokenFiles].sort(),
         skipped: [...skipped.values()].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0)),
         unmatched,
+        ...(context ? { context } : {}),
     };
 }

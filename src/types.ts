@@ -33,7 +33,11 @@ export type TokenType =
  * - `jsx`: objeto `style={{}}` do React;
  * - `angular-template`: `style=""`, `[style.x]` e `[ngStyle]` em template do Angular.
  */
-export type Host = 'css' | 'scss' | 'sass' | 'less' | 'html' | 'jsx' | 'angular-template';
+/**
+ * Onde o valor está escrito, o que decide como o `fix` escreve o token.
+ * `css-in-js`: CSS em template literal. `js-value`: valor lido por JavaScript (canvas, gráfico, destino desconhecido), onde `var()` pode não funcionar. `svg-attribute`: atributo de apresentação do SVG (`fill="#fff"`), onde o suporte a `var()` varia entre navegadores.
+ */
+export type Host = 'css' | 'scss' | 'sass' | 'less' | 'html' | 'jsx' | 'angular-template' | 'css-in-js' | 'js-value' | 'svg-attribute';
 
 /**
  * Um valor visual solto encontrado no código.
@@ -78,6 +82,22 @@ export interface Finding {
     unitSuffix?: { offset: number; endOffset: number };
     /** O valor é um número de JavaScript ou de expressão do Angular (`padding: 8`, `[style.opacity]="0.5"`): o token entra como string. */
     numeric?: true;
+    /** Token que serve para este valor, calculado pelo `check` (nunca escreve nada). */
+    suggestion?: TokenSuggestion;
+}
+
+/**
+ * Token sugerido para um valor solto.
+ * `exact`: mesmo valor, é o que o `fix` trocaria (ou os empatados, em `alternatives`).
+ * `near`: valor próximo, só informativo: quem decide é a pessoa, e o `fix` não troca.
+ */
+export interface TokenSuggestion {
+    token: string;
+    match: 'exact' | 'near';
+    /** `near`: em medidas, token − valor em px; em cores, ΔEOK. */
+    distance?: number;
+    /** Tokens empatados com `token`. */
+    alternatives?: string[];
 }
 
 /**
@@ -117,6 +137,8 @@ export interface TokenDefinition {
     selector?: string;
     /** Tipo declarado no DTCG (`$type`), quando houver. */
     dtcgType?: string;
+    /** `$deprecated` do DTCG: `true` ou o motivo. */
+    deprecated?: true | string;
 }
 
 /** Uso de um token existente (`var(--cor)`, `$cor`, `@cor`) dentro de uma propriedade. */
@@ -124,8 +146,12 @@ export interface TokenReference {
     name: string;
     property: string;
     file: string;
+    /** Posição do nome do token no arquivo. */
     line: number;
+    column: number;
     selector?: string;
+    /** Segundo argumento de `var(--x, 12px)`, como está escrito. */
+    fallback?: string;
 }
 
 /** Arquivo que não pôde ser analisado (ex.: erro de sintaxe). Não interrompe a análise dos outros. */

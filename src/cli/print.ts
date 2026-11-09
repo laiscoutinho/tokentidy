@@ -60,13 +60,16 @@ export function printDiagnostics(result: AnalysisResult): void {
 }
 
 /** `3 violations, 2 review in 4 files`: só quando há algo a dizer. */
-export function printCheckSummary(result: AnalysisResult): void {
+export function printCheckSummary(result: AnalysisResult, baselined = 0): void {
     const { findings, review, ignored, skipped } = result;
-    if (findings.length + review.length + ignored + skipped.length === 0) {
+    if (findings.length + review.length + ignored + skipped.length + baselined === 0) {
         return;
     }
     const files = new Set([...findings, ...review].map((item) => item.file)).size;
     const parts = [`${findings.length} ${findings.length === 1 ? 'violation' : 'violations'}, ${review.length} review in ${files} ${files === 1 ? 'file' : 'files'}`];
+    if (baselined > 0) {
+        parts.push(`${baselined} in the baseline`);
+    }
     if (ignored > 0) {
         parts.push(`${ignored} ignored by comment`);
     }

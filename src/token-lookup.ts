@@ -3,10 +3,15 @@
  * Vêm de dois lugares: o que o projeto já define à mão e o que o `generate` escreveu na pasta de tokens.
  */
 
-import { reusableDefinitions } from '../token-index.ts';
-import type { TreeOccurrence, TreeToken } from '../generate/output/dtcg-tree.ts';
-import { normalizeValue } from '../values/normalize.ts';
-import type { TokenDefinition, TokenReference, TokenType } from '../types.ts';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
+import { reusableDefinitions } from './token-index.ts';
+import { readDtcgTree, treeTokensOf } from './generate/output/dtcg-tree.ts';
+import type { TreeOccurrence, TreeToken } from './generate/output/dtcg-tree.ts';
+import { isInside } from './project/scope.ts';
+import type { Finding, TokenDefinition, TokenReference, TokenType } from './types.ts';
+import { normalizeFinding } from './values/normalize.ts';
 
 /**
  * De onde vem o token. A ordem é a de preferência:
@@ -26,7 +31,7 @@ export interface Candidate {
     form: CandidateForm;
     /** Nome com o prefixo (`--color-primary`, `$primary`, `@primary`). */
     name: string;
-    /** Variável escrita à mão: arquivo e linha da definição (decide se ela é visível no arquivo do valor). */
+    /** Token escrito à mão: arquivo e linha da definição (em SCSS/Less, decide se ela é visível no arquivo do valor). */
     definition?: Pick<TokenDefinition, 'file' | 'line'>;
     /** Alias: as ocorrências para as quais ele foi criado. */
     occurrences?: readonly TreeOccurrence[];
@@ -42,19 +47,20 @@ export interface IndexInput {
     generated: readonly TreeToken[];
     /** Quais arquivos de saída existem: sem `tokens.css`, `var(--x)` de um token gerado não resolveria. */
     outputs: { css: boolean; scss: boolean; less: boolean };
+    /** Nomes sem prefixo de tokens marcados `$deprecated`: nunca são oferecidos. */
+    deprecated?: ReadonlySet<string>;
 }
 
 export interface TokenIndex {
     /** Candidatos para um valor, em ordem de preferência. */
     lookup(type: TokenType, key: string): readonly Candidate[];
+    /** Todos os candidatos de um tipo: base da sugestão por proximidade. */
+    ofType(type: TokenType): readonly Candidate[];
     size: number;
 }
 
 const SOURCE_RANK: Record<CandidateSource, number> = { alias: 0, project: 1, generated: 2 };
 const FORM_RANK: Record<CandidateForm, number> = { 'custom-property': 0, scss: 1, less: 2 };
-
-/** Seletores que valem para a página inteira: custom property definida neles é global. */
-const GLOBAL_SELECTORS = new Set([':root', 'html', 'body']);
 
 /** Caminho que vira nome sem escape (`color.brand-500` → `--color-brand-500`). */
 const SAFE_SEGMENT = /^[A-Za-z0-9_-]+$/;
@@ -66,22 +72,17 @@ export function buildTokenIndex(input: IndexInput): TokenIndex {
         uses.set(ref.name, (uses.get(ref.name) ?? 0) + 1);
     }
 
-    // Todas as definições de cada custom property: um nome redefinido com outro valor é variável de tema
-    const byName = Map.groupBy(input.definitions.filter((d) => d.syntax === 'custom-property'), (d) => d.name);
     const seen = new Set<string>();
     for (const { definition, type, key } of reusableDefinitions(input.definitions, input.references)) {
         const base = { type, key, source: 'project' as const, name: definition.name, uses: uses.get(definition.name) ?? 0 };
         if (definition.syntax === 'custom-property') {
-            const all = byName.get(definition.name) ?? [];
-            const global = all.some((d) => isGlobal(d.selector));
-            const fixed = all.every((d) => normalizeValue(type, d.value) === key);
+            // A mesma custom property em `:root` e em `html`, com o mesmo valor, é um token só
             const id = `${type}\u0000${definition.name}`;
-            if (global && fixed && !seen.has(id)) {
+            if (!seen.has(id)) {
                 seen.add(id);
-                candidates.push({ ...base, form: 'custom-property' });
+                candidates.push({ ...base, form: 'custom-property', definition: { file: definition.file, line: definition.line } });
             }
-        } else if ((definition.syntax === 'scss-variable' || definition.syntax === 'less-variable') && definition.selector === undefined) {
-            // Variável dentro de uma regra só existe ali: só as de nível de arquivo
+        } else if (definition.syntax === 'scss-variable' || definition.syntax === 'less-variable') {
             candidates.push({
                 ...base,
                 form: definition.syntax === 'scss-variable' ? 'scss' : 'less',
@@ -125,14 +126,49 @@ export function buildTokenIndex(input: IndexInput): TokenIndex {
             || b.candidate.uses - a.candidate.uses
             || FORM_RANK[a.candidate.form] - FORM_RANK[b.candidate.form]
             || a.order - b.order)
-        .map(({ candidate }) => candidate);
+        .map(({ candidate }) => candidate)
+        .filter((candidate) => !input.deprecated?.has(bareName(candidate.name)));
     const index = Map.groupBy(sorted, (c) => `${c.type}\u0000${c.key}`);
+    const byType = Map.groupBy(sorted, (c) => c.type);
     return {
         lookup: (type, key) => index.get(`${type}\u0000${key}`) ?? [],
+        ofType: (type) => byType.get(type) ?? [],
         size: sorted.length,
     };
 }
 
-function isGlobal(selector: string | undefined): boolean {
-    return selector !== undefined && selector.split(',').every((part) => GLOBAL_SELECTORS.has(part.trim()));
+/** Nome sem o prefixo da linguagem: `--a-b`, `$a-b`, `@a-b` e o caminho DTCG `a.b` são o mesmo token. */
+export function bareName(name: string): string {
+    return name.replace(/^(--|\$|@)/, '').replaceAll('.', '-');
+}
+
+/** Tokens marcados `$deprecated` no DTCG, pelo nome sem prefixo. */
+export function deprecatedTokens(definitions: readonly TokenDefinition[]): Map<string, TokenDefinition> {
+    return new Map(definitions.filter((d) => d.deprecated !== undefined).map((d) => [bareName(d.name), d]));
+}
+
+/** Índice do projeto: o que ele define à mão (fora da pasta de tokens) e o que o `generate` escreveu nela. */
+export async function projectTokenIndex(
+    analysis: { root: string; definitions: readonly TokenDefinition[]; references: readonly TokenReference[] },
+    tokensDir: string,
+): Promise<TokenIndex> {
+    const tree = await readDtcgTree(tokensDir);
+    return buildTokenIndex({
+        definitions: analysis.definitions.filter((d) => !isInside(path.join(analysis.root, d.file), tokensDir)),
+        references: analysis.references,
+        generated: tree ? treeTokensOf(tree) : [],
+        outputs: {
+            css: existsSync(path.join(tokensDir, 'tokens.css')),
+            scss: existsSync(path.join(tokensDir, '_tokens.scss')),
+            less: existsSync(path.join(tokensDir, '_tokens.less')),
+        },
+        deprecated: new Set(deprecatedTokens(analysis.definitions).keys()),
+    });
+}
+
+/** Valores que o `generate` transformaria em token e que ainda não têm nenhum. */
+export function repeatedValues(withoutToken: readonly Finding[], index: TokenIndex, minOccurrences: number): Finding[] {
+    return [...Map.groupBy(withoutToken, (f) => `${f.type}\u0000${normalizeFinding(f)}`).values()]
+        .filter((group) => group.length >= minOccurrences && index.lookup(group[0]!.type, normalizeFinding(group[0]!)).length === 0)
+        .flat();
 }

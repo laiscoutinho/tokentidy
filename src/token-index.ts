@@ -1,6 +1,7 @@
 /**
- * Tokens que o projeto já tem e onde cada um funciona. Usado pelo `generate` (reutilizar em vez de criar)
- * e pelo `fix` (trocar o valor solto pelo token).
+ * Tokens que o projeto já tem e onde cada um funciona. Definição única de "token utilizável":
+ * `generate` (reutilizar em vez de criar) e `fix` (trocar o valor pelo token) precisam concordar,
+ * senão um valor fica sem token novo e também sem troca.
  */
 
 import { rulesForProperty } from './analysis/rules.ts';
@@ -14,6 +15,8 @@ export interface ReusableDefinition {
     key: string;
 }
 
+const GLOBAL_SELECTORS = new Set([':root', 'html', 'body']);
+
 // Map: `$type` vem de arquivo do usuário, e `constructor`/`__proto__` não podem cair no Object.prototype
 export const DTCG_TYPES = new Map<string, TokenType>([
     ['color', 'color'], ['fontFamily', 'font-family'], ['fontWeight', 'font-weight'], ['duration', 'duration'],
@@ -26,6 +29,9 @@ export const DTCG_TYPES = new Map<string, TokenType>([
  * Token sem uso e com valor ambíguo (`$base: 16px`: tamanho de fonte? espaçamento?) não entra:
  * reutilizar por palpite seria uma afirmação falsa.
  * Tokens que apontam para outros (`--a: var(--b)`) também não: o valor final depende de outro arquivo.
+ * Custom property só entra se vale no documento todo e tem um único valor: redefinida com outro valor é
+ * variável de tema, e trocar o valor solto por ela mudaria a aparência no outro tema.
+ * SCSS/Less só de nível de arquivo: dentro de uma regra, a variável só existe ali.
  */
 export function reusableDefinitions(definitions: readonly TokenDefinition[], references: readonly TokenReference[]): ReusableDefinition[] {
     const usedAs = new Map<string, Set<TokenType>>();
@@ -37,6 +43,7 @@ export function reusableDefinitions(definitions: readonly TokenDefinition[], ref
         usedAs.set(ref.name, types);
     }
 
+    const customProperties = Map.groupBy(definitions.filter((d) => d.syntax === 'custom-property'), (d) => d.name);
     const reusable: ReusableDefinition[] = [];
     for (const definition of definitions) {
         if (/var\(|^[$@]|\$|\{.*\}/.test(definition.value)) {
@@ -51,10 +58,30 @@ export function reusableDefinitions(definitions: readonly TokenDefinition[], ref
             types.add('color');
         }
         for (const type of types) {
-            reusable.push({ definition, type, key: normalizeValue(type, definition.value) });
+            const key = normalizeValue(type, definition.value);
+            if (dependable(definition, type, key, customProperties.get(definition.name) ?? [])) {
+                reusable.push({ definition, type, key });
+            }
         }
     }
     return reusable;
+}
+
+function dependable(definition: TokenDefinition, type: TokenType, key: string, sameName: readonly TokenDefinition[]): boolean {
+    switch (definition.syntax) {
+        case 'custom-property':
+            return sameName.some((d) => isGlobal(d.selector)) && sameName.every((d) => normalizeValue(type, d.value) === key);
+        case 'scss-variable':
+        case 'less-variable':
+            return definition.selector === undefined;
+        case 'dtcg':
+            return true;
+    }
+}
+
+/** Basta uma parte global (`:root, [data-theme=light]`): uma redefinição com outro valor já tira o token. */
+function isGlobal(selector: string | undefined): boolean {
+    return selector !== undefined && selector.split(',').some((part) => GLOBAL_SELECTORS.has(part.trim()));
 }
 
 /** Onde cada tipo de token funciona: `var(--x)` em qualquer lugar; `$x` só em SCSS/Sass; `@x` só em Less. */

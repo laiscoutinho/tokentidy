@@ -7,76 +7,13 @@ import path from 'node:path';
 
 import { normalizeFinding } from '../values/normalize.ts';
 import type { Finding } from '../types.ts';
-import type { Candidate, CandidateSource, TokenIndex } from './candidates.ts';
+import type { Candidate } from '../token-lookup.ts';
 import { importInsertion, loadedFiles, styleId } from './imports.ts';
 import type { LoadedFile, Preprocessor } from './imports.ts';
 import { angularQuote, jsQuote, nextToOperator } from './surrounding-syntax.ts';
+import type { Edit, FilePlan, FixPlan, PlanContext, Replacement, SkipReason, SkippedValue } from './plan-types.ts';
 
-/** Troca de um trecho do arquivo: [offset, endOffset) vira `text` (inserção quando os dois são iguais). */
-export interface Edit {
-    offset: number;
-    endOffset: number;
-    text: string;
-}
-
-export interface Replacement {
-    finding: Finding;
-    /** Token como foi escrito (`--color-primary`, `$primary`). */
-    token: string;
-    source: CandidateSource;
-    /** Texto que entra no lugar do valor (`var(--color-primary)`, `'var(--spacing-2)'`). */
-    text: string;
-}
-
-/**
- * Por que um valor com token não foi trocado:
- * - `needs-preprocessor-variable`: SCSS/Less precisam do valor no build (função, conta, media query) e não há `$x`/`@x`;
- * - `inline-style-function`: o mesmo caso num `styles:` inline do Angular, onde `$x` não pode ser importado;
- * - `variable-not-loaded`: a variável existe, mas o arquivo não a carrega (ou carrega com namespace);
- * - `unit-in-binding`: `[style.width.px]="a ? 16 : 24"`: a unidade no nome vale para os dois valores;
- * - `overlap`: duas trocas no mesmo trecho;
- * - `breaks-syntax`: o arquivo corrigido teria erro de sintaxe;
- * - `changed-on-disk`: o arquivo mudou durante a execução;
- * - `symlink`, `outside-root`: o arquivo não é escrito por segurança.
- */
-export type SkipReason =
-    | 'needs-preprocessor-variable'
-    | 'inline-style-function'
-    | 'variable-not-loaded'
-    | 'unit-in-binding'
-    | 'overlap'
-    | 'breaks-syntax'
-    | 'changed-on-disk'
-    | 'symlink'
-    | 'outside-root';
-
-export interface SkippedValue {
-    finding: Finding;
-    reason: SkipReason;
-    message: string;
-}
-
-export interface FilePlan {
-    file: string;
-    replacements: Replacement[];
-    /** Trocas dos valores, unidades removidas e imports, em ordem de posição, sem sobreposição. */
-    edits: Edit[];
-}
-
-export interface FixPlan {
-    files: FilePlan[];
-    skipped: SkippedValue[];
-    /** Valores sem token com o mesmo valor: o `generate` cria os tokens. */
-    withoutToken: Finding[];
-}
-
-export interface PlanContext {
-    index: TokenIndex;
-    /** Conteúdo dos arquivos com achados. */
-    sources: ReadonlyMap<string, string>;
-    /** Arquivos de tokens gerados, relativos à raiz (`design-tokens/_tokens.scss`). */
-    generatedFiles: { scss: string; less: string };
-}
+export type { Edit, FilePlan, FixPlan, PlanContext, Replacement, ReplacementReason, SkipReason, SkippedValue } from './plan-types.ts';
 
 /**
  * Funções que o próprio navegador calcula: `var()` dentro delas chega intacto ao CSS final.
@@ -131,6 +68,10 @@ class FilePlanner {
     /** Precisa importar os tokens gerados (`$x`/`@x` do `_tokens.scss`/`_tokens.less`). */
     #needsImport = false;
     readonly overlaps: SkippedValue[] = [];
+    /** Calculada uma vez: olha o arquivo inteiro, e um arquivo pode ter milhares de números. */
+    #quote: string | undefined;
+    /** Maior fim das edições planejadas: edição que começa depois dele não precisa ser comparada. */
+    #furthestEnd = 0;
 
     constructor(file: string, source: string, context: PlanContext) {
         this.#file = file;
@@ -151,6 +92,14 @@ class FilePlanner {
             return skippedValue(finding, 'unit-in-binding', 'the unit in the binding name applies to more than one value; edit it by hand');
         }
 
+        if (finding.host === 'js-value') {
+            return skippedValue(finding, 'needs-token-module', 'var() does not work where JavaScript reads this value (canvas, chart or unknown function); edit it by hand');
+        }
+
+        if (finding.host === 'svg-attribute') {
+            return skippedValue(finding, 'svg-attribute', 'var() in an SVG attribute does not work the same in every browser; move it to style or edit it by hand');
+        }
+
         const buildTime = this.#needsBuildTimeValue(finding);
         let reason: SkippedValue | undefined;
         for (const candidate of candidates) {
@@ -158,11 +107,11 @@ class FilePlanner {
                 if (buildTime) {
                     continue;
                 }
-                return this.#replace(finding, candidate, `var(${candidate.name})`);
+                return this.#tied(finding, candidate, candidates, buildTime) ?? this.#replace(finding, candidate, `var(${candidate.name})`, candidates);
             }
             const usable = this.#variableUsable(finding, candidate, buildTime);
             if (usable === true) {
-                return this.#replace(finding, candidate, candidate.name);
+                return this.#tied(finding, candidate, candidates, buildTime) ?? this.#replace(finding, candidate, candidate.name, candidates);
             }
             reason ??= usable;
         }
@@ -229,11 +178,25 @@ class FilePlanner {
         return true;
     }
 
-    #replace(finding: Finding, candidate: Candidate, token: string): undefined {
+    /** Outro token do projeto serviria igualmente bem, com outro nome: escolher um seria palpite. */
+    #tied(finding: Finding, chosen: Candidate, candidates: readonly Candidate[], buildTime: boolean): SkippedValue | undefined {
+        if (chosen.source !== 'project') {
+            return undefined;
+        }
+        const others = candidates.filter((c) => c.source === 'project' && c.form === chosen.form && c.uses === chosen.uses && c.name !== chosen.name
+            && (c.form === 'custom-property' || this.#variableUsable(finding, c, buildTime) === true));
+        if (others.length === 0) {
+            return undefined;
+        }
+        const names = [chosen.name, ...new Set(others.map((c) => c.name))];
+        return { ...skippedValue(finding, 'ambiguous-token', `${names.join(', ')} have this value and are used equally; pick one by hand`), alternatives: names };
+    }
+
+    #replace(finding: Finding, candidate: Candidate, token: string, candidates: readonly Candidate[]): undefined {
         let text = token;
         if (finding.numeric) {
             // Número de JS/Angular: o token só existe como string (`padding: 'var(--x)'`)
-            const quote = finding.host === 'angular-template' ? angularQuote(this.#source, finding) : jsQuote(this.#source);
+            const quote = finding.host === 'angular-template' ? angularQuote(this.#source, finding) : (this.#quote ??= jsQuote(this.#source));
             text = `${quote}${token}${quote}`;
         }
         const edits: Edit[] = [{ offset: finding.offset, endOffset: finding.endOffset, text }];
@@ -241,12 +204,19 @@ class FilePlanner {
             edits.push({ ...finding.unitSuffix, text: '' });
         }
         // Duas trocas no mesmo trecho: a segunda fica de fora (os parsers atuais não geram isso, mas um futuro pode)
-        if (edits.some((e) => this.#edits.some((other) => e.offset < other.endOffset && other.offset < e.endOffset))) {
+        if (edits.some((e) => e.offset < this.#furthestEnd && this.#edits.some((other) => e.offset < other.endOffset && other.offset < e.endOffset))) {
             this.overlaps.push(skippedValue(finding, 'overlap', 'another replacement already changes this text'));
             return undefined;
         }
         this.#edits.push(...edits);
-        this.#replacements.push({ finding, token: candidate.name, source: candidate.source, text });
+        this.#furthestEnd = Math.max(this.#furthestEnd, ...edits.map((e) => e.endOffset));
+        const alternatives = [...new Set(candidates.filter((c) => c.source === 'project' && c.name !== candidate.name).map((c) => c.name))];
+        this.#replacements.push({
+            finding, token: candidate.name, source: candidate.source, text,
+            reason: candidate.source === 'alias' ? 'alias' : candidate.source === 'generated' ? 'generated' : alternatives.length > 0 ? 'most-used' : 'only-match',
+            ...(candidate.definition ? { definedAt: candidate.definition } : {}),
+            ...(alternatives.length > 0 ? { alternatives } : {}),
+        });
         return undefined;
     }
 
@@ -268,6 +238,9 @@ function skippedValue(finding: Finding, reason: SkipReason, message: string): Sk
 function describeContext(finding: Finding): string {
     if (finding.property.startsWith('@')) {
         return `the ${finding.property} condition`;
+    }
+    if (finding.function?.startsWith('@')) {
+        return `this ${finding.function} argument`;
     }
     return finding.function ? `${finding.function}()` : 'this expression';
 }

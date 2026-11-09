@@ -22,18 +22,21 @@ export function parseDtcg(source: string, file: string): { definitions: TokenDef
 
     const definitions: TokenDefinition[] = [];
     // Posição aproximada de cada token: procura a chave depois da posição do grupo pai
-    const walk = (node: unknown, trail: string[], inheritedType: string | undefined, from: number): void => {
+    const walk = (node: unknown, trail: string[], inheritedType: string | undefined, inheritedDeprecated: true | string | undefined, from: number): void => {
         if (typeof node !== 'object' || node === null || Array.isArray(node)) {
             return;
         }
         const group = node as Record<string, unknown>;
         const type = typeof group['$type'] === 'string' ? group['$type'] : inheritedType;
+        // `$deprecated: false` num token desfaz o que veio do grupo
+        const deprecated = '$deprecated' in group ? deprecationOf(group['$deprecated']) : inheritedDeprecated;
         if ('$value' in group) {
             const value = cssValueOf(group['$value'], type);
             if (value !== undefined) {
                 definitions.push({
                     name: trail.join('.'), syntax: 'dtcg', value, file, ...positionOf(from),
                     ...(type ? { dtcgType: type } : {}),
+                    ...(deprecated === undefined ? {} : { deprecated }),
                 });
             }
             return;
@@ -43,11 +46,15 @@ export function parseDtcg(source: string, file: string): { definitions: TokenDef
                 continue;
             }
             const at = source.indexOf(JSON.stringify(key), from);
-            walk(child, [...trail, key], type, at === -1 ? from : at);
+            walk(child, [...trail, key], type, deprecated, at === -1 ? from : at);
         }
     };
-    walk(json, [], undefined, 0);
+    walk(json, [], undefined, undefined, 0);
     return { definitions, errors: [] };
+}
+
+function deprecationOf(value: unknown): true | string | undefined {
+    return value === true ? true : typeof value === 'string' && value !== '' ? value : undefined;
 }
 
 /** Valor DTCG em texto CSS. Referências (`{color.blue.500}`) ficam como estão: são aliases. */

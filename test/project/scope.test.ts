@@ -116,3 +116,63 @@ test('.pcss and .postcss are read as CSS', async () => {
         await rm(dir, { recursive: true });
     }
 });
+
+async function writeProject(files: Record<string, string>): Promise<string> {
+    const dir = await tempDir();
+    await writeFile(path.join(dir, 'package.json'), '{"name":"app"}');
+    for (const [file, content] of Object.entries(files)) {
+        await mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+        await writeFile(path.join(dir, file), content);
+    }
+    return dir;
+}
+
+test('a partial run has the verdict of the whole project, for the files it was given', async () => {
+    const dir = await writeProject({
+        'a/local.css': '.x { --gap: 13px; display: flex; }\n',
+        'b/use.css': '.y { margin: var(--gap); }\n',
+        'c/theme.css': ':root { --brand: #4f46e5; }\n',
+        'd/override.css': '.z { --brand: #ff0000; }\n',
+    });
+    try {
+        const partial = await analyzePaths([path.join(dir, 'a')], { root: dir });
+        const whole = await analyzePaths([dir], { root: dir });
+        assert.deepEqual(partial.findings.map((f) => f.rule), whole.findings.filter((f) => f.file.startsWith('a/')).map((f) => f.rule));
+        assert.equal(partial.findings.length, 1);
+        assert.equal(partial.partial, true);
+        assert.equal(whole.partial, false);
+
+        const override = await analyzePaths([path.join(dir, 'd')], { root: dir });
+        assert.deepEqual(override.findings, []);
+        assert.equal(override.filesAnalyzed, 1);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('a template passed alone is still read as an Angular template', async () => {
+    const dir = await writeProject({
+        'src/l.component.ts': "@Component({ templateUrl: './l.component.html' }) export class L {}\n",
+        'src/l.component.html': '<div [style.width.px]="16"></div>\n',
+    });
+    try {
+        const whole = await analyzePaths([dir], { root: dir });
+        const partial = await analyzePaths([path.join(dir, 'src/l.component.html')], { root: dir });
+        assert.ok(whole.findings.length + whole.review.length > 0);
+        assert.deepEqual(partial.findings.map((f) => f.property), whole.findings.map((f) => f.property));
+        assert.deepEqual(partial.review.map((f) => f.property), whole.review.map((f) => f.property));
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('.mts and .cts are analyzed like .ts', async () => {
+    const component = (name: string) => `@Component({ template: '<p style="color: #4f46e5"></p>' }) export class ${name} {}\n`;
+    const dir = await writeProject({ 'a.ts': component('A'), 'b.mts': component('B'), 'c.cts': component('C') });
+    try {
+        const result = await analyzePaths([dir], { root: dir });
+        assert.deepEqual(result.findings.map((f) => f.file), ['a.ts', 'b.mts', 'c.cts']);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});

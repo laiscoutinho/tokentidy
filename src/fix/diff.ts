@@ -8,13 +8,17 @@ import type { Edit } from './plan.ts';
 /** Linhas de contexto em volta de cada mudança, como no `diff -u`. */
 const CONTEXT = 3;
 
-/** Aplica as edições ao texto, do fim para o começo: as posições das anteriores continuam valendo. */
+/** Aplica as edições numa passada só: refazer o texto a cada edição fica lento em arquivo grande. */
 export function applyEdits(source: string, edits: readonly Edit[]): string {
-    let text = source;
-    for (const edit of edits.toSorted((a, b) => b.offset - a.offset || b.endOffset - a.endOffset)) {
-        text = text.slice(0, edit.offset) + edit.text + text.slice(edit.endOffset);
+    const parts: string[] = [];
+    let position = 0;
+    // Do fim para o começo e depois invertido: inserções no mesmo ponto mantêm a ordem de sempre
+    for (const edit of edits.toSorted((a, b) => b.offset - a.offset || b.endOffset - a.endOffset).reverse()) {
+        parts.push(source.slice(position, edit.offset), edit.text);
+        position = edit.endOffset;
     }
-    return text;
+    parts.push(source.slice(position));
+    return parts.join('');
 }
 
 /** Linhas com o terminador (`\n`); a última pode não ter. */
@@ -40,7 +44,20 @@ export function unifiedDiff(file: string, source: string, edits: readonly Edit[]
         position += line.length;
     }
     // Depois do último `\n`, a posição ainda conta como da última linha
-    const lineAt = (offset: number) => Math.max(0, starts.findLastIndex((start) => start <= offset));
+    const lineAt = (offset: number) => {
+        // Busca binária: a última linha que começa em `offset` ou antes
+        let low = 0;
+        let high = starts.length - 1;
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (starts[middle]! <= offset) {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+        return low;
+    };
 
     // Linhas tocadas por cada edição, juntando as que dividem uma linha ou são vizinhas (o `-` e o `+` ficam em bloco)
     const ranges: { first: number; last: number; edits: Edit[] }[] = [];

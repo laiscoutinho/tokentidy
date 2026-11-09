@@ -4,7 +4,7 @@
  * JSX (style={{ margin: '4px 8px' }}) e Angular reaproveitam a mesma análise.
  */
 
-import { tokenize, isTokenAtKeyword, isTokenDimension, isTokenIdent, isTokenNumber, isTokenOpenCurly, isTokenPercentage } from '@csstools/css-tokenizer';
+import { tokenize, isTokenAtKeyword, isTokenComma, isTokenDimension, isTokenIdent, isTokenNumber, isTokenOpenCurly, isTokenPercentage } from '@csstools/css-tokenizer';
 import type { CSSToken } from '@csstools/css-tokenizer';
 import { parseListOfComponentValues, isFunctionNode, isSimpleBlockNode, isTokenNode, isWhiteSpaceOrCommentNode } from '@csstools/css-parser-algorithms';
 import type { ComponentValue } from '@csstools/css-parser-algorithms';
@@ -136,27 +136,43 @@ function matchesToken(token: CSSToken, node: ComponentValue, match: ValueMatcher
  * Tokens usados no valor: `var(--x)` → `--x`, `$x` (SCSS/Sass) → `$x`, `@x` (Less) → `@x`.
  * Serve para saber onde cada token existente é usado (e sugerir um nome que descreva esse uso).
  */
-export function findReferences(value: string): string[] {
-    const names: string[] = [];
+export function findReferences(value: string): FoundReference[] {
+    const names: FoundReference[] = [];
     collectReferences(parseListOfComponentValues(tokenize({ css: value })), names);
     return names;
 }
 
-function collectReferences(nodes: ComponentValue[], names: string[]): void {
+export interface FoundReference {
+    /** Nome com o prefixo (`--x`, `$x`, `@x`). */
+    name: string;
+    /** Posição do nome dentro do valor. */
+    start: number;
+    /** Segundo argumento de `var(--x, 12px)`. */
+    fallback?: string;
+}
+
+function collectReferences(nodes: ComponentValue[], names: FoundReference[]): void {
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i]!;
         if (isFunctionNode(node)) {
             const first = node.value.find((child) => !isWhiteSpaceOrCommentNode(child));
             if (node.getName().toLowerCase() === 'var' && first && isTokenNode(first) && isTokenIdent(first.value)) {
-                names.push(first.value[4].value);
+                const fallback = fallbackOf(node.value);
+                names.push({ name: first.value[4].value, start: first.value[2], ...(fallback ? { fallback } : {}) });
             }
             collectReferences(node.value, names);
         } else if (isSimpleBlockNode(node)) {
             collectReferences(node.value, names);
         } else if (isTokenNode(node) && isTokenAtKeyword(node.value)) {
-            names.push(`@${node.value[4].value}`);
+            names.push({ name: `@${node.value[4].value}`, start: node.value[2] });
         } else if (isScssVariableName(nodes, i) && isTokenNode(node) && isTokenIdent(node.value)) {
-            names.push(`$${node.value[4].value}`);
+            names.push({ name: `$${node.value[4].value}`, start: node.value[2] - 1 });
         }
     }
+}
+
+/** Texto depois da primeira vírgula de um `var()`. */
+function fallbackOf(children: ComponentValue[]): string | undefined {
+    const comma = children.findIndex((child) => isTokenNode(child) && isTokenComma(child.value));
+    return comma === -1 ? undefined : children.slice(comma + 1).map((child) => child.toString()).join('').trim() || undefined;
 }

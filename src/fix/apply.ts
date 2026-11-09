@@ -4,18 +4,16 @@
  * não mudou desde a leitura e continua com a sintaxe válida depois da troca.
  */
 
-import { existsSync } from 'node:fs';
 import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { analyzeScope } from '../analysis/analyze.ts';
 import type { AnalysisResult, ScopeAnalysisOptions } from '../analysis/analyze.ts';
 import { assertInsideRoot, OutsideRootError, writeFileAtomic } from '../safe-write.ts';
-import { readDtcgTree, treeTokensOf } from '../generate/output/dtcg-tree.ts';
 import { isInside } from '../project/scope.ts';
 import type { Scope } from '../project/scope.ts';
 import type { Finding } from '../types.ts';
-import { buildTokenIndex } from './candidates.ts';
+import { projectTokenIndex, repeatedValues } from '../token-lookup.ts';
 import { applyEdits, unifiedDiff } from './diff.ts';
 import { planFixes } from './plan.ts';
 import type { FilePlan, Replacement, SkippedValue, SkipReason } from './plan.ts';
@@ -25,12 +23,14 @@ export interface FixOptions extends ScopeAnalysisOptions {
     tokensDir: string;
     /** Mostra o diff sem escrever. */
     dryRun?: boolean;
+    /** Usos para um valor virar token: o mesmo limite do `generate`. */
+    minOccurrences?: number;
 }
 
 export interface FileFix {
     file: string;
     replacements: Replacement[];
-    /** Diff unificado da mudança. */
+    /** Diff unificado da mudança; só calculado com `dryRun`. */
     diff: string;
 }
 
@@ -41,6 +41,8 @@ export interface FixResult {
     skipped: SkippedValue[];
     /** Valores sem token com o mesmo valor. */
     withoutToken: Finding[];
+    /** Parte de `withoutToken` repetida o bastante para virar token: a pasta de tokens está desatualizada. */
+    repeatedWithoutToken: Finding[];
     /** Quantos tokens podiam ser usados (0: o projeto não tem tokens nem pasta gerada). */
     tokens: number;
     /** Análise do projeto depois das trocas: o que ainda falta (`findings`), erros e avisos. */
@@ -59,23 +61,13 @@ const MESSAGES: Record<FileReason, string> = {
 
 export async function fixScope(scope: Scope, options: FixOptions): Promise<FixResult> {
     const { root } = scope;
-    const { tokensDir, dryRun = false, ...analysisOptions } = options;
+    const { tokensDir, dryRun = false, minOccurrences = 2, ...analysisOptions } = options;
     await assertInsideRoot(tokensDir, root);
     const before = await analyzeScope(scope, analysisOptions);
     // A pasta de tokens é a saída do `generate`: fonte de tokens, nunca alvo de troca
     const insideTokens = (file: string) => isInside(path.join(root, file), tokensDir);
 
-    const tree = await readDtcgTree(tokensDir);
-    const index = buildTokenIndex({
-        definitions: before.definitions.filter((d) => !insideTokens(d.file)),
-        references: before.references,
-        generated: tree ? treeTokensOf(tree) : [],
-        outputs: {
-            css: existsSync(path.join(tokensDir, 'tokens.css')),
-            scss: existsSync(path.join(tokensDir, '_tokens.scss')),
-            less: existsSync(path.join(tokensDir, '_tokens.less')),
-        },
-    });
+    const index = await projectTokenIndex(before, tokensDir);
     const findings = before.findings.filter((f) => !insideTokens(f.file));
 
     // Lê cada arquivo e confere as posições: o trecho tem que ser exatamente o valor encontrado
@@ -143,10 +135,11 @@ export async function fixScope(scope: Scope, options: FixOptions): Promise<FixRe
     return {
         root,
         dryRun,
-        files: files.map((f) => ({ file: f.file, replacements: f.replacements, diff: unifiedDiff(f.file, sources.get(f.file)!, f.edits) })),
+        files: files.map((f) => ({ file: f.file, replacements: f.replacements, diff: dryRun ? unifiedDiff(f.file, sources.get(f.file)!, f.edits) : '' })),
         skipped: skipped.sort((a, b) => (a.finding.file < b.finding.file ? -1 : a.finding.file > b.finding.file ? 1 : 0)
             || a.finding.offset - b.finding.offset),
         withoutToken: plan.withoutToken,
+        repeatedWithoutToken: repeatedValues(plan.withoutToken, index, minOccurrences),
         tokens: index.size,
         after: { ...after, findings: after.findings.filter((f) => !insideTokens(f.file)) },
     };

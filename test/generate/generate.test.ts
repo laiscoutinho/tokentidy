@@ -102,7 +102,7 @@ test('semantic aliases come only from unambiguous roles used enough times', () =
 
 test('an existing token usable in every host is reused, even when used once', () => {
     const result = generateTokens([finding('color', 'color', '#4F46E5')], {
-        ...options, definitions: [definition('--brand', '#4f46e5', 'custom-property')],
+        ...options, definitions: [{ ...definition('--brand', '#4f46e5', 'custom-property'), selector: ':root' }],
     });
 
     assert.deepEqual(result.tokens, []);

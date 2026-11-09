@@ -3,13 +3,12 @@ import path from 'node:path';
 import type { Command } from 'commander';
 
 import type { AnalysisResult } from '../analysis/analyze.ts';
-import { CONFIG_FILE, integerAtLeast } from '../project/config.ts';
+import { CONFIG_FILE, integerAtLeast, loadConfig } from '../project/config.ts';
 import { assertInsideRoot } from '../safe-write.ts';
 import { describe } from '../generate/diagnosis.ts';
 import type { GenerationResult } from '../generate/generate.ts';
-import { isInside } from '../project/scope.ts';
-import { analyzeProject } from './check.ts';
-import { EXIT, UsageError } from './errors.ts';
+import { findProjectRoot, isInside } from '../project/scope.ts';
+import { EXIT, JSON_SCHEMA_VERSION, UsageError } from './errors.ts';
 import { displayPath, link, printable, printDiagnostics } from './print.ts';
 
 interface GenerateOptions {
@@ -41,12 +40,15 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
     if (options.extend && options.new) {
         throw new UsageError('--extend and --new cannot be used together');
     }
-    const { result, config } = await analyzeProject(paths.length > 0 ? paths : ['.'], options.config);
+    // Erros de uso antes da análise: em projeto grande, ela leva segundos
+    const given = paths.length > 0 ? paths : ['.'];
+    const root = await findProjectRoot(given);
+    const { config } = await loadConfig(root, options.config);
     if (options.minOccurrences !== undefined) {
         config.minOccurrences = integerAtLeast(options.minOccurrences, 2, '--min-occurrences');
     }
-    const outDir = options.out ? path.resolve(options.out) : path.resolve(result.root, config.output);
-    await assertInsideRoot(outDir, result.root);
+    const outDir = options.out ? path.resolve(options.out) : path.resolve(root, config.output);
+    await assertInsideRoot(outDir, root);
 
     const { generateTokens } = await import('../generate/generate.ts');
     const dtcgTree = await import('../generate/output/dtcg-tree.ts');
@@ -55,6 +57,8 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
     const previous = await dtcgTree.readDtcgTree(outDir);
     const mode = previous ? await chooseMode(path.join(outDir, dtcgTree.DTCG_FILE), options) : 'extend';
     const existingTree = mode === 'extend' ? previous : undefined;
+    const { analyzePaths } = await import('../analysis/analyze.ts');
+    const result = await analyzePaths(given, { root, ignore: config.ignore, includeMinified: config.includeMinified });
     // Os tokens da própria pasta de saída entram pelo JSON (mantêm o nome), não como "tokens do projeto"
     const insideOut = (file: string) => isInside(path.join(result.root, file), outDir);
 
@@ -81,7 +85,7 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
     if (options.json) {
         const { root, filesAnalyzed, errors, warnings, skipped } = result;
         console.log(JSON.stringify({
-            root, filesAnalyzed, mode, config, dryRun: options.dryRun === true,
+            schemaVersion: JSON_SCHEMA_VERSION, root, filesAnalyzed, mode, config, dryRun: options.dryRun === true,
             files: files.map((f) => f.file), ...generation, errors, warnings, skipped,
         }, null, 2));
         return;
