@@ -4,7 +4,7 @@
 
 A command-line tool built as my **undergraduate capstone project (TCC)** to help keep front-end code **faithful to the design system**. It finds hardcoded visual values in the code (such as `#4f46e5`, `17px` or `font-family: Arial`), points out which **design token** should be used instead, fixes the code safely and, when the project has no tokens yet, helps create them.
 
-> ⚠️ Work in progress (version `0.0.x`: each feature is a patch release; `0.1.0` will be the first with every planned feature). Today TokenTidy finds hardcoded values in CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) and Angular, generates design tokens from the repeated ones and replaces hardcoded values with tokens of exactly the same value. See the [roadmap](#️-roadmap).
+> ⚠️ Work in progress (version `0.0.x`: each feature is a patch release; `0.1.0` will be the first with every planned feature). Today TokenTidy finds hardcoded values in CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) and Angular, generates design tokens from the repeated ones (with light/dark themes and a JS module for canvas and charts), replaces hardcoded values with tokens (close values only with your authorization and the coherence guards), compares micro-frontends and validates DTCG token files. See the [roadmap](#️-roadmap).
 
 ```bash
 npm install -D github:laiscoutinho/tokentidy
@@ -34,12 +34,15 @@ New to the command line or to design tokens? Read in this order; each page cover
 | 8 | [Ignore comments](docs/ignore-comments.md) | Keeping an intentional value |
 | 9 | [generate](docs/generate.md) | Creating tokens from the repeated values |
 | 10 | [fix](docs/fix.md) | Replacing values with tokens |
-| 11 | [Configuration](docs/configuration.md) | The `tokentidy.config.json` file |
-| 12 | [Exit codes](docs/exit-codes.md) | What the number at the end of each command means |
-| 13 | [Scripts and CI](docs/ci-and-scripts.md) | npm scripts, GitHub Actions and pre-commit checks |
-| 14 | [JSON output](docs/json-output.md) | Reading the results from another program |
-| 15 | [How it works](docs/how-it-works.md) | The steps inside TokenTidy and its principles |
-| 16 | [Examples](docs/examples.md) | Real runs of each command, from the first analysis to scripts |
+| 11 | [validate](docs/validate.md) | Checking DTCG token files |
+| 12 | [Themes](docs/themes.md) | Light and dark tokens from the theme the code already has |
+| 13 | [Micro-frontends](docs/micro-frontends.md) | Several apps at once: collisions, drift and a shared token package |
+| 14 | [Configuration](docs/configuration.md) | The `tokentidy.config.json` file |
+| 15 | [Exit codes](docs/exit-codes.md) | What the number at the end of each command means |
+| 16 | [Scripts and CI](docs/ci-and-scripts.md) | npm scripts, GitHub Actions and pre-commit checks |
+| 17 | [JSON output](docs/json-output.md) | Reading the results from another program |
+| 18 | [How it works](docs/how-it-works.md) | The steps inside TokenTidy and its principles |
+| 19 | [Examples](docs/examples.md) | Real runs of each command, from the first analysis to scripts |
 
 ---
 
@@ -64,9 +67,9 @@ The result is an **inconsistent** interface and code that is **hard to maintain*
 |---|---|
 | 🔍 **Detect** | Scans the project and finds hardcoded visual values (colors, spacing, sizes, radius, typography, shadows, motion…), with file, line and column |
 | 🎯 **Suggest** | Compares each value with the project's tokens and points to the exact or closest token, explaining the choice |
-| 🔁 **Fix** | Replaces values with tokens by editing only the necessary slice, with a preview (`--dry-run`) and, by default, only for exact matches |
+| 🔁 **Fix** | Replaces values with tokens by editing only the necessary slice, with a preview (`--dry-run`); close values only when you authorize them and the coherence guards allow it |
 | 🏷️ **Generate** | When the project has no tokens, groups repeated values and proposes a token file with familiar names |
-| 🛡️ **Verify** | Predictable output, `--json` and dedicated exit codes to run in CI and pre-commit hooks |
+| 🛡️ **Verify** | Predictable output, `--json` and dedicated exit codes to run in CI and pre-commit hooks; `validate` checks the token files |
 
 What sets it apart is **context**: TokenTidy looks at what a value is doing (the property, the selector, the declarations next to it) before deciding whether it should be a token. More in [How it works](docs/how-it-works.md).
 
@@ -81,7 +84,7 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 | CSS-in-JS: styled-components, Emotion, `css` prop, MUI `sx` | React Native |
 | Angular: component styles, style files, templates, `host`, `@HostBinding`, `Renderer2.setStyle` | |
 | HTML (`<style>` and `style=""`) | Artificial intelligence and external services |
-| Design token files in the [DTCG](https://www.designtokens.org/) format | |
+| Design token files in the [DTCG](https://www.designtokens.org/) format, the Resolver Module for themes, and tokens from installed design-system packages and JS themes | |
 
 ---
 
@@ -112,12 +115,18 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 | Warnings about tokens: unknown names, `$deprecated`, `var()` fallbacks that disagree, unused tokens | 🟢 |
 | Baseline for projects that already have violations | 🟢 |
 | CI usage and npm release | 🟡 CI on Linux/Windows/macOS |
-| Fixes of values close to a token (`fix --approximate`) | ⚪ |
 | SCSS mixin arguments and defaults, `mat.*-overrides` maps | 🟢 |
 | Style objects outside `style={{}}`, DOM styles, canvas and charts | 🟢 |
 | CSS-in-JS (styled-components, Emotion, `sx`) | 🟢 |
 | Angular `host`, `@HostBinding`, `Renderer2.setStyle` | 🟢 |
 | Reports: `check --summary`, `--format github`, `schemaVersion` | 🟢 |
+| Tokens from npm packages and JS themes; semantic alias suggested over a primitive | 🟢 |
+| Coherence guards (states, contrast, spacing order, nested radius, type scale, variants) | 🟢 |
+| Consolidation of close values in `generate`; `fix --approximate` with prompt, `--yes`, `--no-input` and saved decisions | 🟢 |
+| `tokens.ts` module and `fix` for canvas and chart libraries | 🟢 |
+| Micro-frontends: `:root` collisions, drift, design-system versions, `generate --shared` | 🟢 |
+| `validate` against the DTCG 2025.10 schema and reference rules | 🟢 |
+| Light/dark themes with the DTCG Resolver Module | 🟢 |
 | Relative units (`%`, `vw`, `vh`): compare with absolute values used in the same role | ⚪ |
 | Comparative evaluation on the base projects | ⚪ |
 | Writing the TCC text | ⚪ |
@@ -139,8 +148,13 @@ tokentidy/
 │   ├── values/           # value normalization and color information
 │   ├── token-index.ts    # tokens the project already defines, and where each syntax works
 │   ├── generate/         # token generation: grouping, names (naming/), output files (output/)
+│   ├── check/            # token suggestions, baseline, summary, GitHub annotations, micro-frontends
+│   ├── coherence/        # element model and coherence guards (states, contrast, spacing, radius, type)
+│   ├── consolidate/      # close values merged by role, and the saved decisions
 │   ├── fix/              # automatic fixes: token candidates, plan, diff, safe apply
+│   ├── validate/         # DTCG schema and reference checks
 │   └── safe-write.ts     # atomic writes inside the project
+├── schemas/              # DTCG 2025.10 JSON schemas used by validate
 ├── test/                 # automated tests and sample projects (fixtures)
 └── docs/                 # user documentation (English, with pt-br/ translations)
 ```

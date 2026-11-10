@@ -2,7 +2,7 @@
 
 > 🇧🇷 To read this file in Brazilian Portuguese, [click here](pt-br/fix.md).
 
-`fix` replaces each hardcoded value with a token of **exactly the same value**. Values without such a token are left alone and counted. Values that are only *close* to a token (`15px` and a `16px` token) are never touched.
+`fix` replaces each hardcoded value with a token of **exactly the same value**. Values without such a token are left alone and counted. Values that are only *close* to a token (`15px` and a `16px` token) are changed only with [`--approximate`](#values-close-to-a-token---approximate), and only when you authorize it.
 
 ```bash
 npx tokentidy fix --dry-run                     # show a diff, write nothing
@@ -31,6 +31,23 @@ In this order:
 | JSX number (`padding: 16`) | `'var(--name)'`, in the quote style the file uses most |
 | JSX string (`'8px 16px'`) | `'8px var(--name)'` |
 | Angular `[style.padding.px]="16"` / `{'gap.px': 16}` | `[style.padding]="'var(--name)'"` / `{'gap': 'var(--name)'}` |
+| JS/TS read by JavaScript: canvas, charts, unknown functions (`ctx.fillStyle = '#4f46e5'`) | `color.indigo[600]` from the generated `tokens.ts`/`tokens.js`, with the `import` added (see below) |
+
+### Canvas and charts: the `tokens.ts` module
+
+`var()` doesn't work where JavaScript reads the value (a canvas, a chart library). For those, [`generate`](generate.md#the-tokensts-module) writes `tokens.ts` (or `tokens.js`) next to `tokens.css`, and `fix` uses it:
+
+```ts
+import { color } from '../design-tokens/tokens';
+
+ctx.fillStyle = color.indigo[600];
+```
+
+The import goes after the file's other imports, in its quote style; an existing import of the module is extended, and a name already used in the file is imported under another name (`color as tokenColor`). A file with no `import`/`export` (a classic script) or a `.cjs` file is skipped as `needs-token-module`.
+
+### Themes
+
+With [theme tokens](themes.md), the value in `.card` and the one in `.dark .card` are replaced by the same semantic token, which already has one value per mode.
 
 ## Values it skips
 
@@ -46,13 +63,54 @@ src/App.scss:12:10	skipped	needs-preprocessor-variable	16px	…
 | `inline-style-function` | The same, in an Angular inline `styles:` (it can't import Sass variables) |
 | `variable-not-loaded` | The tokens file is loaded with a namespace (`@use … as t`), or a variable with the value exists but isn't imported |
 | `unit-in-binding` | `[style.width.px]="a ? 16 : 24"`: the unit in the name belongs to both values. Also a number in `host: { '[style.width.px]': '16' }` |
-| `needs-token-module` | The value is read by JavaScript (canvas, chart or unknown function), where `var()` doesn't work: edit it by hand |
+| `needs-token-module` | The value is read by JavaScript (canvas, chart or unknown function), where `var()` doesn't work, and the `tokens.ts` module can't be used: it wasn't generated, or the file can't import it |
 | `svg-attribute` | The value is in an SVG presentation attribute (`fill="#fff"`). Browsers don't agree on `var()` there, and the specification is still under discussion: move it to `style` or edit it by hand |
 | `ambiguous-token` | Two tokens of the project have this value and are used equally: picking one would be a guess |
 | `overlap` | Two replacements on the same text |
 | `breaks-syntax` | The fixed file would have a syntax error (it is analyzed again in memory before writing) |
 | `changed-on-disk` | The file changed while the command was running |
 | `symlink`, `outside-root` | The file is a symbolic link or resolves outside the project |
+
+## Values close to a token: `--approximate`
+
+```bash
+npx tokentidy fix --approximate               # in a terminal: asks per group
+npx tokentidy fix --approximate --yes         # applies what passes the guards
+npx tokentidy fix --approximate --no-input    # only lists, changes nothing close
+```
+
+With `--approximate`, `fix` also replaces values that are *almost* a token of the project: off the spacing grid by a little (`15px` next to a `16px` token, in the same role) or a color within `colorTolerance` of it (`#4f46e6` next to `#4f46e5`). The values are grouped by role, the same way [`generate` consolidates](generate.md#close-values-consolidation), and each group is shown before anything happens. A color close to a project token always goes to that token, even when the loose color is used more:
+
+```
+.card padding: 15px ×1 → var(--space-m) (16px)
+  a.css:3:18	padding: 15px → var(--space-m)	+1px
+Apply? [y]es [n]o [a]ll in this group [q]uit
+```
+
+**Coherence guards.** A change may move a value, never a relationship. Before a group is offered, every element it touches is analyzed as a whole, and a change that would break something that held is blocked, with the reason (`blocked: merges .btn:hover with .btn`):
+
+| Guard | Keeps |
+|---|---|
+| distinct states | `:hover`, `:focus`, `:active`, modifier classes and both branches of a conditional (`isActive ? a : b`, `[class.x]`) different from the base |
+| contrast | text over its background (its own, a parent's or the page's) at 4.5:1 (3:1 for large text and for the border of a control) when it was |
+| inset shape | the order of vertical and horizontal padding |
+| spacing order | inner spacing smaller than outer spacing (padding vs. gap vs. margin) |
+| nested radius | inner radius = outer radius − padding, and an inner radius never larger than the outer |
+| type scale | headings stay larger than the text below them, and line-height/font-size changes by at most 5% |
+| variants | `.btn-sm` and `.btn-lg` stay different |
+
+**Answers are saved.** `y` (or `a`) applies the whole group, `n` rejects it, `q` stops asking (the remaining groups stay unanswered and unchanged). Each answer goes to `tokentidy.decisions.json` at the project root; commit it, so the team doesn't answer the same question again. A rejected group is never offered again, not even with `--yes`; delete its line to be asked again. `--dry-run` asks but saves nothing.
+
+```json
+{
+  "version": 1,
+  "decisions": {
+    "spacing|padding|card|16px|15px": "rejected"
+  }
+}
+```
+
+**Outside a terminal** (CI, hooks, pipes) nothing waits for an answer: `--approximate` alone is a usage error (`2`), and you choose `--yes` or `--no-input`. The same goes for `--json`: JSON output never asks, even in a terminal. `--yes` and `--no-input` without `--approximate` are also usage errors.
 
 ## Safety
 
@@ -74,10 +132,13 @@ When generated tokens were written as `var()`, it also reminds you that the app 
 
 | Option | What it does |
 |---|---|
-| `--tokens <dir>` | Folder with the generated tokens (default: `output` in the config, `design-tokens`) |
+| `--tokens <dir>` | Folder with the generated tokens (default: `output` in the config, `design-tokens`). Outside the app, as a shared package in a monorepo, the root becomes the folder that contains both ([micro-frontends](micro-frontends.md)) |
 | `--config <file>` | Config file (default: `tokentidy.config.json` in the project) |
 | `--dry-run` | Prints a unified diff instead of writing |
 | `--json` | Prints the result as JSON ([JSON output](json-output.md)) |
+| `--approximate` | Also replaces values close to a token, when the guards allow it ([above](#values-close-to-a-token---approximate)) |
+| `--yes` | With `--approximate`: applies every group that passes the guards, without asking (rejected groups stay rejected) |
+| `--no-input` | With `--approximate`: never asks; only lists the groups |
 
 ## Exit code
 

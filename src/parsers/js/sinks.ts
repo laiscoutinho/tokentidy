@@ -13,6 +13,7 @@ import { hostBinding } from './angular-host.ts';
 import { isCssTag, rootName, walkCssTemplate } from './css-in-js.ts';
 import { ObjectFlow, memberName } from './flow.ts';
 import { chartColors, unknownColors } from './js-values.ts';
+import { themeDefinitions } from './theme.ts';
 import { emitStyleObjects, literals } from './style-object.ts';
 import type { ObjectContext, ObjectKind } from './style-object.ts';
 
@@ -22,6 +23,8 @@ const SVG_COLOR_ATTRIBUTES = new Set(['fill', 'stroke', 'stopColor', 'floodColor
 const CANVAS_COLOR_PROPERTIES = new Set(['fillStyle', 'strokeStyle', 'shadowColor']);
 /** Construtores de gráficos cuja configuração tem cores em chaves `*Color`. */
 const CHART_CONSTRUCTORS = new Set(['Chart', 'ApexCharts']);
+/** Funções que recebem o tema da aplicação: o objeto é fonte de tokens, não valor solto. */
+const THEME_FACTORIES = new Set(['createTheme', 'createMuiTheme', 'extendTheme']);
 
 /** Cada destino de estilo que o JavaScript tem, e o que acontece com o valor que chega nele. */
 export class ScriptSinks {
@@ -138,6 +141,10 @@ export class ScriptSinks {
                 this.#emit(value.expression, kind, selector);
             }
         }
+        const theme = named('theme')?.value;
+        if (tagName === 'ThemeProvider' && theme?.type === 'JSXExpressionContainer' && theme.expression.type !== 'JSXEmptyExpression') {
+            this.#theme(theme.expression);
+        }
         for (const attr of attributes) {
             if (attr.name.type === 'JSXIdentifier' && SVG_COLOR_ATTRIBUTES.has(attr.name.name)) {
                 this.#svgAttribute(attr, attr.name.name, selector);
@@ -158,6 +165,7 @@ export class ScriptSinks {
             this.#collector.declaration({
                 property, value: literal.text, offset: literal.offset, host, siblings: new Map(),
                 ...(selector === undefined ? {} : { selector }),
+                ...(literal.branch === undefined ? {} : { branch: literal.branch }),
             });
         }
     }
@@ -248,9 +256,24 @@ export class ScriptSinks {
             }
             return;
         }
+        if (callee.type === 'Identifier' && THEME_FACTORIES.has(callee.name)) {
+            for (const argument of args) {
+                if (argument.type !== 'SpreadElement' && argument.type !== 'ArgumentPlaceholder') {
+                    this.#theme(argument as t.Expression);
+                }
+            }
+            return;
+        }
         // Qualquer outra função: destino desconhecido
         if (rootName(callee) !== undefined || callee.type === 'MemberExpression') {
             this.#unknown.push(...args.filter((arg): arg is t.ObjectExpression => arg.type === 'ObjectExpression'));
+        }
+    }
+
+    #theme(node: t.Expression): void {
+        for (const object of this.#flow.follow(node).objects) {
+            this.#seen.add(object);
+            themeDefinitions(this.#collector, object, (value) => this.#flow.follow(value).objects);
         }
     }
 

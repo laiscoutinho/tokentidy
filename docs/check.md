@@ -40,6 +40,8 @@ The path is relative to the folder where you ran the command. The summary goes t
 
 Violations make `check` end with exit code `1`; review items never do ([Exit codes](exit-codes.md)).
 
+With several apps in one repository, `check` also compares them: see [Micro-frontends](micro-frontends.md).
+
 ## Which token fits
 
 `check` looks up each violation among the tokens the project defines and the ones in the tokens folder (`design-tokens/`, or `output` in the config). It uses the same decision as `fix`, so it never names a token `fix` would not use. It only reads: to apply the change, run [`fix`](fix.md).
@@ -51,7 +53,23 @@ Violations make `check` end with exit code `1`; review items never do ([Exit cod
 | `--spacing-4 (+1px)` | No token has this value, but `15px` is off the grid and one on the grid is 1px away | No |
 | `--brand (ΔE 0.012)` | No token has this color, but one is almost the same (ΔEOK up to 0.02) | No |
 
-A value that is close is only a hint: looking similar doesn't make it the same design decision. Measures are only compared when they are off the grid (`gridBase` in the config), so `16px` next to a `12px` token suggests nothing. Two tokens at the same distance suggest nothing either.
+Tokens can come from more places than your own stylesheets:
+
+| Source | Example | Sixth field |
+|---|---|---|
+| A design-system package your styles load from `node_modules` (`@use "@acme/tokens" as *;`, `@import`) | `$brand: #4f46e5;` in the package | `$brand` |
+| A JS theme (`createTheme({...})`, `<ThemeProvider theme={...}>`), string values only | `palette: { primary: { main: '#0ea5e9' } }` | `theme.palette.primary.main`: only a hint, `fix` doesn't write theme paths |
+| A hand-written DTCG file (`*.tokens.json`) | `color.primary` | `--color-primary` |
+
+Only the definitions of a package are read: its own CSS isn't your code, so nothing in it is reported.
+
+When a value already uses a primitive token but a semantic alias exists for that role, a `suggestion` line points to the alias. It never fails, and `fix` doesn't change existing references:
+
+```
+src/b.css:2:21	suggestion	token/prefer-alias	color	--color-red-500	--color-text-danger
+```
+
+A value that is close is only a hint: looking similar doesn't make it the same design decision. To replace close values, use [`fix --approximate`](fix.md#values-close-to-a-token---approximate), which asks first and checks the coherence guards. Measures are only compared when they are off the grid (`gridBase` in the config), so `16px` next to a `12px` token suggests nothing. Two tokens at the same distance suggest nothing either.
 
 When the tokens folder exists and repeated values have no token, the summary says so, because the code changed after `generate`:
 
@@ -109,7 +127,7 @@ They stay as two numbers on purpose: one overall score would hide that colors ar
 | `angular-template` | Angular `template:`, the `.html` of `templateUrl` and `host:` | `style="..."`, `[style.padding.px]="4"`, `[ngStyle]="{...}"` |
 | `css-in-js` | The same script files | Tagged templates: `styled.x`, `css`, `keyframes`, `createGlobalStyle`, `injectGlobal`, and the `css` prop with a template. A value with `${...}` inside it is not reported |
 | `svg-attribute` | The same script files | SVG presentation attributes in JSX (`fill`, `stroke`, `stopColor`, `floodColor`, `lightingColor`) and `setAttribute('fill' or 'stroke', ...)`. `fix` leaves them alone |
-| `js-value` | The same script files | Colors read by JavaScript: `ctx.fillStyle`, `new Chart`/`new ApexCharts` options, and color keys in objects passed to unknown functions. `fix` leaves them alone |
+| `js-value` | The same script files | Colors read by JavaScript: `ctx.fillStyle`, `new Chart`/`new ApexCharts` options, and color keys in objects passed to unknown functions. `fix` writes them from the [`tokens.ts` module](fix.md#canvas-and-charts-the-tokensts-module) |
 
 `.pcss`/`.postcss` files are read as CSS. As in TypeScript itself, JSX inside a `.ts` file is a syntax error. Token files (`*.tokens.json`) are read as the project's existing tokens, not as code.
 

@@ -9,6 +9,7 @@ import { EXIT } from './errors.ts';
 import { registerFix } from './fix.ts';
 import { registerGenerate } from './generate.ts';
 import { printable } from './print.ts';
+import { registerValidate } from './validate.ts';
 
 const program = new Command();
 
@@ -27,12 +28,16 @@ Examples:
   $ tokentidy generate --min-occurrences 3 --extend
   $ tokentidy fix --dry-run
   $ tokentidy fix src/components
+  $ tokentidy fix --approximate --no-input
+  $ tokentidy generate --shared packages/tokens
+  $ tokentidy validate design-tokens
 
-Exit codes: 0 ok, 1 hardcoded values found (check) or left after fix, or files with syntax errors, 2 usage error.`);
+Exit codes: 0 ok, 1 hardcoded values found (check), left after fix, global token collisions between micro-frontends (check), invalid token files (validate), or files with syntax errors, 2 usage error.`);
 
 registerCheck(program);
 registerGenerate(program);
 registerFix(program);
+registerValidate(program);
 
 // Ponto único de saída: erros vão para stderr e definem o exit code
 async function main(): Promise<void> {

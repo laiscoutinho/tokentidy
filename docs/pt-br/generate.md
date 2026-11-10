@@ -19,6 +19,8 @@ npx tokentidy generate --min-occurrences 3  # mais exigente: só valores usados 
 | `_tokens.scss` | Quando o projeto tem arquivos `.scss` ou `.sass` |
 | `_tokens.less` | Quando o projeto tem arquivos `.less` |
 | `css/<categoria>.css` + `README.md` | Quando há mais de `splitThreshold` tokens (padrão 60): o `tokens.css` vira um índice com `@import` |
+| `tokens.ts` / `tokens.js` | Quando o JavaScript lê um valor (canvas, gráficos): veja [O módulo `tokens.ts`](#o-módulo-tokensts) |
+| `tokens.light.tokens.json`, `tokens.dark.tokens.json`, `tokens.resolver.json` | Quando o código tem um tema escuro: veja [Temas](themes.md) |
 
 Exemplo de `tokens.css`:
 
@@ -61,10 +63,42 @@ Com `--dry-run`, cada arquivo aparece como `==> arquivo <==` seguido do conteúd
 ## Como ele decide
 
 - **Limite:** um valor só vira token quando aparece pelo menos `minOccurrences` vezes (padrão 2) no mesmo tipo de token. Um valor usado uma vez não é uma decisão de design repetida.
-- **Agrupamento:** grafias diferentes do mesmo valor viram um token só (`#FFF`, `white` e `rgb(255 255 255)`; `12pt` e `16px`; `.2s` e `200ms`; `bold` e `700`). Valores próximos (`15px` e `16px`) e `px`/`rem` (`16px` e `1rem`) **não** são juntados: a diferença pode ser intencional.
+- **Agrupamento:** grafias diferentes do mesmo valor viram um token só (`#FFF`, `white` e `rgb(255 255 255)`; `12pt` e `16px`; `.2s` e `200ms`; `bold` e `700`). Valores só *próximos* são juntados apenas pela [consolidação](#valores-próximos-consolidação), que tem regras rígidas.
 - **Papéis:** o mesmo valor usado como `spacing`, `font-size` e `line-height` vira três tokens.
 - **Nomes:** espaçamentos e tamanhos no grid (`spacing-2` = 8px com grid de 4px; `spacing-2_5` = 10px); escalas conhecidas quando o valor bate (`radius-lg`, `font-size-base`, `shadow-md`, `container-md`); cores pela cor mais próxima da paleta do Tailwind v4 e pela luminosidade (`color-indigo-600`, `color-gray-950` para `#111827`, `color-black-a50` para preto com 50% de opacidade); senão, o próprio número (`font-size-13`).
 - **Ordem:** por categoria e, dentro dela, do menor para o maior. O mesmo projeto sempre gera os mesmos arquivos.
+
+## Valores próximos: consolidação
+
+Um valor que é *quase* outro (`15px` perto de `16px`, `#4f46e6` perto de `#4f46e5`) costuma ser uma inconsistência, não uma decisão. O `generate` o junta ao valor que ele deveria ser, para o conjunto de tokens seguir as decisões reais do projeto:
+
+- **Espaçamento, tamanhos e raio:** um valor fora do grid `gridBase` se junta ao valor no grid usado no **mesmo papel**: mesmo tipo, mesma família de propriedade (`padding`) e mesmo componente (`.card`, `.card-footer`; `.tile` e `.panel` também contam como card). Entre os valores no grid a no máximo um passo do grid, vence o mais próximo, depois o mais usado, depois o que está no grid mais grosso. Sem nenhum, ele vai para o passo do grid mais próximo. `15px`, `16px` e `17px` em cards viram um token de `16px`.
+- **Dois valores no grid nunca são juntados** (`12px` e `16px` são duas decisões). Valores menores que o grid (`1px`, `2px`) e raios de pílula (`9999px`) ficam como estão. Valores em `rem` continuam em `rem`.
+- **Cores:** uma cor se junta à cor mais usada dentro do `colorTolerance` (ΔE em OKLab, padrão `0.02`) com a mesma opacidade. Ela se junta à mais usada, nunca a uma vizinha, então não se formam cadeias `a ≈ b ≈ c`.
+- **Tamanhos de fonte:** quando a maioria está em `rem`, um tamanho em `px` de mesmo tamanho se junta ao em `rem`.
+- **Guardas:** uma junção que quebraria uma relação (uma cor de `:hover` igual à base, um texto perdendo contraste, `.btn-sm` igual a `.btn-lg`) é bloqueada, com o motivo. São as mesmas [guardas de coerência](fix.md#valores-próximos-de-um-token---approximate) do `fix --approximate`. Um grupo rejeitado no `tokentidy.decisions.json` também não é juntado.
+
+Cada junção é listada na saída de erro:
+
+```
+consolidated	spacing	.card padding: 15px ×1, 17px ×1 → 16px
+```
+
+O `generate` só cria os tokens: o código continua com `15px` até você rodar o [`fix --approximate`](fix.md#valores-próximos-de-um-token---approximate), que pergunta antes de mudar.
+
+## O módulo `tokens.ts`
+
+`var()` não funciona onde o JavaScript lê um valor: `ctx.fillStyle`, opções de gráfico, uma cor passada para uma função. Quando o projeto tem valores assim, o `generate` também grava o `tokens.ts` (num projeto TypeScript; `tokens.js` para arquivos JavaScript), com os mesmos tokens como objetos:
+
+```ts
+export const color = {
+  indigo: {
+    600: '#4f46e5',
+  },
+} as const;
+```
+
+Os aliases já vêm resolvidos, já que ali não existe `var()`. O [`fix`](fix.md#canvas-e-gráficos-o-módulo-tokensts) o usa para escrever `color.indigo[600]` e acrescenta o `import`. Depois de gerado, o módulo é mantido atualizado por todo `generate`.
 
 ## Tokens que o projeto já tem
 
@@ -92,7 +126,7 @@ Se a pasta de saída já tem um `tokens.tokens.json`, o `generate` precisa de um
 
 - **Diagnóstico** (linhas `diagnosis`): por tipo, quantos valores diferentes, quantos têm token, e que parte dos usos já cai em um token. Espaçamento é comparado com o IBM Carbon (13 passos) e tamanhos de fonte com o Material 3 (15 estilos), só como referência: acima dela, a linha avisa e conta os valores usados uma vez, os primeiros candidatos a juntar.
 - **Sugestões** (linhas `suggestion`, só mostradas): espaçamentos e tamanhos fora do grid, e o mesmo tamanho escrito em `px` e em `rem`. Nada é alterado por elas; você decide.
-- **Aliases semânticos:** quando o papel de uma cor é claro (propriedade + palavras no seletor + estado), é acrescentado um alias que aponta para o primitivo: `--color-text-danger: var(--color-red-500)`. Desligue com `"semanticTokens": false` na [configuração](configuration.md).
+- **Aliases semânticos:** quando o papel de uma cor é claro (propriedade + palavras no seletor + estado), é acrescentado um alias que aponta para o primitivo: `--color-text-danger: var(--color-red-500)`. Desligue com `"semanticTokens": false` na [configuração](configuration.md). Com um tema escuro no código, esses aliases ganham um valor por modo ([Temas](themes.md)).
 
 ## O que o JSON guarda
 
@@ -114,6 +148,7 @@ Cada token no `tokens.tokens.json` guarda, em `$extensions["dev.tokentidy"]`, o 
 | `--config <file>` | Arquivo de configuração (padrão: `tokentidy.config.json` no projeto) |
 | `--extend` / `--new` | Veja [Rodando de novo](#rodando-de-novo) |
 | `--dry-run` | Mostra os arquivos em vez de gravá-los |
+| `--shared <dir>` | Micro-frontends: valores usados por dois ou mais apps vão para esta pasta, o resto para a pasta de cada app ([Micro-frontends](micro-frontends.md#um-pacote-de-tokens-compartilhado-generate---shared)) |
 | `--json` | Mostra o resultado em JSON ([Saída JSON](json-output.md)) |
 
 ## Código de saída

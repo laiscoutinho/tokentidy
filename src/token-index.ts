@@ -34,6 +34,21 @@ export const DTCG_TYPES = new Map<string, TokenType>([
  * SCSS/Less só de nível de arquivo: dentro de uma regra, a variável só existe ali.
  */
 export function reusableDefinitions(definitions: readonly TokenDefinition[], references: readonly TokenReference[]): ReusableDefinition[] {
+    const usedAs = usageTypes(references);
+    const customProperties = Map.groupBy(definitions.filter((d) => d.syntax === 'custom-property'), (d) => d.name);
+    const reusable: ReusableDefinition[] = [];
+    for (const definition of definitions) {
+        for (const type of typesOf(definition, usedAs)) {
+            const key = normalizeValue(type, definition.value);
+            if (dependable(definition, type, key, customProperties.get(definition.name) ?? [])) {
+                reusable.push({ definition, type, key });
+            }
+        }
+    }
+    return reusable;
+}
+
+function usageTypes(references: readonly TokenReference[]): Map<string, Set<TokenType>> {
     const usedAs = new Map<string, Set<TokenType>>();
     for (const ref of references) {
         const types = usedAs.get(ref.name) ?? new Set();
@@ -42,29 +57,74 @@ export function reusableDefinitions(definitions: readonly TokenDefinition[], ref
         }
         usedAs.set(ref.name, types);
     }
+    return usedAs;
+}
 
-    const customProperties = Map.groupBy(definitions.filter((d) => d.syntax === 'custom-property'), (d) => d.name);
-    const reusable: ReusableDefinition[] = [];
-    for (const definition of definitions) {
-        if (/var\(|^[$@]|\$|\{.*\}/.test(definition.value)) {
+/** Tipos de uma definição literal; vazio se ela aponta para outro token ou se nada diz o que ela é. */
+function typesOf(definition: TokenDefinition, usedAs: ReadonlyMap<string, ReadonlySet<TokenType>>): Set<TokenType> {
+    if (/var\(|^[$@]|\$|\{.*\}/.test(definition.value)) {
+        return new Set();
+    }
+    const types = new Set(usedAs.get(definition.name) ?? []);
+    const dtcgType = definition.dtcgType ? DTCG_TYPES.get(definition.dtcgType) : undefined;
+    if (dtcgType) {
+        types.add(dtcgType);
+    }
+    if (definition.declaredType) {
+        types.add(definition.declaredType);
+    }
+    if (types.size === 0 && colorInfo(definition.value)) {
+        types.add('color');
+    }
+    return types;
+}
+
+/** Definição que só vale dentro de um escopo (`.dark { --bg: #000 }`). */
+export interface ScopedDefinition extends ReusableDefinition {
+    scope: string;
+    /** Outros escopos do mesmo nome: um mais específico (`.dark .sidebar`) ganha deste. */
+    rivals: string[];
+}
+
+/**
+ * Custom properties com mais de um valor (variáveis de tema). Fora dos escopos elas continuam sem servir:
+ * o valor muda com o tema. Dentro de `.dark`, `var(--bg)` resolve para o valor de `.dark`, e a troca é exata.
+ */
+export function scopedOverrides(definitions: readonly TokenDefinition[], references: readonly TokenReference[]): ScopedDefinition[] {
+    const usedAs = usageTypes(references);
+    const scoped: ScopedDefinition[] = [];
+    for (const sameName of Map.groupBy(definitions.filter((d) => d.syntax === 'custom-property'), (d) => d.name).values()) {
+        if (new Set(sameName.map((d) => d.value)).size < 2) {
             continue;
         }
-        const types = new Set(usedAs.get(definition.name) ?? []);
-        const dtcgType = definition.dtcgType ? DTCG_TYPES.get(definition.dtcgType) : undefined;
-        if (dtcgType) {
-            types.add(dtcgType);
-        }
-        if (types.size === 0 && colorInfo(definition.value)) {
-            types.add('color');
-        }
-        for (const type of types) {
-            const key = normalizeValue(type, definition.value);
-            if (dependable(definition, type, key, customProperties.get(definition.name) ?? [])) {
-                reusable.push({ definition, type, key });
+        for (const definition of sameName.filter((d) => d.selector !== undefined && !isGlobal(d.selector))) {
+            const rivals = sameName.filter((d) => d !== definition && d.selector !== undefined && !isGlobal(d.selector)).map((d) => d.selector!);
+            for (const type of typesOf(definition, usedAs)) {
+                scoped.push({ definition, type, key: normalizeValue(type, definition.value), scope: definition.selector!, rivals });
             }
         }
     }
-    return reusable;
+    return scoped;
+}
+
+/** Cada parte do seletor do valor está sob `scope`, e nenhum escopo mais específico define o token ali. */
+export function resolvesUnder(selector: string | undefined, scope: string, rivals: readonly string[]): boolean {
+    // Vírgula dentro de `:is()` não separa regras: em vez de interpretar, não afirma nada
+    if (selector === undefined || selector.includes('(')) {
+        return false;
+    }
+    const under = (part: string, candidate: string) => candidate.split(',').map((s) => s.trim()).some((s) => isUnder(part, s));
+    const longerRivals = rivals.filter((rival) => rival.length > scope.length);
+    return selector.split(',').map((part) => part.trim()).every((part) => under(part, scope) && !longerRivals.some((rival) => under(part, rival)));
+}
+
+/** `.dark .card`, `.dark:hover` e `html.dark .card` estão sob `.dark`; `.darker .card` não. */
+function isUnder(part: string, scope: string): boolean {
+    if (part.startsWith(scope) && /^($|[\s>~+:])/.test(part.slice(scope.length))) {
+        return true;
+    }
+    const [first = ''] = part.split(/[\s>~+]/);
+    return /^[.[]/.test(scope) && !/\s/.test(scope) && first.endsWith(scope);
 }
 
 function dependable(definition: TokenDefinition, type: TokenType, key: string, sameName: readonly TokenDefinition[]): boolean {
@@ -75,6 +135,7 @@ function dependable(definition: TokenDefinition, type: TokenType, key: string, s
         case 'less-variable':
             return definition.selector === undefined;
         case 'dtcg':
+        case 'js-theme':
             return true;
     }
 }
@@ -94,7 +155,8 @@ export function usableIn(definition: TokenDefinition, host: Host): boolean {
         case 'less-variable':
             return host === 'less';
         case 'dtcg':
-            // O nome no código depende de como o projeto compila o arquivo DTCG: não dá para usar direto
+        case 'js-theme':
+            // DTCG: o nome no código depende de como o projeto o compila. Tema JS: só existe onde o `theme` chega
             return false;
     }
 }

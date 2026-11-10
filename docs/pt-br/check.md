@@ -40,6 +40,8 @@ O caminho é relativo à pasta onde você rodou o comando. O resumo vai para a s
 
 Violações fazem o `check` terminar com código de saída `1`; itens de revisão nunca fazem ([Códigos de saída](exit-codes.md)).
 
+Com vários apps em um repositório, o `check` também os compara: veja [Micro-frontends](micro-frontends.md).
+
 ## Qual token serve
 
 O `check` procura cada violação entre os tokens que o projeto define e os da pasta de tokens (`design-tokens/`, ou `output` na configuração). Ele usa a mesma decisão do `fix`, então nunca cita um token que o `fix` não usaria. Ele só lê: para aplicar a mudança, rode o [`fix`](fix.md).
@@ -51,7 +53,23 @@ O `check` procura cada violação entre os tokens que o projeto define e os da p
 | `--spacing-4 (+1px)` | Nenhum token tem este valor, mas `15px` está fora do grid e um token no grid está a 1px | Não |
 | `--brand (ΔE 0.012)` | Nenhum token tem esta cor, mas um é quase igual (ΔEOK até 0,02) | Não |
 
-Valor próximo é só uma dica: parecer igual não faz dele a mesma decisão de design. Medidas só são comparadas quando estão fora do grid (`gridBase` na configuração), então `16px` perto de um token de `12px` não sugere nada. Dois tokens à mesma distância também não.
+Os tokens podem vir de mais lugares além das suas folhas de estilo:
+
+| Fonte | Exemplo | Sexto campo |
+|---|---|---|
+| Um pacote de design system que seus estilos carregam do `node_modules` (`@use "@acme/tokens" as *;`, `@import`) | `$brand: #4f46e5;` no pacote | `$brand` |
+| Um tema JS (`createTheme({...})`, `<ThemeProvider theme={...}>`), só valores em texto | `palette: { primary: { main: '#0ea5e9' } }` | `theme.palette.primary.main`: só uma dica, o `fix` não escreve caminhos de tema |
+| Um arquivo DTCG escrito à mão (`*.tokens.json`) | `color.primary` | `--color-primary` |
+
+Do pacote, só as definições são lidas: o CSS dele não é o seu código, então nada nele é informado.
+
+Quando um valor já usa um token primitivo mas existe um alias semântico para aquele papel, uma linha `suggestion` aponta o alias. Ela nunca falha, e o `fix` não muda referências que já existem:
+
+```
+src/b.css:2:21	suggestion	token/prefer-alias	color	--color-red-500	--color-text-danger
+```
+
+Valor próximo é só uma dica: parecer igual não faz dele a mesma decisão de design. Para trocar valores próximos, use o [`fix --approximate`](fix.md#valores-próximos-de-um-token---approximate), que pergunta antes e confere as guardas de coerência. Medidas só são comparadas quando estão fora do grid (`gridBase` na configuração), então `16px` perto de um token de `12px` não sugere nada. Dois tokens à mesma distância também não.
 
 Quando a pasta de tokens existe e valores repetidos não têm token, o resumo avisa, porque o código mudou depois do `generate`:
 
@@ -109,7 +127,7 @@ Ficam dois números de propósito: uma nota única esconderia que as cores estã
 | `angular-template` | `template:` do Angular, o `.html` do `templateUrl` e `host:` | `style="..."`, `[style.padding.px]="4"`, `[ngStyle]="{...}"` |
 | `css-in-js` | Os mesmos arquivos de script | Templates com tag: `styled.x`, `css`, `keyframes`, `createGlobalStyle`, `injectGlobal` e a prop `css` com template. Um valor com `${...}` dentro não é informado |
 | `svg-attribute` | Os mesmos arquivos de script | Atributos de apresentação do SVG em JSX (`fill`, `stroke`, `stopColor`, `floodColor`, `lightingColor`) e `setAttribute('fill' ou 'stroke', ...)`. O `fix` não mexe neles |
-| `js-value` | Os mesmos arquivos de script | Cores lidas por JavaScript: `ctx.fillStyle`, opções de `new Chart`/`new ApexCharts` e chaves de cor em objetos passados a funções desconhecidas. O `fix` não mexe nelas |
+| `js-value` | Os mesmos arquivos de script | Cores lidas por JavaScript: `ctx.fillStyle`, opções de `new Chart`/`new ApexCharts` e chaves de cor em objetos passados a funções desconhecidas. O `fix` as escreve a partir do [módulo `tokens.ts`](fix.md#canvas-e-gráficos-o-módulo-tokensts) |
 
 Arquivos `.pcss`/`.postcss` são lidos como CSS. Como no próprio TypeScript, JSX dentro de um `.ts` é erro de sintaxe. Arquivos de tokens (`*.tokens.json`) são lidos como os tokens que o projeto já tem, não como código.
 

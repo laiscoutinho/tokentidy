@@ -48,12 +48,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tokentidy check src
+      - run: npx tokentidy validate
 ```
 
-Dois detalhes para o CI:
+O `validate` faz o passo falhar quando um arquivo de tokens tem um alias quebrado, um ciclo ou não segue o schema DTCG ([validate](validate.md)).
+
+Três detalhes para o CI:
 
 - O `generate` nunca espera uma resposta fora de um terminal: quando já existem arquivos de tokens, passe `--extend` ou `--new`.
 - O `fix --dry-run` termina com `1` quando sobrariam violações, então também pode ser uma verificação no CI.
+- O `fix --approximate` também nunca espera uma resposta: passe `--yes` (aplica o que passa pelas guardas; grupos rejeitados no `tokentidy.decisions.json` continuam rejeitados) ou `--no-input` (só lista).
 
 ## Anotações no pull request
 

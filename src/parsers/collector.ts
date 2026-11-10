@@ -7,7 +7,7 @@
 import { createPositionLookup } from './position.ts';
 import { rulesForProperty, violationRule } from '../analysis/rules.ts';
 import type { PropertyRule, Siblings } from '../analysis/rules.ts';
-import type { AnalysisError, DefinitionSyntax, Finding, Host, ReviewItem, TokenDefinition, TokenReference } from '../types.ts';
+import type { AnalysisError, DefinitionSyntax, ElementFact, Finding, Host, ReviewItem, TokenDefinition, TokenReference, TokenType } from '../types.ts';
 import { findReferences, findValues } from './css/values.ts';
 import type { ValueMatch } from './css/values.ts';
 import type { MixinCall, MixinDefinition } from './css/mixins.ts';
@@ -59,6 +59,8 @@ export interface ParseResult {
     /** Templates externos de componentes Angular (`templateUrl`), relativos à raiz. */
     templateUrls?: string[];
     customProperties?: CustomPropertyCandidate[];
+    /** Elementos com classes, para as guardas de coerência. */
+    elements?: ElementFact[];
     /** Mixins definidas e chamadas neste arquivo: a definição pode estar em outro (`analysis/cross-file.ts`). */
     mixins?: MixinDefinition[];
     mixinCalls?: MixinCall[];
@@ -96,8 +98,30 @@ export interface Declaration {
     impliedUnit?: string;
     unitSuffix?: { offset: number; endOffset: number };
     numeric?: boolean;
+    /** Posição do ternário de onde o valor veio. */
+    branch?: number;
     /** Expressão que envolve o valor quando o parser de valores não a vê (`@include`): o `fix` a trata como função do build. */
     enclosing?: string;
+}
+
+/** Atalhos em que cada valor é um lado (ou eixo). */
+const SIDE_SHORTHANDS = new Set(['padding', 'margin', 'gap', 'border-radius', 'padding-inline', 'padding-block', 'margin-inline', 'margin-block']);
+
+/** Início de cada valor separado por espaço, sem contar o que está dentro de parênteses (`calc(1px + 2px)`). */
+function topLevelStarts(value: string): number[] {
+    const starts: number[] = [];
+    let depth = 0;
+    let inside = false;
+    for (let i = 0; i < value.length; i++) {
+        const char = value[i]!;
+        const blank = depth === 0 && (char === ' ' || char === '\t' || char === '\n' || char === '\r');
+        if (!blank && !inside) {
+            starts.push(i);
+        }
+        inside = !blank;
+        depth += char === '(' ? 1 : char === ')' ? -1 : 0;
+    }
+    return starts;
 }
 
 const COLOR_LITERAL = /^(#[0-9a-f]{3,8}$|(rgb|hsl|hwb|oklch|oklab|lab|lch)a?\()/i;
@@ -178,8 +202,16 @@ export class FileCollector {
         (this.result.customProperties ??= []).push({ ...candidate, file: this.file, ...this.#positionOf(candidate.offset) });
     }
 
+    element(fact: Omit<ElementFact, 'file'>): void {
+        if (fact.classes.length > 0 || fact.conditional.length > 0) {
+            (this.result.elements ??= []).push({ ...fact, file: this.file });
+        }
+    }
+
     #report(decl: Declaration, rule: PropertyRule, matches: readonly ValueMatch[]): void {
+        const starts = SIDE_SHORTHANDS.has(decl.property) ? topLevelStarts(decl.value) : [];
         for (const match of matches) {
+            const index = starts.findLastIndex((start) => start <= match.start);
             const start = decl.offset + match.start;
             const end = decl.offset + match.end;
             const type = match.type ?? rule.type;
@@ -199,6 +231,8 @@ export class FileCollector {
                 ...(decl.impliedUnit ? { impliedUnit: decl.impliedUnit } : {}),
                 ...(decl.unitSuffix ? { unitSuffix: decl.unitSuffix } : {}),
                 ...(decl.numeric ? { numeric: true as const } : {}),
+                ...(decl.branch === undefined ? {} : { branch: decl.branch }),
+                ...(starts.length > 1 && index >= 0 ? { part: { index, count: starts.length } } : {}),
             };
             if (rule.review) {
                 this.result.review.push({ ...item, message: REVIEW_MESSAGES[rule.review] });
@@ -208,10 +242,11 @@ export class FileCollector {
         }
     }
 
-    definition(name: string, syntax: DefinitionSyntax, value: string, offset: number, selector?: string): void {
+    definition(name: string, syntax: DefinitionSyntax, value: string, offset: number, selector?: string, declaredType?: TokenType): void {
         this.result.definitions.push({
             name, syntax, value: value.trim(), file: this.file, ...this.#positionOf(offset),
             ...(selector === undefined ? {} : { selector }),
+            ...(declaredType ? { declaredType } : {}),
         });
     }
 

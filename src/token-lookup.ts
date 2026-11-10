@@ -6,8 +6,11 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { reusableDefinitions } from './token-index.ts';
+import { reusableDefinitions, scopedOverrides } from './token-index.ts';
 import { readDtcgTree, treeTokensOf } from './generate/output/dtcg-tree.ts';
+import { DARK_FILE } from './generate/output/theme-files.ts';
+import { moduleAccess } from './generate/output/token-module.ts';
+import type { ModuleAccess } from './generate/output/token-module.ts';
 import type { TreeOccurrence, TreeToken } from './generate/output/dtcg-tree.ts';
 import { isInside } from './project/scope.ts';
 import type { Finding, TokenDefinition, TokenReference, TokenType } from './types.ts';
@@ -21,8 +24,8 @@ import { normalizeFinding } from './values/normalize.ts';
  */
 export type CandidateSource = 'alias' | 'project' | 'generated';
 
-/** Como o token é escrito: `var(--x)`, `$x` (SCSS/Sass) ou `@x` (Less). */
-export type CandidateForm = 'custom-property' | 'scss' | 'less';
+/** Como o token é escrito: `var(--x)`, `$x` (SCSS/Sass), `@x` (Less) ou `theme.a.b` (tema JS: só sugestão). */
+export type CandidateForm = 'custom-property' | 'scss' | 'less' | 'js-theme';
 
 export interface Candidate {
     type: TokenType;
@@ -32,11 +35,13 @@ export interface Candidate {
     /** Nome com o prefixo (`--color-primary`, `$primary`, `@primary`). */
     name: string;
     /** Token escrito à mão: arquivo e linha da definição (em SCSS/Less, decide se ela é visível no arquivo do valor). */
-    definition?: Pick<TokenDefinition, 'file' | 'line'>;
+    definition?: Pick<TokenDefinition, 'file' | 'line' | 'loadedBy'>;
     /** Alias: as ocorrências para as quais ele foi criado. */
     occurrences?: readonly TreeOccurrence[];
     /** Quantas vezes o token já é usado no projeto: desempate entre tokens à mão com o mesmo valor. */
     uses: number;
+    /** Redefinição de tema: o token só vale, com este valor, dentro destes seletores. */
+    scope?: { selector: string; rivals: readonly string[] };
 }
 
 export interface IndexInput {
@@ -46,7 +51,7 @@ export interface IndexInput {
     /** Tokens da pasta de tokens (`treeTokensOf`). */
     generated: readonly TreeToken[];
     /** Quais arquivos de saída existem: sem `tokens.css`, `var(--x)` de um token gerado não resolveria. */
-    outputs: { css: boolean; scss: boolean; less: boolean };
+    outputs: { css: boolean; scss: boolean; less: boolean; module?: boolean };
     /** Nomes sem prefixo de tokens marcados `$deprecated`: nunca são oferecidos. */
     deprecated?: ReadonlySet<string>;
 }
@@ -56,11 +61,13 @@ export interface TokenIndex {
     lookup(type: TokenType, key: string): readonly Candidate[];
     /** Todos os candidatos de um tipo: base da sugestão por proximidade. */
     ofType(type: TokenType): readonly Candidate[];
+    /** Como ler o valor no módulo gerado (`tokens.ts`), para onde `var()` não funciona. */
+    module(type: TokenType, key: string): ModuleAccess | undefined;
     size: number;
 }
 
 const SOURCE_RANK: Record<CandidateSource, number> = { alias: 0, project: 1, generated: 2 };
-const FORM_RANK: Record<CandidateForm, number> = { 'custom-property': 0, scss: 1, less: 2 };
+const FORM_RANK: Record<CandidateForm, number> = { 'custom-property': 0, scss: 1, less: 2, 'js-theme': 3 };
 
 /** Caminho que vira nome sem escape (`color.brand-500` → `--color-brand-500`). */
 const SAFE_SEGMENT = /^[A-Za-z0-9_-]+$/;
@@ -86,12 +93,25 @@ export function buildTokenIndex(input: IndexInput): TokenIndex {
             candidates.push({
                 ...base,
                 form: definition.syntax === 'scss-variable' ? 'scss' : 'less',
-                definition: { file: definition.file, line: definition.line },
+                definition: { file: definition.file, line: definition.line, ...(definition.loadedBy ? { loadedBy: definition.loadedBy } : {}) },
             });
+        } else if (definition.syntax === 'js-theme') {
+            candidates.push({ ...base, form: 'js-theme', definition: { file: definition.file, line: definition.line } });
         }
     }
 
+    for (const { definition, type, key, scope, rivals } of scopedOverrides(input.definitions, input.references)) {
+        candidates.push({
+            type, key, source: 'project', form: 'custom-property', name: definition.name, uses: uses.get(definition.name) ?? 0,
+            definition: { file: definition.file, line: definition.line }, scope: { selector: scope, rivals },
+        });
+    }
+
     const byPath = new Map(input.generated.map((t) => [t.path.join('.'), t]));
+    // Só primitivos: no módulo o alias semântico é o mesmo valor, e um caminho basta
+    const modules = new Map(input.outputs.module
+        ? input.generated.filter((t) => !t.target && t.type && t.key !== undefined).map((t) => [`${t.type}\u0000${t.key}`, t.path] as const)
+        : []);
     for (const token of input.generated) {
         if (!token.path.every((segment) => SAFE_SEGMENT.test(segment))) {
             continue;
@@ -133,6 +153,10 @@ export function buildTokenIndex(input: IndexInput): TokenIndex {
     return {
         lookup: (type, key) => index.get(`${type}\u0000${key}`) ?? [],
         ofType: (type) => byType.get(type) ?? [],
+        module: (type, key) => {
+            const trail = modules.get(`${type}\u0000${key}`);
+            return trail ? moduleAccess(trail) : undefined;
+        },
         size: sorted.length,
     };
 }
@@ -153,14 +177,17 @@ export async function projectTokenIndex(
     tokensDir: string,
 ): Promise<TokenIndex> {
     const tree = await readDtcgTree(tokensDir);
+    // O escuro entra depois: `.dark .card` usa o mesmo token semântico, que ali vale o valor escuro
+    const dark = tree ? await readDtcgTree(tokensDir, DARK_FILE) : undefined;
     return buildTokenIndex({
         definitions: analysis.definitions.filter((d) => !isInside(path.join(analysis.root, d.file), tokensDir)),
         references: analysis.references,
-        generated: tree ? treeTokensOf(tree) : [],
+        generated: tree ? [...treeTokensOf(tree), ...(dark ? treeTokensOf(dark) : [])] : [],
         outputs: {
             css: existsSync(path.join(tokensDir, 'tokens.css')),
             scss: existsSync(path.join(tokensDir, '_tokens.scss')),
             less: existsSync(path.join(tokensDir, '_tokens.less')),
+            module: existsSync(path.join(tokensDir, 'tokens.ts')) || existsSync(path.join(tokensDir, 'tokens.js')),
         },
         deprecated: new Set(deprecatedTokens(analysis.definitions).keys()),
     });

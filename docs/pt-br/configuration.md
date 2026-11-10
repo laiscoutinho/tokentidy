@@ -13,7 +13,8 @@ O TokenTidy funciona sem nenhuma configuração. Para mudar os padrões, crie um
   "splitThreshold": 60,
   "semanticTokens": true,
   "ignore": ["legacy/**", "**/*.generated.css"],
-  "includeMinified": false
+  "includeMinified": false,
+  "colorTolerance": 0.02
 }
 ```
 
@@ -29,6 +30,7 @@ O TokenTidy funciona sem nenhuma configuração. Para mudar os padrões, crie um
 | `semanticTokens` | `true` | Gerar aliases semânticos (`color-text-danger`) |
 | `ignore` | `[]` | Padrões de arquivos e pastas a pular, relativos à raiz do projeto (`legacy/**`). Eles são listados como pulados, com o motivo `ignored` |
 | `includeMinified` | `false` | Analisar arquivos minificados em vez de listá-los como pulados |
+| `colorTolerance` | `0.02` | Quão perto duas cores precisam estar (ΔE em OKLab, `0` ou mais) para contar como a mesma decisão: usado pela [consolidação](generate.md#valores-próximos-consolidação) e pelo [`fix --approximate`](fix.md#valores-próximos-de-um-token---approximate) |
 
 ## Qual valor vale
 

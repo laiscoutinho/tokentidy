@@ -5,11 +5,12 @@ import path from 'node:path';
 
 import { applyIgnores, parseIgnoreDirectives, unusedDirectives } from './ignore.ts';
 import type { IgnoreDirective } from './ignore.ts';
+import { LOADS_STYLES } from './package-tokens.ts';
 import { resolveLocalProperties } from './local-properties.ts';
 import { collectFiles } from '../project/scope.ts';
 import type { Scope, ScopeOptions } from '../project/scope.ts';
 import type { SkippedFile } from '../project/scanner.ts';
-import type { AnalysisError, AnalysisWarning, Finding, ReviewItem, TokenDefinition, TokenReference } from '../types.ts';
+import type { AnalysisError, AnalysisWarning, ElementFact, Finding, ReviewItem, TokenDefinition, TokenReference } from '../types.ts';
 import type { ParseResult, RootFontSize } from '../parsers/collector.ts';
 import type { StyleSyntax } from '../parsers/css/stylesheet.ts';
 
@@ -36,6 +37,8 @@ export interface AnalysisResult {
     definitions: TokenDefinition[];
     /** Usos de tokens (`var(--x)`, `$x`, `@x`). */
     references: TokenReference[];
+    /** Elementos de templates e JSX: quem contém quem e que classe depende de condição. */
+    elements: ElementFact[];
     /** `html { font-size }` do projeto, se houver. Sem ele, `1rem` = 16px (padrão dos navegadores). */
     rootFontSize?: RootFontSize;
     /** Linguagens de estilo que o projeto usa: decide em que formato os tokens são gerados. */
@@ -132,6 +135,17 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
     const allFiles = [...scope.files, ...(scope.context?.files ?? [])].sort();
     const allTokenFiles = [...scope.tokenFiles, ...(scope.context?.tokenFiles ?? [])].sort();
     let filesAnalyzed = 0;
+    // Folhas de estilo com `@import`/`@use`: podem trazer tokens de um pacote
+    const styleSources = new Map<string, string>();
+
+    async function parserFor(kind: string): Promise<Parser> {
+        let parse = loaded.get(kind);
+        if (!parse) {
+            parse = await loadParser(kind);
+            loaded.set(kind, parse);
+        }
+        return parse;
+    }
 
     async function run(file: string, kind: string): Promise<ParseResult | undefined> {
         const source = await read(file);
@@ -142,11 +156,10 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
             }
             return undefined;
         }
-        let parse = loaded.get(kind);
-        if (!parse) {
-            parse = await loadParser(kind);
-            loaded.set(kind, parse);
+        if (STYLE_SYNTAX.has(kind) && LOADS_STYLES.test(source)) {
+            styleSources.set(file, source);
         }
+        const parse = await parserFor(kind);
         const result = await parse(source, file);
         results.push(result);
         if (reported.has(file)) {
@@ -183,6 +196,14 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
             }
         } else if (ext === '.html') {
             await run(file, angularTemplates.has(file) ? 'angular' : 'html');
+        }
+    }
+
+    if (styleSources.size > 0) {
+        const { packageDefinitions } = await import('./package-tokens.ts');
+        const definitions = await packageDefinitions(styleSources, root, async (source, file, kind) => (await parserFor(kind))(source, file));
+        if (definitions.length > 0) {
+            results.push({ findings: [], review: [], errors: [], definitions, references: [], declarations: 0 });
         }
     }
 
@@ -240,6 +261,7 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
         skipped: skipped.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0)),
         unmatched: scope.unmatched,
         // Custom property local que virou achado não é token do projeto
+        elements: results.flatMap((r) => r.elements ?? []),
         definitions: results.flatMap((r) => r.definitions)
             .filter((d) => !(d.syntax === 'custom-property' && localDefinition.has(definitionKey(d))))
             .sort(byPosition),

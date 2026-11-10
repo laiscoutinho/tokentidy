@@ -4,6 +4,7 @@
  */
 
 import type { AnalysisError, Finding, ReviewItem } from '../types.ts';
+import type { MfeIssue } from './microfrontends.ts';
 
 /** Regra do runner do GitHub para a mensagem. */
 function escapeData(text: string): string {
@@ -28,13 +29,15 @@ export interface GithubInput {
     findings: readonly Finding[];
     review: readonly ReviewItem[];
     errors: readonly AnalysisError[];
+    microFrontends?: readonly MfeIssue[];
 }
 
 /** Violações e erros são `error`; revisões, `notice`, porque não falham o CI. */
-export function githubAnnotations({ findings, review, errors }: GithubInput, pathOf: (file: string) => string): string[] {
+export function githubAnnotations({ findings, review, errors, microFrontends = [] }: GithubInput, pathOf: (file: string) => string): string[] {
     return [
         ...errors.map((item) => annotation('error', pathOf(item.file), item.line, item.column, 'syntax-error', item.message)),
         ...findings.map((item) => annotation('error', pathOf(item.file), item.line, item.column, item.rule, findingMessage(item))),
         ...review.map((item) => annotation('notice', pathOf(item.file), item.line, item.column, item.rule, item.message)),
+        ...microFrontends.map((item) => annotation(item.severity === 'violation' ? 'error' : 'notice', pathOf(item.file), item.line, item.column, item.rule, `${item.property}: ${item.detail}`)),
     ];
 }

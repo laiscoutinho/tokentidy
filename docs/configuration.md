@@ -13,7 +13,8 @@ TokenTidy works without any configuration. To change its defaults, create a file
   "splitThreshold": 60,
   "semanticTokens": true,
   "ignore": ["legacy/**", "**/*.generated.css"],
-  "includeMinified": false
+  "includeMinified": false,
+  "colorTolerance": 0.02
 }
 ```
 
@@ -29,6 +30,7 @@ TokenTidy works without any configuration. To change its defaults, create a file
 | `semanticTokens` | `true` | Generate semantic aliases (`color-text-danger`) |
 | `ignore` | `[]` | Patterns of files and folders to skip, relative to the project root (`legacy/**`). They are listed as skipped, with the reason `ignored` |
 | `includeMinified` | `false` | Analyze minified files instead of listing them as skipped |
+| `colorTolerance` | `0.02` | How close two colors must be (ΔE in OKLab, `0` or more) to count as the same decision: used by [consolidation](generate.md#close-values-consolidation) and by [`fix --approximate`](fix.md#values-close-to-a-token---approximate) |
 
 ## Which value wins
 

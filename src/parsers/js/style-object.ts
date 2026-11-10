@@ -73,6 +73,7 @@ export function emitStyleObjects(objects: readonly t.ObjectExpression[], context
             ...(context.selector === undefined ? {} : { selector: context.selector }),
             ...(value.impliedUnit ? { impliedUnit: value.impliedUnit } : {}),
             ...(value.numeric ? { numeric: true } : {}),
+            ...(value.branch === undefined ? {} : { branch: value.branch }),
         });
     }
     // Cada bloco aninhado é outra regra: seus vizinhos são só os dele
@@ -126,6 +127,8 @@ export interface Literal {
     text: string;
     offset: number;
     numeric: boolean;
+    /** Veio de um ternário: a posição dele. */
+    branch?: number;
 }
 
 /**
@@ -148,7 +151,7 @@ export function literals(source: string, node: t.Expression): Literal[] {
                 ? [{ text: source.slice(node.start!, node.end!), offset: node.start!, numeric: true }]
                 : [];
         case 'ConditionalExpression':
-            return [...literals(source, node.consequent), ...literals(source, node.alternate)];
+            return [...literals(source, node.consequent), ...literals(source, node.alternate)].map((literal) => ({ ...literal, branch: literal.branch ?? node.start! }));
         case 'LogicalExpression':
             return node.operator === '&&' ? [] : literals(source, node.right);
         default:

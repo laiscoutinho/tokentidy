@@ -8,8 +8,10 @@ import path from 'node:path';
 import { normalizeFinding } from '../values/normalize.ts';
 import type { Finding } from '../types.ts';
 import type { Candidate } from '../token-lookup.ts';
+import { resolvesUnder } from '../token-index.ts';
 import { importInsertion, loadedFiles, styleId } from './imports.ts';
 import type { LoadedFile, Preprocessor } from './imports.ts';
+import { ModuleImport } from './module-import.ts';
 import { angularQuote, jsQuote, nextToOperator } from './surrounding-syntax.ts';
 import type { Edit, FilePlan, FixPlan, PlanContext, Replacement, SkipReason, SkippedValue } from './plan-types.ts';
 
@@ -67,6 +69,7 @@ class FilePlanner {
     readonly #edits: Edit[] = [];
     /** Precisa importar os tokens gerados (`$x`/`@x` do `_tokens.scss`/`_tokens.less`). */
     #needsImport = false;
+    #module: ModuleImport | undefined;
     readonly overlaps: SkippedValue[] = [];
     /** Calculada uma vez: olha o arquivo inteiro, e um arquivo pode ter milhares de números. */
     #quote: string | undefined;
@@ -83,8 +86,10 @@ class FilePlanner {
 
     /** Troca planejada (`undefined`), sem token (`'no-token'`) ou o motivo de não trocar. */
     plan(finding: Finding): SkippedValue | 'no-token' | undefined {
-        const candidates = this.#context.index.lookup(finding.type, normalizeFinding(finding))
-            .filter((c) => c.source !== 'alias' || c.occurrences?.some((o) => sameOccurrence(o, finding)));
+        const candidates = this.#context.index.lookup(finding.type, this.#context.approximate?.get(finding) ?? normalizeFinding(finding))
+            .filter((c) => c.form !== 'js-theme'
+                && (c.source !== 'alias' || c.occurrences?.some((o) => sameOccurrence(o, finding)))
+                && (!c.scope || resolvesUnder(finding.selector, c.scope.selector, c.scope.rivals)));
         if (candidates.length === 0) {
             return 'no-token';
         }
@@ -93,7 +98,7 @@ class FilePlanner {
         }
 
         if (finding.host === 'js-value') {
-            return skippedValue(finding, 'needs-token-module', 'var() does not work where JavaScript reads this value (canvas, chart or unknown function); edit it by hand');
+            return this.#moduleValue(finding);
         }
 
         if (finding.host === 'svg-attribute') {
@@ -155,7 +160,7 @@ class FilePlanner {
         if (candidate.source === 'project') {
             const definition = candidate.definition!;
             const sameFile = definition.file === this.#file && (language === 'less' || definition.line < finding.line);
-            const imported = this.#loaded.some((l) => l.global && l.id === styleId(definition.file));
+            const imported = definition.loadedBy?.includes(this.#file) || this.#loaded.some((l) => l.global && l.id === styleId(definition.file));
             if (sameFile || imported) {
                 return true;
             }
@@ -192,6 +197,32 @@ class FilePlanner {
         return { ...skippedValue(finding, 'ambiguous-token', `${names.join(', ')} have this value and are used equally; pick one by hand`), alternatives: names };
     }
 
+    /** Onde o JavaScript lê o valor, entra o caminho no módulo gerado: `color.indigo[600]`, trocando também as aspas. */
+    #moduleValue(finding: Finding): SkippedValue | undefined {
+        const unavailable = (detail: string) => skippedValue(finding, 'needs-token-module', `var() does not work where JavaScript reads this value (canvas, chart or unknown function); ${detail}`);
+        const key = this.#context.approximate?.get(finding) ?? normalizeFinding(finding);
+        const access = this.#context.index.module(finding.type, key);
+        const moduleFile = /\.[mc]?tsx?$/.test(this.#file) ? this.#context.generatedFiles.ts : this.#context.generatedFiles.js;
+        const facts = this.#context.scripts?.get(this.#file);
+        if (!access || !moduleFile || this.#file.endsWith('.cjs') || !facts) {
+            return unavailable('run tokentidy generate to create the token module, or edit it by hand');
+        }
+        if (!facts.isModule) {
+            return unavailable('this file has no import or export, so the token module can\'t be imported; edit it by hand');
+        }
+        const quote = this.#source[finding.offset - 1];
+        if (!quote || !'\'"`'.includes(quote) || this.#source[finding.endOffset] !== quote) {
+            return unavailable('the value is part of a longer string; edit it by hand');
+        }
+        this.#module ??= new ModuleImport(this.#file, this.#source, moduleFile, facts);
+        const text = `${this.#module.local(access.root)}${access.rest}`;
+        const edit = { offset: finding.offset - 1, endOffset: finding.endOffset + 1, text };
+        this.#edits.push(edit);
+        this.#furthestEnd = Math.max(this.#furthestEnd, edit.endOffset);
+        this.#replacements.push({ finding, token: text, source: 'generated', text, reason: 'generated', ...(key === normalizeFinding(finding) ? {} : { approximate: key }) });
+        return undefined;
+    }
+
     #replace(finding: Finding, candidate: Candidate, token: string, candidates: readonly Candidate[]): undefined {
         let text = token;
         if (finding.numeric) {
@@ -211,17 +242,23 @@ class FilePlanner {
         this.#edits.push(...edits);
         this.#furthestEnd = Math.max(this.#furthestEnd, ...edits.map((e) => e.endOffset));
         const alternatives = [...new Set(candidates.filter((c) => c.source === 'project' && c.name !== candidate.name).map((c) => c.name))];
+        const approximate = this.#context.approximate?.get(finding);
         this.#replacements.push({
             finding, token: candidate.name, source: candidate.source, text,
             reason: candidate.source === 'alias' ? 'alias' : candidate.source === 'generated' ? 'generated' : alternatives.length > 0 ? 'most-used' : 'only-match',
             ...(candidate.definition ? { definedAt: candidate.definition } : {}),
             ...(alternatives.length > 0 ? { alternatives } : {}),
+            ...(approximate === undefined ? {} : { approximate }),
         });
         return undefined;
     }
 
     result(): FilePlan {
         const edits = [...this.#edits];
+        const moduleImport = this.#module?.edit();
+        if (moduleImport) {
+            edits.push(moduleImport);
+        }
         if (this.#needsImport && this.#language) {
             const tokensFile = this.#language === 'less' ? this.#context.generatedFiles.less : this.#context.generatedFiles.scss;
             const { offset, text } = importInsertion(this.#source, this.#language, tokensFile, this.#file);

@@ -7,3 +7,15 @@ Original repository: https://github.com/laiscoutinho/tokentidy
 Licensed under the Apache License, Version 2.0 (see the LICENSE file).
 Any redistribution or derivative work must keep this NOTICE file, credit
 Laís Coutinho as the original author and link to the original repository.
+
+-------------------------------------------------------------------------------
+
+Third-party material
+
+schemas/format.json and schemas/resolver.json are unmodified copies of the
+DTCG Format and Resolver JSON Schemas, version 2025.10
+(https://www.designtokens.org/schemas/2025.10/).
+Copyright © 2025 the Contributors to the Design Tokens Community Group
+specifications. Licensed under the W3C Software and Document License, whose
+full text is in schemas/LICENSE.md. They are not covered by the Apache License
+above.

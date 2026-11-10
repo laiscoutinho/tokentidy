@@ -29,6 +29,12 @@ const MINIFIED_NAME = /\.min\.[^.]+$/;
 /** Tokens no formato DTCG (`*.tokens.json` ou `*.tokens`), a especificação de design tokens do W3C. */
 const TOKEN_FILE = /\.tokens(\.json)?$/;
 
+/** Arquivo do Resolver Module do DTCG: diz em que ordem os arquivos de tokens se combinam (temas). */
+const RESOLVER_FILE = /\.resolver\.json$/;
+
+export const isTokenFileName = (name: string): boolean => TOKEN_FILE.test(name);
+export const isResolverFileName = (name: string): boolean => RESOLVER_FILE.test(name);
+
 /** Por que um arquivo do escopo não foi analisado. `ignored`: casou com `ignore` da configuração. */
 export type SkipReason = 'minified' | 'unsupported' | 'ignored';
 

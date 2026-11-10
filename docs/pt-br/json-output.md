@@ -67,6 +67,7 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
 | `unusedTokens` | Custom properties que ninguém usa (`name`, `file`, `line`). Vazio em execução parcial |
 | `baselined` | Com `--baseline`: quantas violações o baseline cobriu |
 | `summary` | Com `--summary`: um item por tipo de token (`type`, `hardcoded`, `tokenized`) |
+| `microFrontends` | Com dois ou mais apps ([Micro-frontends](micro-frontends.md)): `projects` (`name`, `dir`) e `issues` (`rule`, `severity`, `file`, `line`, `column`, `property`, `value`, `detail`) |
 | `rootFontSize` | Presente quando o projeto define `html { font-size }` |
 
 ## `generate --json`
@@ -84,6 +85,8 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
 | `belowThreshold` | Valores usados menos vezes que o limite, com as ocorrências |
 | `suggestions` | `kind`, `type`, `message`, `values` |
 | `diagnosis` | `type`, `distinct`, `steps`, `uses`, `onStep`, `consistency` (0–1), `singleUse`, `reference` |
+| `consolidated` | Os grupos da [consolidação](generate.md#valores-próximos-consolidação): `id`, `type`, `label`, `to`, `from` (`key`, `count`), `applied` (quantos usos foram juntados), `blocked` (`file`, `line`, `value`, `guard`, `reason`), `kept` (relações que continuam valendo) |
+| `themes` | Tokens semânticos com um valor por modo ([Temas](themes.md)): `path`, `light`, `dark` |
 | `rootFontSize`, `errors`, `warnings`, `skipped` | Como no `check` |
 
 ## `fix --json`
@@ -95,8 +98,37 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
 | `skippedValues` | Valores não trocados, com o motivo ([fix](fix.md#valores-que-ele-pula)); `alternatives` lista os tokens empatados |
 | `withoutToken` | Valores sem token de mesmo valor |
 | `repeatedWithoutToken` | A parte deles que o `generate` transformaria em token: a pasta de tokens está desatualizada |
+| `approximate` | Com `--approximate`: cada grupo com `id`, `type`, `label`, `to`, `token`, `status` (`applied`, `rejected`, `pending`, `blocked`), `from`, `changes`, `blocked`, `kept` |
 | `remaining` | Violações que sobraram depois da correção |
 | `errors`, `warnings`, `skipped` | Como no `check` |
+
+## `generate --shared --json`
+
+Um formato diferente, uma entrada por pasta gravada ([Micro-frontends](micro-frontends.md#um-pacote-de-tokens-compartilhado-generate---shared)):
+
+| Campo | Significado |
+|---|---|
+| `root`, `mode`, `dryRun` | Como no `generate` |
+| `targets` | `name` (`shared` ou o app), `dir`, `tokens`, `files` |
+| `errors`, `warnings`, `skipped` | Como no `check` |
+
+## `validate --json`
+
+```json
+{
+  "schemaVersion": 1,
+  "root": "/home/you/app",
+  "files": ["design-tokens/brand.tokens.json"],
+  "problems": [
+    { "file": "design-tokens/brand.tokens.json", "path": "/color/link/$value", "rule": "reference/broken", "message": "{color.primery} does not exist" }
+  ]
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `files` | Arquivos conferidos, relativos a `root`: os encontrados e os que um resolver cita |
+| `problems` | `file`, `path` (um JSON pointer dentro do arquivo), `rule` ([validate](validate.md#o-que-ele-confere)), `message` |
 
 ## Exemplo: lendo com `jq`
 

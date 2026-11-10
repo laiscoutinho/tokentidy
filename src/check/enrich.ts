@@ -11,8 +11,11 @@ import type { AnalysisResult } from '../analysis/analyze.ts';
 import { planFixes } from '../fix/plan.ts';
 import { isInside } from '../project/scope.ts';
 import { projectTokenIndex, repeatedValues } from '../token-lookup.ts';
+import { normalizeFinding } from '../values/normalize.ts';
 import type { Finding, TokenSuggestion } from '../types.ts';
 import { findReferences } from '../parsers/css/values.ts';
+import { aliasHints } from './alias-hints.ts';
+import type { AliasHint } from './alias-hints.ts';
 import { nearSuggestion } from './near.ts';
 
 export interface UnusedToken {
@@ -26,6 +29,8 @@ export interface CheckResult extends AnalysisResult {
     repeatedWithoutToken: Finding[];
     /** Custom properties que nenhum arquivo analisado usa; vazio em execução parcial. */
     unusedTokens: UnusedToken[];
+    /** Primitivos usados onde já existe um alias semântico para aquele papel. Nunca falham e o `fix` não mexe. */
+    aliasHints: AliasHint[];
 }
 
 export interface EnrichOptions {
@@ -34,14 +39,19 @@ export interface EnrichOptions {
     gridBase: number;
 }
 
+/** Onde o objeto `theme` do JavaScript pode ser usado; o `fix` não escreve esse caminho porque o `theme` pode não estar no escopo. */
+const JS_HOSTS = new Set<Finding['host']>(['jsx', 'css-in-js', 'js-value']);
+
 export async function enrichCheck(result: AnalysisResult, options: EnrichOptions): Promise<CheckResult> {
     const { tokensDir, minOccurrences, gridBase } = options;
     const insideTokens = (file: string) => isInside(path.join(result.root, file), tokensDir);
     const unusedTokens = result.partial ? [] : findUnusedTokens(result, insideTokens);
 
+    const hints = await aliasHints(result, tokensDir);
+
     const index = await projectTokenIndex(result, tokensDir).catch(() => undefined);
     if (!index || index.size === 0) {
-        return { ...result, repeatedWithoutToken: [], unusedTokens };
+        return { ...result, repeatedWithoutToken: [], unusedTokens, aliasHints: hints };
     }
 
     const candidates = result.findings.filter((f) => !insideTokens(f.file));
@@ -64,6 +74,11 @@ export async function enrichCheck(result: AnalysisResult, options: EnrichOptions
         }
     }
     for (const finding of plan.withoutToken) {
+        const theme = JS_HOSTS.has(finding.host) ? index.lookup(finding.type, normalizeFinding(finding)).find((c) => c.form === 'js-theme') : undefined;
+        if (theme) {
+            suggestions.set(finding, { token: theme.name, match: 'exact' });
+            continue;
+        }
         const near = nearSuggestion(finding, index, { gridBase, ...(result.rootFontSize ? { rootFontSize: result.rootFontSize.px } : {}) });
         if (near) {
             suggestions.set(finding, near);
@@ -78,6 +93,7 @@ export async function enrichCheck(result: AnalysisResult, options: EnrichOptions
         }),
         repeatedWithoutToken: repeatedValues(plan.withoutToken, index, minOccurrences),
         unusedTokens,
+        aliasHints: hints,
     };
 }
 
@@ -95,7 +111,7 @@ function findUnusedTokens(result: AnalysisResult, insideTokens: (file: string) =
     const seen = new Set<string>();
     const unused: UnusedToken[] = [];
     for (const d of result.definitions) {
-        if (d.syntax === 'custom-property' && !used.has(d.name) && !insideTokens(d.file) && !seen.has(d.name)) {
+        if (d.syntax === 'custom-property' && d.package === undefined && !used.has(d.name) && !insideTokens(d.file) && !seen.has(d.name)) {
             seen.add(d.name);
             unused.push({ name: d.name, file: d.file, line: d.line });
         }

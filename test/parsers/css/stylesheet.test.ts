@@ -69,6 +69,14 @@ test('typography: size, line height, weight, family and the font shorthand', () 
     ]);
 });
 
+test('a variable in the font shorthand does not shift the other parts (as after a fix)', () => {
+    const values = (css: string) => parseCss(`.a { font: ${css}; }\n`, 'a.scss', 'scss').findings.map((f) => `${f.type} ${f.value}`);
+    assert.deepEqual(values('var(--weight) var(--size)/1.4 Inter, sans-serif'), ['line-height 1.4', 'font-family Inter, sans-serif']);
+    assert.deepEqual(values('$weight 14px Inter'), ['font-size 14px', 'font-family Inter']);
+    assert.deepEqual(values('var(--weight) var(--size) Inter'), ['font-family Inter']);
+    assert.deepEqual(values('600 calc(1rem + 2px)/1.5 Inter'), ['font-weight 600', 'line-height 1.5', 'font-family Inter']);
+});
+
 test('SCSS: variables, // comments, module functions, interpolation and nesting', () => {
     assert.deepEqual(summary('variables.scss'), [
         '9:30 padding 12px',

@@ -6,6 +6,7 @@ import type { AnalysisResult } from '../analysis/analyze.ts';
 import { CONFIG_FILE, integerAtLeast, loadConfig } from '../project/config.ts';
 import { assertInsideRoot } from '../safe-write.ts';
 import { describe } from '../generate/diagnosis.ts';
+import type { GuardedGroup } from '../consolidate/consolidate.ts';
 import type { GenerationResult } from '../generate/generate.ts';
 import { findProjectRoot, isInside } from '../project/scope.ts';
 import { EXIT, JSON_SCHEMA_VERSION, UsageError } from './errors.ts';
@@ -16,6 +17,7 @@ interface GenerateOptions {
     out?: string;
     config?: string;
     extend?: boolean;
+    shared?: string;
     new?: boolean;
     dryRun?: boolean;
     json?: boolean;
@@ -30,6 +32,7 @@ export function registerGenerate(program: Command): void {
         .option('--out <dir>', 'output folder inside the project (default: design-tokens at the project root)')
         .option('--config <file>', `config file (default: ${CONFIG_FILE} at the project root)`)
         .option('--extend', 'keep the names of tokens generated before and add the new ones')
+        .option('--shared <dir>', 'with two or more micro-frontends: values used by 2+ go to this folder, the others to each one')
         .option('--new', 'forget the tokens generated before and name everything again (hand-written tokens are still reused)')
         .option('--dry-run', 'print the files instead of writing them')
         .option('--json', 'print the result as JSON')
@@ -53,7 +56,7 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
     const { generateTokens } = await import('../generate/generate.ts');
     const dtcgTree = await import('../generate/output/dtcg-tree.ts');
     const { renderOutput } = await import('../generate/output/render-files.ts');
-    const { writeOutput } = await import('../generate/output/write-files.ts');
+    const { moduleLanguages, writeOutput } = await import('../generate/output/write-files.ts');
     const previous = await dtcgTree.readDtcgTree(outDir);
     const mode = previous ? await chooseMode(path.join(outDir, dtcgTree.DTCG_FILE), options) : 'extend';
     const existingTree = mode === 'extend' ? previous : undefined;
@@ -62,7 +65,21 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
     // Os tokens da própria pasta de saída entram pelo JSON (mantêm o nome), não como "tokens do projeto"
     const insideOut = (file: string) => isInside(path.join(result.root, file), outDir);
 
+    if (options.shared !== undefined) {
+        const { runGenerateShared } = await import('./generate-shared.ts');
+        await runGenerateShared(root, given, result, config, { ...options, shared: options.shared });
+        return;
+    }
+
+    const { automaticConsolidations } = await import('../consolidate/automatic.ts');
+    const { groups: consolidation, consolidations } = await automaticConsolidations(root, result, config);
+
+    const { findThemes, themeTokens } = await import('../generate/themes.ts');
+    const themes = config.semanticTokens ? findThemes(result.findings, consolidations) : undefined;
+
     const generation = generateTokens(result.findings, {
+        consolidations,
+        ...(themes ? { required: themes.required } : {}),
         minOccurrences: config.minOccurrences,
         gridBase: config.gridBase,
         semanticTokens: config.semanticTokens,
@@ -74,7 +91,14 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
         ownTokens: existingTree ? dtcgTree.ownTokensOf(existingTree) : [],
     });
 
-    const writeOptions = { outDir, mode, styleLanguages: result.styleLanguages, splitThreshold: config.splitThreshold };
+    const themed = themeTokens(themes?.candidates ?? [], generation.tokens);
+    // O token do tema substitui o alias de mesmo nome: o valor padrão é o mesmo, mas agora ele muda com o modo
+    const themedNames = new Set(themed.light.map((alias) => alias.name));
+    generation.aliases = [...generation.aliases.filter((alias) => !themedNames.has(alias.name)), ...themed.light];
+    const { buildThemeOutput } = await import('../generate/output/theme-files.ts');
+    const theme = await buildThemeOutput(outDir, { ...themed, selectors: themes?.selectors ?? [], media: themes?.media === true }, mode === 'extend');
+
+    const writeOptions = { outDir, mode, styleLanguages: result.styleLanguages, splitThreshold: config.splitThreshold, modules: await moduleLanguages(result.findings, outDir), ...(theme ? { theme } : {}) };
     const tree = dtcgTree.buildDtcgTree(generation, existingTree);
     const files = generation.tokens.length > 0 || existingTree ? renderOutput(tree, writeOptions) : [];
     if (!options.dryRun && files.length > 0) {
@@ -86,7 +110,13 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
         const { root, filesAnalyzed, errors, warnings, skipped } = result;
         console.log(JSON.stringify({
             schemaVersion: JSON_SCHEMA_VERSION, root, filesAnalyzed, mode, config, dryRun: options.dryRun === true,
-            files: files.map((f) => f.file), ...generation, errors, warnings, skipped,
+            files: files.map((f) => f.file), ...generation,
+            themes: themed.dark.map((alias, i) => ({ path: alias.path, light: themed.light[i]!.target, dark: alias.target })),
+            consolidated: consolidation.map(({ id, type, label, to, from, changes, blocked, kept }) => ({
+                id, type, label, to, from: from.map((value) => ({ key: value.key, count: value.findings.length })), applied: changes.length,
+                blocked: blocked.map(({ finding, guard, reason }) => ({ file: finding.file, line: finding.line, value: finding.value, guard, reason })), kept,
+            })),
+            errors, warnings, skipped,
         }, null, 2));
         return;
     }
@@ -99,6 +129,7 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
             console.log(displayPath(file.file));
         }
     }
+    printConsolidation(consolidation);
     printGenerationSummary(result, generation, config.minOccurrences);
     printDiagnostics(result);
 }
@@ -141,11 +172,23 @@ async function chooseMode(dtcgFile: string, options: GenerateOptions): Promise<'
     }
 }
 
+function printConsolidation(groups: readonly GuardedGroup[]): void {
+    for (const group of groups) {
+        if (group.changes.length > 0) {
+            const absorbed = group.from.map((value) => `${printable(value.key)} ×${value.findings.length}`).join(', ');
+            console.error(`consolidated\t${group.type}\t${printable(group.label)}: ${absorbed} → ${printable(group.to)}`);
+        }
+        for (const { finding, reason } of group.blocked) {
+            console.error(`blocked\t${group.type}\t${printable(finding.file)}:${finding.line}\t${printable(finding.value)}\t${printable(reason)}`);
+        }
+    }
+}
+
 /** Resumo no stderr: o stdout fica só com os arquivos, para scripts. */
 function printGenerationSummary(result: AnalysisResult, generation: GenerationResult, minOccurrences: number): void {
     const { tokens, aliases, reused, belowThreshold, suggestions, diagnosis } = generation;
     const created = tokens.filter((t) => !t.kept).length;
-    console.error(`${created} new tokens, ${tokens.length - created} kept, ${aliases.length} semantic aliases`);
+    console.error(`${created} new ${created === 1 ? 'token' : 'tokens'}, ${tokens.length - created} kept, ${aliases.length} semantic ${aliases.length === 1 ? 'alias' : 'aliases'}`);
     if (reused.length > 0) {
         console.error(`${reused.length} values already have a token in the project:`);
         for (const r of reused) {

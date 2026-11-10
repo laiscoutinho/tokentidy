@@ -28,7 +28,7 @@ export function nearSuggestion(finding: Finding, index: TokenIndex, options: Nea
 }
 
 function fitsHost(candidate: Candidate, finding: Finding): boolean {
-    if (finding.host === 'js-value' || finding.host === 'svg-attribute') {
+    if (finding.host === 'js-value' || finding.host === 'svg-attribute' || candidate.scope || candidate.form === 'js-theme') {
         return false;
     }
     if (candidate.form === 'custom-property') {

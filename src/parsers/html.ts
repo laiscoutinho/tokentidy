@@ -17,6 +17,7 @@ type Element = DefaultTreeAdapterTypes.Element;
 export function parseHtml(source: string, file: string): ParseResult {
     const collector = new FileCollector(file, source);
     const document = parse(source, { sourceCodeLocationInfo: true });
+    collectElements(collector, document, []);
     walkTree(document, (node) => {
         if (!('tagName' in node)) {
             return;
@@ -37,6 +38,21 @@ export function parseHtml(source: string, file: string): ParseResult {
         }
     });
     return collector.result;
+}
+
+/** Quem contém quem: HTML estático não tem estado, mas o fundo pode estar num ancestral. */
+function collectElements(collector: FileCollector, node: Node, ancestors: readonly string[][]): void {
+    let inner = ancestors;
+    if ('tagName' in node) {
+        const classes = (node.attrs.find((attr) => attr.name === 'class')?.value ?? '').split(/\s+/).filter(Boolean);
+        collector.element({ tag: node.tagName, classes, conditional: [], ancestors: [...ancestors] });
+        inner = [classes, ...ancestors];
+    }
+    if ('childNodes' in node) {
+        for (const child of node.childNodes) {
+            collectElements(collector, child, inner);
+        }
+    }
 }
 
 function walkTree(node: Node, callback: (node: Node) => void): void {

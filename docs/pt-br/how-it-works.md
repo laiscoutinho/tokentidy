@@ -21,7 +21,7 @@
 1. **Ler o projeto.** O TokenTidy encontra a raiz do projeto, lê a configuração e lista os arquivos a analisar (veja o [check](check.md#onde-ele-procura)).
 2. **Entender o código.** Cada arquivo é lido pela sua estrutura (uma *árvore sintática*), não por busca de texto. Assim o TokenTidy diferencia uma cor de um texto que só parece uma, e sabe a posição exata de cada valor.
 3. **Comparar com tokens.** Cada valor é escrito em uma forma padrão única (`#FFF`, `white` e `rgb(255 255 255)` viram `#ffffff`) e comparado com os tokens que o projeto já tem.
-4. **Informar, sugerir ou corrigir.** O [`check`](check.md) lista, o [`generate`](generate.md) cria tokens, o [`fix`](fix.md) troca valores, editando só o trecho exato de cada arquivo.
+4. **Informar, sugerir ou corrigir.** O [`check`](check.md) lista, o [`generate`](generate.md) cria tokens, o [`fix`](fix.md) troca valores, editando só o trecho exato de cada arquivo. O [`validate`](validate.md) confere os próprios arquivos de tokens.
 
 ## Contexto
 
@@ -30,10 +30,11 @@ Um valor sozinho não diz se deveria ser um token. O TokenTidy olha **o que o va
 - **O mesmo valor pode querer dizer coisas diferentes.** `width: 800px` definindo a largura máxima do conteúdo da página é uma decisão de layout, e candidata a token (`--layout-max-width`). O mesmo `800px` como largura de um card é outra decisão, e não é juntado com a primeira só porque o número é igual.
 - **Valores diferentes podem querer dizer a mesma coisa.** Um `max-width` repetido nos containers das páginas com valores um pouco diferentes provavelmente é uma decisão escrita de vários jeitos.
 - **O contexto vem do próprio código:** a propriedade, o seletor, as declarações ao lado e quantas vezes o valor se repete no mesmo papel.
+- **Uma troca pode mover um valor, nunca uma relação.** Antes de trocar um valor próximo, o elemento é analisado por inteiro: um `:hover` continua diferente da base, o texto mantém o contraste, o espaçamento interno continua menor que o externo, um botão pequeno continua menor que um grande. Uma troca que quebraria uma dessas relações é bloqueada, com o motivo ([guardas de coerência](fix.md#valores-próximos-de-um-token---approximate)).
 
 ## Princípios
 
-- Nada é alterado sem um pedido explícito, e o `--dry-run` mostra as mudanças antes.
+- Nada é alterado sem um pedido explícito, e o `--dry-run` mostra as mudanças antes. Um valor que só está perto de um token só muda com a sua autorização.
 - Toda sugestão vem com um motivo.
 - A mesma entrada sempre gera a mesma saída.
 - Um arquivo quebrado nunca interrompe a análise dos outros.

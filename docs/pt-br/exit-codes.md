@@ -6,9 +6,9 @@ Quando um comando termina, ele devolve um número, o **código de saída**. Voc�
 
 | Código | Significado |
 |---|---|
-| `0` | Tudo certo: nenhuma violação (`check`; itens de revisão e avisos não contam), tokens gerados (`generate`), nada mais para corrigir (`fix`) |
-| `1` | Foram encontrados valores fixos no código (`check`) ou eles sobraram depois do `fix`, ou um arquivo tem erro de sintaxe |
-| `2` | Erro de uso ou de execução: caminho inexistente, opção desconhecida, configuração inválida, pasta de saída fora do projeto, arquivo de tokens corrompido, arquivos de tokens existentes sem `--extend`/`--new` fora de um terminal |
+| `0` | Tudo certo: nenhuma violação (`check`; itens de revisão e avisos não contam), tokens gerados (`generate`), nada mais para corrigir (`fix`), nenhum problema nos arquivos de tokens (`validate`) |
+| `1` | Foram encontrados valores fixos no código (`check`) ou eles sobraram depois do `fix`, dois micro-frontends definem o mesmo token global com valores diferentes (`check`), um arquivo de tokens tem um problema (`validate`), ou um arquivo tem erro de sintaxe |
+| `2` | Erro de uso ou de execução: caminho ou pasta do `--tokens` inexistente, opção desconhecida, configuração inválida, pasta de saída fora do projeto, arquivo de tokens corrompido, arquivos de tokens existentes sem `--extend`/`--new` fora de um terminal, `fix --approximate` fora de um terminal sem `--yes`/`--no-input`, `generate --shared` com menos de dois apps, um `tokentidy.decisions.json` quebrado |
 
 ## Vendo o código
 

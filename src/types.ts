@@ -82,6 +82,10 @@ export interface Finding {
     unitSuffix?: { offset: number; endOffset: number };
     /** O valor é um número de JavaScript ou de expressão do Angular (`padding: 8`, `[style.opacity]="0.5"`): o token entra como string. */
     numeric?: true;
+    /** Ternário de onde o valor veio (posição do `cond ? a : b`): os dois lados são dois estados do mesmo elemento. */
+    branch?: number;
+    /** Lugar do valor num atalho de lados (`padding: 8px 16px` → 0 de 2). Sem isso, não dá para saber qual lado ele é. */
+    part?: { index: number; count: number };
     /** Token que serve para este valor, calculado pelo `check` (nunca escreve nada). */
     suggestion?: TokenSuggestion;
 }
@@ -121,8 +125,8 @@ export interface AnalysisWarning {
     message: string;
 }
 
-/** Sintaxe de uma definição de token já existente no projeto (`dtcg`: arquivo `*.tokens.json`). */
-export type DefinitionSyntax = 'custom-property' | 'scss-variable' | 'less-variable' | 'dtcg';
+/** Sintaxe de uma definição de token já existente no projeto (`dtcg`: arquivo `*.tokens.json`; `js-theme`: objeto de `createTheme`/`ThemeProvider`). */
+export type DefinitionSyntax = 'custom-property' | 'scss-variable' | 'less-variable' | 'dtcg' | 'js-theme';
 
 /** Token que o projeto já define (`--cor: #fff`, `$cor: #fff`, `@cor: #fff`). */
 export interface TokenDefinition {
@@ -139,6 +143,24 @@ export interface TokenDefinition {
     dtcgType?: string;
     /** `$deprecated` do DTCG: `true` ou o motivo. */
     deprecated?: true | string;
+    /** Tipo dito pelo próprio tema JS (`borderRadius` → `radius`), já que nada no código usa esse token como propriedade CSS. */
+    declaredType?: TokenType;
+    /** Pacote npm de onde veio (`@acme/tokens`): só definições são lidas dele. */
+    package?: string;
+    /** Definição de pacote: arquivos do projeto que carregam o arquivo sem namespace, onde `$x`/`@x` funciona. */
+    loadedBy?: string[];
+}
+
+/** Um elemento de template ou JSX, para saber o que o CSS sozinho não diz: quem contém quem e que classe liga com uma condição. */
+export interface ElementFact {
+    file: string;
+    tag: string;
+    /** Classes sempre presentes. */
+    classes: string[];
+    /** Classes que dependem de uma condição (`[class.x]`, `[ngClass]`, `className={a ? 'x' : 'y'}`). */
+    conditional: string[];
+    /** Classes de cada ancestral, do mais próximo para o mais distante. */
+    ancestors: string[][];
 }
 
 /** Uso de um token existente (`var(--cor)`, `$cor`, `@cor`) dentro de uma propriedade. */

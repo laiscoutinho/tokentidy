@@ -3,7 +3,7 @@
  * e as sombras (deslocamento, desfoque e cor formam uma decisão só).
  */
 
-import { isTokenComma, isTokenDelim, isTokenIdent } from '@csstools/css-tokenizer';
+import { isTokenComma, isTokenDelim, isTokenIdent, isTokenString } from '@csstools/css-tokenizer';
 import { isFunctionNode, isTokenNode, isWhiteSpaceOrCommentNode } from '@csstools/css-parser-algorithms';
 import type { ComponentValue } from '@csstools/css-parser-algorithms';
 
@@ -56,49 +56,60 @@ export const FONT_PREFIX_KEYWORDS = new Set([
  */
 export function findFontShorthand(nodes: ComponentValue[], report: Report): void {
     const content = nodes.filter((node) => !isWhiteSpaceOrCommentNode(node));
-    let i = 0;
-
-    // Antes do tamanho: palavras de estilo e o peso
-    for (; i < content.length; i++) {
-        const node = content[i]!;
-        if (!isTokenNode(node)) {
-            break;
-        }
-        const token = node.value;
-        if (isNonZeroNumber(token) || isWeightKeyword(token)) {
-            report(...sourceRangeOf([token]), { type: 'font-weight' });
-            continue;
-        }
-        if (isTokenIdent(token) && FONT_PREFIX_KEYWORDS.has(token[4].value.toLowerCase())) {
-            continue;
-        }
-        break;
-    }
-
-    // Tamanho: o primeiro item que não é estilo nem peso (pode ser variável: `$size`)
-    const size = content[i];
-    if (!size) {
+    const size = sizeIndex(content);
+    if (size === undefined) {
         return;
     }
-    if (isTokenNode(size) && isLength(size.value)) {
-        report(...sourceRangeOf([size.value]), { type: 'font-size' });
-    }
-    // `$size` chega em dois pedaços (`$` + `size`)
-    i += isTokenNode(size) && isTokenDelim(size.value) && size.value[4].value === '$' ? 2 : 1;
 
-    const slash = content[i];
-    if (slash && isTokenNode(slash) && isTokenDelim(slash.value) && slash.value[4].value === '/') {
+    // Antes do tamanho: estilo e peso. Uma variável ali (`var(--peso)`, depois de um `fix`) só ocupa o lugar
+    for (let i = 0; i < size; i++) {
+        const node = content[i]!;
+        if (isTokenNode(node) && !isDollar(content[i - 1]) && (isNonZeroNumber(node.value) || isWeightKeyword(node.value))) {
+            report(...sourceRangeOf([node.value]), { type: 'font-weight' });
+        }
+    }
+
+    const sizeNode = content[size]!;
+    if (isTokenNode(sizeNode) && isLength(sizeNode.value)) {
+        report(...sourceRangeOf([sizeNode.value]), { type: 'font-size' });
+    }
+    let i = size + (isDollar(sizeNode) ? 2 : 1);
+
+    if (isSlash(content[i])) {
         const lineHeight = content[i + 1];
         if (lineHeight && isTokenNode(lineHeight) && (isLength(lineHeight.value) || isNonZeroNumber(lineHeight.value))) {
             report(...sourceRangeOf([lineHeight.value]), { type: 'line-height' });
         }
-        i += 2;
-        if (lineHeight && isTokenNode(lineHeight) && isTokenDelim(lineHeight.value) && lineHeight.value[4].value === '$') {
-            i++;
-        }
+        i += isDollar(lineHeight) ? 3 : 2;
     }
 
     findFontFamily(content.slice(i), report, 'font-family');
+}
+
+const isDollar = (node: ComponentValue | undefined) => node !== undefined && isTokenNode(node) && isTokenDelim(node.value) && node.value[4].value === '$';
+const isSlash = (node: ComponentValue | undefined) => node !== undefined && isTokenNode(node) && isTokenDelim(node.value) && node.value[4].value === '/';
+
+/**
+ * Onde está o tamanho, pela estrutura e não pela posição: o item antes da `/`; sem ela, o primeiro comprimento;
+ * sem comprimento, o item antes da família. `$x` ocupa dois nós (`$` + `x`) e conta pelo `$`.
+ */
+function sizeIndex(content: readonly ComponentValue[]): number | undefined {
+    const slash = content.findIndex(isSlash);
+    if (slash > 0) {
+        return isDollar(content[slash - 2]) ? slash - 2 : slash - 1;
+    }
+    const length = content.findIndex((node) => isTokenNode(node) && isLength(node.value));
+    if (length >= 0) {
+        return length;
+    }
+    // A família começa no primeiro nome que não é estilo nem peso (`font: caption` não tem tamanho)
+    const family = content.findIndex((node, i) => isTokenNode(node) && !isDollar(content[i - 1])
+        && ((isTokenIdent(node.value) && !FONT_PREFIX_KEYWORDS.has(node.value[4].value.toLowerCase()) && !isWeightKeyword(node.value))
+            || isTokenString(node.value)));
+    if (family <= 0) {
+        return undefined;
+    }
+    return isDollar(content[family - 2]) ? family - 2 : family - 1;
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { ScriptFacts } from './script-facts.ts';
 // Os tipos do plano do `fix`, separados da lógica em `plan.ts`.
 
 import type { Finding } from '../types.ts';
@@ -23,6 +24,8 @@ export interface Replacement {
     definedAt?: { file: string; line: number };
     /** Outros tokens do projeto com o mesmo valor, que perderam a escolha. */
     alternatives?: string[];
+    /** Troca aproximada, já autorizada: o valor que o token tem. */
+    approximate?: string;
 }
 
 export type ReplacementReason = 'alias' | 'most-used' | 'only-match' | 'generated';
@@ -82,5 +85,9 @@ export interface PlanContext {
     /** Conteúdo dos arquivos com achados. */
     sources: ReadonlyMap<string, string>;
     /** Arquivos de tokens gerados, relativos à raiz (`design-tokens/_tokens.scss`). */
-    generatedFiles: { scss: string; less: string };
+    generatedFiles: { scss: string; less: string; ts?: string; js?: string };
+    /** Só dos arquivos com valor lido pelo JavaScript: é o que decide como importar o módulo de tokens. */
+    scripts?: ReadonlyMap<string, ScriptFacts>;
+    /** Trocas aproximadas autorizadas: achado → valor do token que ele recebe. */
+    approximate?: ReadonlyMap<Finding, string>;
 }

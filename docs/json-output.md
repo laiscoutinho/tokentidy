@@ -68,6 +68,7 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
 | `unusedTokens` | Custom properties nobody uses (`name`, `file`, `line`). Empty on a partial run |
 | `baselined` | With `--baseline`: how many violations the baseline covered |
 | `summary` | With `--summary`: one item per token type (`type`, `hardcoded`, `tokenized`) |
+| `microFrontends` | With two or more apps ([Micro-frontends](micro-frontends.md)): `projects` (`name`, `dir`) and `issues` (`rule`, `severity`, `file`, `line`, `column`, `property`, `value`, `detail`) |
 
 ## `generate --json`
 
@@ -84,6 +85,8 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
 | `belowThreshold` | Values used fewer times than the threshold, with their occurrences |
 | `suggestions` | `kind`, `type`, `message`, `values` |
 | `diagnosis` | `type`, `distinct`, `steps`, `uses`, `onStep`, `consistency` (0–1), `singleUse`, `reference` |
+| `consolidated` | The [consolidation](generate.md#close-values-consolidation) groups: `id`, `type`, `label`, `to`, `from` (`key`, `count`), `applied` (how many uses were merged), `blocked` (`file`, `line`, `value`, `guard`, `reason`), `kept` (relationships that still hold) |
+| `themes` | Semantic tokens with a value per mode ([Themes](themes.md)): `path`, `light`, `dark` |
 | `rootFontSize`, `errors`, `warnings`, `skipped` | As in `check` |
 
 ## `fix --json`
@@ -95,8 +98,37 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
 | `skippedValues` | Values not replaced, with the reason ([fix](fix.md#values-it-skips)); `alternatives` lists the tokens in a tie |
 | `withoutToken` | Values with no token of the same value |
 | `repeatedWithoutToken` | The part of those that `generate` would turn into tokens: the tokens folder is out of date |
+| `approximate` | With `--approximate`: each group with `id`, `type`, `label`, `to`, `token`, `status` (`applied`, `rejected`, `pending`, `blocked`), `from`, `changes`, `blocked`, `kept` |
 | `remaining` | Violations left after the fix |
 | `errors`, `warnings`, `skipped` | As in `check` |
+
+## `generate --shared --json`
+
+A different shape, one entry per folder written ([Micro-frontends](micro-frontends.md#a-shared-token-package-generate---shared)):
+
+| Field | Meaning |
+|---|---|
+| `root`, `mode`, `dryRun` | As in `generate` |
+| `targets` | `name` (`shared` or the app), `dir`, `tokens`, `files` |
+| `errors`, `warnings`, `skipped` | As in `check` |
+
+## `validate --json`
+
+```json
+{
+  "schemaVersion": 1,
+  "root": "/home/you/app",
+  "files": ["design-tokens/brand.tokens.json"],
+  "problems": [
+    { "file": "design-tokens/brand.tokens.json", "path": "/color/link/$value", "rule": "reference/broken", "message": "{color.primery} does not exist" }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `files` | Files checked, relative to `root`: those found and those a resolver points to |
+| `problems` | `file`, `path` (a JSON pointer inside the file), `rule` ([validate](validate.md#what-it-checks)), `message` |
 
 ## Example: read it with `jq`
 

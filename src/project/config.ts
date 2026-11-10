@@ -29,6 +29,8 @@ export interface Config {
     ignore: string[];
     /** Analisa arquivos minificados (`*.min.css` ou linha média longa). Padrão: não. */
     includeMinified: boolean;
+    /** Distância OKLab (ΔEOK) até onde duas cores são a mesma decisão escrita de jeitos quase iguais. */
+    colorTolerance: number;
 }
 
 export const DEFAULT_CONFIG: Readonly<Config> = {
@@ -39,6 +41,7 @@ export const DEFAULT_CONFIG: Readonly<Config> = {
     semanticTokens: true,
     ignore: [],
     includeMinified: false,
+    colorTolerance: 0.02,
 };
 
 /** Erro de configuração: a CLI mostra a mensagem e sai com código 2 (erro de uso). */
@@ -113,6 +116,12 @@ export function validateConfig(raw: unknown, source: string): Config {
                     throw new ConfigError(`${source}: includeMinified must be true or false`);
                 }
                 config.includeMinified = value;
+                break;
+            case 'colorTolerance':
+                if (typeof value !== 'number' || !(value >= 0)) {
+                    throw new ConfigError(`${source}: colorTolerance must be a number >= 0 (OKLab distance)`);
+                }
+                config.colorTolerance = value;
                 break;
             default:
                 throw new ConfigError(`${source}: unknown option "${key}"`);

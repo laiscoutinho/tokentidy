@@ -5,7 +5,8 @@
  *   valor usado uma vez só não é uma decisão de design repetida;
  * - valor que o projeto já tem como token é reutilizado (mesmo que apareça uma vez só); se o token existente
  *   não funciona onde o valor está (`$cor` num template), vira token CSS com o existente como equivalente;
- * - o que é parecido mas não igual (`15px` e `16px`, `16px` e `1rem`) vira sugestão, nunca grupo.
+ * - o que é parecido mas não igual só vira grupo pela consolidação (`consolidations`), que já passou pelas guardas;
+ *   sem ela, vira sugestão.
  * Cada token guarda todas as ocorrências (arquivo, posição, host): é a base do autofix.
  */
 
@@ -80,6 +81,10 @@ export interface GenerationOptions {
     references?: readonly TokenReference[];
     /** Tokens gerados antes pelo TokenTidy na pasta de saída: mantêm o nome no modo extend. */
     ownTokens?: readonly OwnToken[];
+    /** Achados que entram no token de um valor próximo: achado → valor final. */
+    consolidations?: ReadonlyMap<Finding, string>;
+    /** `tipo\0valor` que precisam de um primitivo próprio: os dois lados de um tema. */
+    required?: ReadonlySet<string>;
 }
 
 /** Token já existente na pasta de saída (lido do `tokens.tokens.json`). */
@@ -110,7 +115,7 @@ interface Group {
 /** Agrupa os achados e decide o destino de cada grupo. Mesma entrada, mesma saída. */
 export function generateTokens(findings: readonly Finding[], options: GenerationOptions): GenerationResult {
     const rootFontSize = options.rootFontSize ?? DEFAULT_ROOT_FONT_SIZE;
-    const groups = groupFindings(findings);
+    const groups = groupFindings(findings, options.consolidations);
     const definitions = reusableDefinitions(options.definitions ?? [], options.references ?? []);
     const own = new Map((options.mode === 'extend' ? options.ownTokens ?? [] : []).map((t) => [`${t.type}\u0000${t.key}`, t]));
 
@@ -123,9 +128,10 @@ export function generateTokens(findings: readonly Finding[], options: Generation
         const matches = definitions.filter((d) => d.type === group.type && d.key === group.key).map((d) => d.definition);
         const hosts = new Set(group.findings.map((f) => f.host));
         const usable = matches.find((d) => [...hosts].every((host) => usableIn(d, host)));
-        if (usable && !kept) {
+        const required = options.required?.has(`${group.type}\u0000${group.key}`) === true;
+        if (usable && !kept && !required) {
             reused.push({ definition: usable, type: group.type, key: group.key, count: group.findings.length, occurrences: group.findings });
-        } else if (kept || matches.length > 0 || group.findings.length >= options.minOccurrences) {
+        } else if (kept || required || matches.length > 0 || group.findings.length >= options.minOccurrences) {
             /**
              * Com token equivalente no projeto (ex.: `$roxo`, que não funciona em template/JSX), a decisão de design
              * já existe: vira token CSS mesmo com poucos usos, e o equivalente fica registrado
@@ -152,7 +158,9 @@ export function generateTokens(findings: readonly Finding[], options: Generation
             path = freeName(path, taken);
         }
         taken.add(path.join('-'));
-        const spellings = countSpellings(group.findings);
+        // Grafia é o que o projeto escreveu para este valor: o `15px` absorvido não é uma grafia de `16px`
+        const exact = group.findings.filter((f) => !options.consolidations?.has(f));
+        const spellings = exact.length > 0 ? countSpellings(exact) : [group.key];
         return {
             path,
             name: path.join('-'),
@@ -180,12 +188,12 @@ export function generateTokens(findings: readonly Finding[], options: Generation
 }
 
 /** Junta os achados por tipo e valor normalizado, na ordem da primeira ocorrência. */
-function groupFindings(findings: readonly Finding[]): Group[] {
+function groupFindings(findings: readonly Finding[], consolidations?: ReadonlyMap<Finding, string>): Group[] {
     const groups = new Map<string, Group>();
     // Em ordem de arquivo e posição: empates (grafia mais usada, ordem das ocorrências) não dependem da ordem de entrada
     const sorted = findings.toSorted((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || a.offset - b.offset);
     for (const finding of sorted) {
-        const key = normalizeFinding(finding);
+        const key = consolidations?.get(finding) ?? normalizeFinding(finding);
         const id = `${finding.type}\u0000${key}`;
         let group = groups.get(id);
         if (!group) {

@@ -8,6 +8,9 @@ import { createPositionLookup } from './position.ts';
 import type { AnalysisError, TokenDefinition } from '../types.ts';
 import { offsetAt } from './collector.ts';
 
+/** Índices de array no sentido do JS: o motor os põe primeiro, em ordem crescente. */
+const INTEGER_KEY = /^(0|[1-9]\d{0,8})$/;
+
 export function parseDtcg(source: string, file: string): { definitions: TokenDefinition[]; errors: AnalysisError[] } {
     const positionOf = createPositionLookup(source);
     let json: unknown;
@@ -41,11 +44,20 @@ export function parseDtcg(source: string, file: string): { definitions: TokenDef
             }
             return;
         }
+        // Cada irmão é procurado depois do anterior: voltar sempre ao pai deixava arquivos grandes quadráticos.
+        // Chaves inteiras (`"100"`) saem do `Object.entries` antes das outras, fora da ordem do arquivo:
+        // essas são procuradas a partir do pai, como antes
+        let cursor = from;
         for (const [key, child] of Object.entries(group)) {
             if (key.startsWith('$')) {
                 continue;
             }
-            const at = source.indexOf(JSON.stringify(key), from);
+            const quoted = JSON.stringify(key);
+            const integer = INTEGER_KEY.test(key);
+            const at = source.indexOf(quoted, integer ? from : cursor);
+            if (at !== -1 && !integer) {
+                cursor = at + quoted.length;
+            }
             walk(child, [...trail, key], type, deprecated, at === -1 ? from : at);
         }
     };

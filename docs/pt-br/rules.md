@@ -44,6 +44,26 @@ Itens de revisão são o que o código sozinho não consegue decidir. Eles são 
 | `custom-property/unknown-use` | Uma custom property local cujo papel não dá para descobrir pelos usos nem pelo valor |
 | `value/unknown-destination` | Uma medida passada a uma mixin que não deu para seguir. Uma cor na mesma posição é uma violação normal: cor é visual em qualquer lugar |
 
+## Sugestões
+
+| Regra | Quando |
+|---|---|
+| `token/prefer-alias` | Um token primitivo é usado onde existe um alias semântico para aquele papel (`var(--color-red-500)` em `.error`, com `--color-text-danger`). Nunca falha ([check](check.md#qual-token-serve)) |
+
+## Micro-frontends
+
+Com dois ou mais apps ([Micro-frontends](micro-frontends.md)):
+
+| Regra | Severidade | Quando |
+|---|---|---|
+| `mfe/root-collision` | violation | Dois apps definem a mesma custom property global com valores diferentes |
+| `mfe/drift` | review | O mesmo papel tem um valor mais usado diferente em cada app |
+| `mfe/version-mismatch` | review | Os apps dependem de versões diferentes do mesmo pacote de design system |
+
+## Arquivos de tokens
+
+O [`validate`](validate.md#o-que-ele-confere) tem regras próprias (`schema/invalid`, `reference/broken`, `reference/cycle`…).
+
 ## Avisos sobre comentários de ignore
 
 Vão para a saída de erro e nunca mudam o código de saída. Veja [Comentários de ignore](ignore-comments.md).

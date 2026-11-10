@@ -44,6 +44,26 @@ Review items are what the code alone can't decide. They are printed and counted,
 | `custom-property/unknown-use` | A local custom property whose role can't be told from its uses or its value |
 | `value/unknown-destination` | A measure passed to a mixin that couldn't be followed. A color in the same position is a normal violation: a color is visual wherever it goes |
 
+## Suggestions
+
+| Rule | When |
+|---|---|
+| `token/prefer-alias` | A primitive token is used where a semantic alias exists for that role (`var(--color-red-500)` in `.error`, with `--color-text-danger`). Never fails ([check](check.md#which-token-fits)) |
+
+## Micro-frontends
+
+With two or more apps ([Micro-frontends](micro-frontends.md)):
+
+| Rule | Severity | When |
+|---|---|---|
+| `mfe/root-collision` | violation | Two apps define the same global custom property with different values |
+| `mfe/drift` | review | The same role has a different most-used value in each app |
+| `mfe/version-mismatch` | review | The apps depend on different versions of the same design-system package |
+
+## Token files
+
+[`validate`](validate.md#what-it-checks) has its own rules (`schema/invalid`, `reference/broken`, `reference/cycle`…).
+
 ## Warnings about ignore comments
 
 These go to the error output and never change the exit code. See [Ignore comments](ignore-comments.md).

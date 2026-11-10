@@ -2,6 +2,7 @@
  * Comando `fix`: troca valores soltos por tokens com exatamente o mesmo valor.
  * Exit code como o `eslint --fix`: diz se o código ficou limpo, não se algo mudou.
  */
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Command } from 'commander';
 
@@ -9,7 +10,9 @@ import { CONFIG_FILE, loadConfig } from '../project/config.ts';
 import type { FixResult } from '../fix/apply.ts';
 import { collectFiles, findProjectRoot } from '../project/scope.ts';
 import { normalizeFinding } from '../values/normalize.ts';
-import { EXIT, JSON_SCHEMA_VERSION } from './errors.ts';
+import type { Finding } from '../types.ts';
+import { createPrompt, groupLines } from './approximate.ts';
+import { EXIT, JSON_SCHEMA_VERSION, UsageError } from './errors.ts';
 import { display, displayPath, oneLine, printable, printDiagnostics } from './print.ts';
 
 interface FixCommandOptions {
@@ -17,6 +20,10 @@ interface FixCommandOptions {
     tokens?: string;
     dryRun?: boolean;
     json?: boolean;
+    approximate?: boolean;
+    yes?: boolean;
+    /** `--no-input` do commander: `false` quando a flag é passada. */
+    input?: boolean;
 }
 
 export function registerFix(program: Command): void {
@@ -28,19 +35,55 @@ export function registerFix(program: Command): void {
         .option('--config <file>', `config file (default: ${CONFIG_FILE} at the project root)`)
         .option('--dry-run', 'print a unified diff instead of writing the files')
         .option('--json', 'print the result as JSON')
+        .option('--approximate', 'also replace values close to a token, when the coherence guards allow it')
+        .option('--yes', 'with --approximate: apply every change that passes the guards, without asking')
+        .option('--no-input', 'with --approximate: never ask; only list the changes')
         .action(runFix);
 }
 
 async function runFix(paths: string[], options: FixCommandOptions): Promise<void> {
+    const noInput = options.input === false;
+    if ((options.yes || noInput) && !options.approximate) {
+        throw new UsageError('--yes and --no-input only apply to --approximate');
+    }
+    if (options.yes && noInput) {
+        throw new UsageError('--yes and --no-input cannot be used together');
+    }
+    const interactive = process.stdin.isTTY && process.stderr.isTTY && !options.json;
+    if (options.approximate && !options.yes && !noInput && !interactive) {
+        throw new UsageError('fix --approximate needs an answer and this is not a terminal: use --yes to apply what passes the guards or --no-input to only list it');
+    }
     const given = paths.length > 0 ? paths : ['.'];
-    const root = await findProjectRoot(given);
+    // Uma pasta pedida pelo nome e ausente é erro de digitação, não "projeto sem tokens"
+    if (options.tokens && !(await stat(path.resolve(options.tokens)).catch(() => undefined))?.isDirectory()) {
+        throw new UsageError(`Tokens folder not found: ${options.tokens}`);
+    }
+    // A raiz contém também a pasta de tokens: num monorepo, `fix apps/checkout --tokens packages/tokens` sobe até a raiz comum
+    const root = await findProjectRoot(options.tokens ? [...given, options.tokens] : given);
     const { config } = await loadConfig(root, options.config);
     const scopeOptions = { ignore: config.ignore, includeMinified: config.includeMinified };
     const scope = await collectFiles(given, root, scopeOptions);
     const tokensDir = options.tokens ? path.resolve(options.tokens) : path.resolve(root, config.output);
 
     const { fixScope } = await import('../fix/apply.ts');
-    const result = await fixScope(scope, { ...scopeOptions, tokensDir, dryRun: options.dryRun === true, minOccurrences: config.minOccurrences });
+    const where = (finding: Finding) => `${displayPath(path.join(root, finding.file))}:${finding.line}:${finding.column}`;
+    const prompt = options.approximate && !options.yes && !noInput ? await createPrompt(where) : undefined;
+    let result: FixResult;
+    try {
+        result = await fixScope(scope, {
+            ...scopeOptions, tokensDir, dryRun: options.dryRun === true, minOccurrences: config.minOccurrences,
+            ...(options.approximate ? {
+                approximate: {
+                    mode: options.yes ? 'yes' as const : noInput ? 'list' as const : 'ask' as const,
+                    gridBase: config.gridBase, colorTolerance: config.colorTolerance,
+                    ...(config.rootFontSize ? { rootFontSize: config.rootFontSize } : {}),
+                    ...(prompt ? { decide: prompt.decide } : {}),
+                },
+            } : {}),
+        });
+    } finally {
+        prompt?.close();
+    }
     const { after } = result;
     process.exitCode = after.findings.length > 0 || after.errors.length > 0 ? EXIT.findings : EXIT.ok;
 
@@ -64,6 +107,12 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
                 property: finding.property, value: finding.value, reason, message,
                 ...(alternatives ? { alternatives } : {}),
             })),
+            ...(result.approximate ? {
+                approximate: result.approximate.map(({ id, type, label, to, token, status, from, changes, blocked, kept }) => ({
+                    id, type, label, to, token, status, from: from.map((value) => ({ key: value.key, count: value.findings.length })), changes: changes.length,
+                    blocked: blocked.map(({ finding, guard, reason }) => ({ file: finding.file, line: finding.line, value: finding.value, guard, reason })), kept,
+                })),
+            } : {}),
             withoutToken: result.withoutToken.length,
             repeatedWithoutToken: result.repeatedWithoutToken.map((finding) => ({
                 file: finding.file, line: finding.line, column: finding.column, type: finding.type,
@@ -77,6 +126,12 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
         return;
     }
 
+    for (const group of result.approximate ?? []) {
+        // Listar é a saída do `--no-input`; nos outros modos o bloco já apareceu ou só interessa o bloqueado
+        if (noInput || group.status === 'blocked') {
+            (noInput ? console.log : console.error)(groupLines(group, where).join('\n'));
+        }
+    }
     for (const file of result.files) {
         if (result.dryRun) {
             process.stdout.write(printableDiff(file.diff));
@@ -119,7 +174,9 @@ function printFixSummary(result: FixResult, tokensDir: string): void {
     console.error(parts.join('; '));
     if (result.tokens > 0 && result.repeatedWithoutToken.length > 0) {
         const values = new Set(result.repeatedWithoutToken.map((f) => `${f.type}\u0000${normalizeFinding(f)}`)).size;
-        console.error(`${values} repeated ${values === 1 ? 'value has' : 'values have'} no token yet; run tokentidy generate --extend`);
+        // Com `--approximate` já ligado, sugerir a mesma opção seria ruído
+        const approximate = result.approximate ? '' : ', or fix --approximate for values close to a token';
+        console.error(`${values} repeated ${values === 1 ? 'value has' : 'values have'} no token yet; run tokentidy generate --extend${approximate}`);
     }
     // `var(--x)` de um token gerado só resolve se o `tokens.css` estiver carregado na página
     const generatedVar = result.files.some((f) => f.replacements.some((r) => r.source !== 'project' && r.token.startsWith('--')));

@@ -85,6 +85,15 @@ export function buildDtcgTree(result: GenerationResult, existing: DtcgTree | und
     return tree;
 }
 
+/** Árvore só com aliases: um arquivo de modo. Parte do que já existia, porque depois do `fix` não há mais o que descobrir. */
+export function aliasTree(aliases: readonly SemanticAlias[], existing: DtcgTree | undefined): DtcgTree {
+    const tree: DtcgTree = existing ? structuredClone(existing) : {};
+    for (const alias of aliases) {
+        setAt(tree, alias.path, aliasEntry(alias));
+    }
+    return tree;
+}
+
 // A árvore vem de um JSON do usuário: só propriedades próprias, para `__proto__`/`constructor` não chegarem ao protótipo
 function getAt(tree: DtcgTree, trail: readonly string[]): unknown {
     let node: unknown = tree;
@@ -202,8 +211,8 @@ function isOccurrence(item: unknown): item is TreeOccurrence {
 export class OutputError extends Error {}
 
 /** Lê o `tokens.tokens.json` da pasta de saída, se existir. Arquivo corrompido é erro claro, não um stack trace. */
-export async function readDtcgTree(outDir: string): Promise<DtcgTree | undefined> {
-    const file = path.join(outDir, DTCG_FILE);
+export async function readDtcgTree(outDir: string, name = DTCG_FILE): Promise<DtcgTree | undefined> {
+    const file = path.join(outDir, name);
     if (!existsSync(file)) {
         return undefined;
     }

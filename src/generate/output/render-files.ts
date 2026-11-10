@@ -8,6 +8,10 @@ import type { TokenType } from '../../types.ts';
 import { TOKEN_TYPES } from '../generate.ts';
 import { DTCG_FILE, extensionOf, tokensOf } from './dtcg-tree.ts';
 import type { DtcgTree } from './dtcg-tree.ts';
+import { DARK_FILE, JSON_MARKER, LIGHT_FILE, RESOLVER_FILE, darkBlock, resolverContent } from './theme-files.ts';
+import type { ThemeOutput } from './theme-files.ts';
+import { renderTokenModule } from './token-module.ts';
+import type { ModuleLanguage } from './token-module.ts';
 
 /** Pasta dos arquivos por categoria quando o CSS é dividido (`css/color.css`). */
 export const SPLIT_DIR = 'css';
@@ -75,6 +79,10 @@ export interface WriteOptions {
     /** Linguagens de estilo do projeto: decidem se `_tokens.scss` e `_tokens.less` são gerados. */
     styleLanguages: readonly string[];
     splitThreshold: number;
+    /** Módulos JS/TS a gerar: só quando há valor que o JavaScript lê (ou já foram gerados e o código os importa). */
+    modules?: readonly ModuleLanguage[];
+    /** Tokens por tema: os arquivos de modo, o resolver e o bloco do tema escuro no CSS. */
+    theme?: ThemeOutput;
 }
 
 export interface OutputFile {
@@ -90,20 +98,32 @@ export function renderOutput(tree: DtcgTree, options: WriteOptions): OutputFile[
     const files: OutputFile[] = [{ file: at(DTCG_FILE), content: `${JSON.stringify(tree, null, 2)}\n` }];
 
     const split = flat.length > options.splitThreshold;
+    // Depois do `:root`: mesma especificidade, então quem vem depois ganha
+    const dark = options.theme ? darkBlock(flatten(options.theme.dark).map((token) => declarationLine(token, 'css')), options.theme) : '';
     if (split) {
         const categories = [...new Set(flat.map((t) => t.category))];
         for (const category of categories) {
             files.push({ file: at(path.join(SPLIT_DIR, `${category}.css`)), content: renderStylesheet(flat.filter((t) => t.category === category), 'css') });
         }
-        files.push({ file: at('tokens.css'), content: `${HEADER}\n${categories.map((c) => `@import "./${SPLIT_DIR}/${c}.css";`).join('\n')}\n` });
+        files.push({ file: at('tokens.css'), content: `${HEADER}\n${categories.map((c) => `@import "./${SPLIT_DIR}/${c}.css";`).join('\n')}\n${dark}` });
     } else {
-        files.push({ file: at('tokens.css'), content: renderStylesheet(flat, 'css') });
+        files.push({ file: at('tokens.css'), content: `${renderStylesheet(flat, 'css')}${dark}` });
+    }
+    if (options.theme) {
+        files.push(
+            { file: at(LIGHT_FILE), content: `${JSON.stringify(options.theme.light, null, 2)}\n` },
+            { file: at(DARK_FILE), content: `${JSON.stringify(options.theme.dark, null, 2)}\n` },
+            { file: at(RESOLVER_FILE), content: resolverContent() },
+        );
     }
     if (options.styleLanguages.includes('scss') || options.styleLanguages.includes('sass')) {
         files.push({ file: at('_tokens.scss'), content: renderStylesheet(flat, 'scss') });
     }
     if (options.styleLanguages.includes('less')) {
         files.push({ file: at('_tokens.less'), content: renderStylesheet(flat, 'less') });
+    }
+    for (const language of options.modules ?? []) {
+        files.push({ file: at(`tokens.${language}`), content: renderTokenModule(tree, language, SILENT_HEADER) });
     }
     if (split) {
         files.push({ file: at('README.md'), content: renderReadme(files.map((f) => path.relative(options.outDir, f.file).split(path.sep).join('/')), flat.length) });
@@ -156,5 +176,7 @@ ${files.map((file) => `- \`${file}\``).join('\n')}
 
 /** Arquivo que o próprio TokenTidy escreveu (começa com o cabeçalho ou o marcador do README). */
 export function isGenerated(content: string): boolean {
-    return content.startsWith(HEADER) || content.startsWith(SILENT_HEADER) || content.startsWith(README_MARKER);
+    return content.startsWith(HEADER) || content.startsWith(SILENT_HEADER) || content.startsWith(README_MARKER)
+        // Os JSON não têm comentário: a marca vem no campo de descrição, logo no começo
+        || (content.startsWith('{') && content.slice(0, 200).includes(JSON_MARKER));
 }

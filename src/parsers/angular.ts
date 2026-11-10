@@ -41,6 +41,8 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
     readonly #collector: FileCollector;
     readonly #template: string;
     readonly #base: number;
+    /** Classes dos elementos abertos, do mais próximo para o mais distante. */
+    readonly #open: string[][] = [];
 
     constructor(collector: FileCollector, template: string, base: number) {
         super();
@@ -72,10 +74,15 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
                 selector,
                 ...(binding.impliedUnit ? { impliedUnit: binding.impliedUnit } : {}),
                 ...(binding.numeric ? { numeric: true } : {}),
+                ...(binding.branch === undefined ? {} : { branch: binding.branch }),
                 ...(binding.unitSuffix ? { unitSuffix: { offset: this.#base + binding.unitSuffix.offset, endOffset: this.#base + binding.unitSuffix.endOffset } } : {}),
             });
         }
+        const classes = (element.attributes.find((attr) => attr.name === 'class')?.value ?? '').split(/\s+/).filter(Boolean);
+        this.#collector.element({ tag: element.name, classes, conditional: element.inputs.flatMap(conditionalClasses), ancestors: [...this.#open] });
+        this.#open.unshift(classes);
         super.visitElement(element);
+        this.#open.shift();
     }
 
     /** Valores literais de um binding de estilo, com a propriedade CSS de cada um. */
@@ -119,7 +126,7 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
     /** Literais de uma expressão: o próprio literal ou os dois lados de um ternário (`ok ? '#000' : '#111'`). */
     #literals(ast: AST, property: string, unit: string | undefined): StyleBinding[] {
         if (ast instanceof Conditional) {
-            return [...this.#literals(ast.trueExp, property, unit), ...this.#literals(ast.falseExp, property, unit)];
+            return [...this.#literals(ast.trueExp, property, unit), ...this.#literals(ast.falseExp, property, unit)].map((b) => ({ ...b, branch: b.branch ?? this.#base + ast.sourceSpan.start }));
         }
         if (!(ast instanceof LiteralPrimitive)) {
             return [];
@@ -138,6 +145,26 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
     }
 }
 
+/** Classes ligadas por condição: `[class.x]="c"`, `[ngClass]="{ x: c }"` e `[ngClass]="c ? 'a' : 'b'"`. */
+function conditionalClasses(input: TmplAstBoundAttribute): string[] {
+    if (input.type === BindingType.Class) {
+        return [input.name];
+    }
+    if (input.name !== 'ngClass') {
+        return [];
+    }
+    const strings = (ast: AST): string[] => {
+        if (ast instanceof Conditional) {
+            return [...strings(ast.trueExp), ...strings(ast.falseExp)];
+        }
+        return ast instanceof LiteralPrimitive && typeof ast.value === 'string' ? ast.value.split(/\s+/).filter(Boolean) : [];
+    };
+    const ast = unwrap(input.value);
+    return ast instanceof LiteralMap
+        ? ast.keys.flatMap((key) => (key.kind === 'property' ? key.key.split(/\s+/).filter(Boolean) : []))
+        : strings(ast);
+}
+
 interface StyleBinding {
     property: string;
     /** Texto do valor como está no template. */
@@ -147,6 +174,8 @@ interface StyleBinding {
     impliedUnit?: string;
     /** Número da expressão (não string). */
     numeric?: boolean;
+    /** Posição do ternário de onde o valor veio. */
+    branch?: number;
     /** Posição da unidade no nome do binding (`.px`), no template. */
     unitSuffix?: { offset: number; endOffset: number };
 }

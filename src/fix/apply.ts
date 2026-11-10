@@ -4,6 +4,7 @@
  * não mudou desde a leitura e continua com a sintaxe válida depois da troca.
  */
 
+import { existsSync } from 'node:fs';
 import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -15,7 +16,10 @@ import type { Scope } from '../project/scope.ts';
 import type { Finding } from '../types.ts';
 import { projectTokenIndex, repeatedValues } from '../token-lookup.ts';
 import { applyEdits, unifiedDiff } from './diff.ts';
+import { resolveApproximate } from './approximate.ts';
+import type { ApproximateGroup, ApproximateOptions } from './approximate.ts';
 import { planFixes } from './plan.ts';
+import type { ScriptFacts } from './script-facts.ts';
 import type { FilePlan, Replacement, SkippedValue, SkipReason } from './plan.ts';
 
 export interface FixOptions extends ScopeAnalysisOptions {
@@ -25,6 +29,8 @@ export interface FixOptions extends ScopeAnalysisOptions {
     dryRun?: boolean;
     /** Usos para um valor virar token: o mesmo limite do `generate`. */
     minOccurrences?: number;
+    /** Também troca valores próximos de um token, com autorização. */
+    approximate?: ApproximateOptions;
 }
 
 export interface FileFix {
@@ -45,6 +51,8 @@ export interface FixResult {
     repeatedWithoutToken: Finding[];
     /** Quantos tokens podiam ser usados (0: o projeto não tem tokens nem pasta gerada). */
     tokens: number;
+    /** Grupos de trocas aproximadas, com o destino de cada um (só com `approximate`). */
+    approximate?: ApproximateGroup[];
     /** Análise do projeto depois das trocas: o que ainda falta (`findings`), erros e avisos. */
     after: AnalysisResult;
 }
@@ -61,7 +69,7 @@ const MESSAGES: Record<FileReason, string> = {
 
 export async function fixScope(scope: Scope, options: FixOptions): Promise<FixResult> {
     const { root } = scope;
-    const { tokensDir, dryRun = false, minOccurrences = 2, ...analysisOptions } = options;
+    const { tokensDir, dryRun = false, minOccurrences = 2, approximate, ...analysisOptions } = options;
     await assertInsideRoot(tokensDir, root);
     const before = await analyzeScope(scope, analysisOptions);
     // A pasta de tokens é a saída do `generate`: fonte de tokens, nunca alvo de troca
@@ -85,7 +93,30 @@ export async function fixScope(scope: Scope, options: FixOptions): Promise<FixRe
     }
 
     const relative = (file: string) => path.relative(root, path.join(tokensDir, file)).split(path.sep).join('/');
-    const plan = planFixes(findings, { index, sources, generatedFiles: { scss: relative('_tokens.scss'), less: relative('_tokens.less') } });
+    const moduleFiles = {
+        ...(existsSync(path.join(tokensDir, 'tokens.ts')) ? { ts: relative('tokens.ts') } : {}),
+        ...(existsSync(path.join(tokensDir, 'tokens.js')) ? { js: relative('tokens.js') } : {}),
+    };
+    // O Babel só entra quando há valor lido pelo JavaScript e módulo para importar
+    const moduleScripts = Object.keys(moduleFiles).length > 0 ? [...new Set(findings.filter((f) => f.host === 'js-value').map((f) => f.file))] : [];
+    const scripts = new Map<string, ScriptFacts>();
+    if (moduleScripts.length > 0) {
+        const { scriptFacts } = await import('./script-facts.ts');
+        for (const file of moduleScripts) {
+            const facts = sources.has(file) ? scriptFacts(sources.get(file)!, file) : undefined;
+            if (facts) {
+                scripts.set(file, facts);
+            }
+        }
+    }
+    const context = { index, sources, scripts, generatedFiles: { scss: relative('_tokens.scss'), less: relative('_tokens.less'), ...moduleFiles } };
+    let plan = planFixes(findings, context);
+    const resolution = approximate
+        ? await resolveApproximate({ root, analysis: before, findings, withoutToken: plan.withoutToken, index, dryRun }, approximate)
+        : undefined;
+    if (resolution && resolution.approved.size > 0) {
+        plan = planFixes(findings, { ...context, approximate: resolution.approved });
+    }
     const skipped = [...plan.skipped];
     let files = plan.files.filter((filePlan) => {
         const reason = refused.get(filePlan.file);
@@ -141,6 +172,7 @@ export async function fixScope(scope: Scope, options: FixOptions): Promise<FixRe
         withoutToken: plan.withoutToken,
         repeatedWithoutToken: repeatedValues(plan.withoutToken, index, minOccurrences),
         tokens: index.size,
+        ...(resolution ? { approximate: resolution.groups } : {}),
         after: { ...after, findings: after.findings.filter((f) => !insideTokens(f.file)) },
     };
 }

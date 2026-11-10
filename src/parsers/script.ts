@@ -12,12 +12,13 @@ import { FileCollector, offsetAt } from './collector.ts';
 import type { ParseResult } from './collector.ts';
 import { walkStylesheet } from './css/stylesheet.ts';
 import { angularHost } from './js/angular-host.ts';
+import { jsxElements } from './js/elements.ts';
 import { ScriptSinks } from './js/sinks.ts';
 import { literals } from './js/style-object.ts';
 import type { Literal } from './js/style-object.ts';
 
 /** Atalho barato antes de montar a árvore: sem nada disso no texto, não há o que procurar. */
-const MAY_HAVE_STYLES = /style|component|css|sx=|fill|stroke|chart|color|keyframes|hostbinding|matchmedia/i;
+const MAY_HAVE_STYLES = /style|component|css|sx=|fill|stroke|chart|color|theme|keyframes|hostbinding|matchmedia/i;
 
 export async function parseScript(source: string, file: string): Promise<ParseResult> {
     const collector = new FileCollector(file, source);
@@ -48,6 +49,7 @@ export async function parseScript(source: string, file: string): Promise<ParseRe
         }
     });
     sinks.finish();
+    jsxElements(collector, program.program);
     // O parser do Angular é pesado: só é carregado quando um componente tem `template:` inline
     if (component.templates.length > 0) {
         const { walkAngularTemplate } = await import('./angular.ts');
@@ -62,7 +64,7 @@ export async function parseScript(source: string, file: string): Promise<ParseRe
 }
 
 /** `.ts` não aceita JSX (o `<T>` de genéricos conflita); `.js` aceita, porque projetos React antigos usam JSX em `.js`. */
-function pluginsFor(file: string): ParserPlugin[] {
+export function pluginsFor(file: string): ParserPlugin[] {
     if (file.endsWith('.tsx')) {
         return ['jsx', 'typescript', 'decorators'];
     }
@@ -73,7 +75,7 @@ function pluginsFor(file: string): ParserPlugin[] {
 }
 
 /** Percorre a árvore do Babel chamando `callback` para cada nó. */
-function walkTree(node: t.Node, callback: (node: t.Node) => void): void {
+export function walkTree(node: t.Node, callback: (node: t.Node) => void): void {
     callback(node);
     for (const key of Object.keys(node) as (keyof t.Node)[]) {
         if (key === 'loc' || key === 'leadingComments' || key === 'trailingComments' || key === 'innerComments') {

@@ -291,6 +291,42 @@ npx tokentidy fix src/components --dry-run    # troca só aqui
 
 O resultado pode ser diferente de uma execução completa: veja [Analisando parte de um projeto](check.md#analisando-parte-de-um-projeto). Para a resposta final, analise o projeto inteiro.
 
+## Valores que são quase um token
+
+```css
+/* a.css */
+:root { --space-m: 16px; }
+.used { padding: var(--space-m); }
+.card { padding: 15px; }
+.card-b { padding: 16px; }
+```
+
+O `fix` troca o `16px`; o `15px` fica, porque não é o mesmo valor. Para ver o que o `--approximate` faria, sem mudar nada:
+
+```bash
+npx tokentidy fix --approximate --no-input
+```
+
+```
+.card padding: 15px ×1 → var(--space-m) (16px)
+  a.css:3:18	padding: 15px → var(--space-m)	+1px
+```
+
+Num terminal, `npx tokentidy fix --approximate` mostra o mesmo grupo e pergunta `Apply? [y]es [n]o [a]ll in this group [q]uit`. A resposta fica salva no `tokentidy.decisions.json`. Mais no [fix](fix.md#valores-próximos-de-um-token---approximate).
+
+## Conferindo os arquivos de tokens
+
+```bash
+npx tokentidy validate
+```
+
+```
+design-tokens/brand.tokens.json	error	reference/broken	/color/link/$value	{color.primery} does not exist
+1 file checked; 1 problem
+```
+
+O quarto campo diz onde o problema está dentro do arquivo. Mais no [validate](validate.md).
+
 ## Usando o resultado em scripts
 
 Os dados vão para a saída padrão e o resumo para a saída de erro, então os pipes recebem só os dados.

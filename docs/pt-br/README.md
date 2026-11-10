@@ -4,7 +4,7 @@
 
 Uma ferramenta de linha de comando criada como meu **Trabalho de Conclusão de Curso (TCC)** para ajudar a manter o código front-end **fiel ao design system**. Ela encontra valores visuais fixos no código (como `#4f46e5`, `17px` ou `font-family: Arial`), aponta qual **design token** deveria ser usado no lugar, corrige o código com segurança e, quando o projeto ainda não tem tokens, ajuda a criá-los.
 
-> ⚠️ Em desenvolvimento (versão `0.0.x`: cada recurso é uma versão patch; a `0.1.0` será a primeira com todos os recursos planejados). Hoje o TokenTidy encontra valores fixos em CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) e Angular, gera design tokens a partir dos repetidos e troca valores fixos por tokens de exatamente o mesmo valor. Veja o [roadmap](#️-roadmap).
+> ⚠️ Em desenvolvimento (versão `0.0.x`: cada recurso é uma versão patch; a `0.1.0` será a primeira com todos os recursos planejados). Hoje o TokenTidy encontra valores fixos em CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) e Angular, gera design tokens a partir dos repetidos (com temas claro/escuro e um módulo JS para canvas e gráficos), troca valores fixos por tokens (valores próximos só com a sua autorização e as guardas de coerência), compara micro-frontends e valida arquivos de tokens DTCG. Veja o [roadmap](#️-roadmap).
 
 ```bash
 npm install -D github:laiscoutinho/tokentidy
@@ -34,12 +34,15 @@ Novo na linha de comando ou em design tokens? Leia nesta ordem; cada página tra
 | 8 | [Comentários de ignore](ignore-comments.md) | Manter um valor intencional |
 | 9 | [generate](generate.md) | Criar tokens a partir dos valores repetidos |
 | 10 | [fix](fix.md) | Trocar valores por tokens |
-| 11 | [Configuração](configuration.md) | O arquivo `tokentidy.config.json` |
-| 12 | [Códigos de saída](exit-codes.md) | O que quer dizer o número no fim de cada comando |
-| 13 | [Scripts e CI](ci-and-scripts.md) | Scripts do npm, GitHub Actions e verificação antes do commit |
-| 14 | [Saída JSON](json-output.md) | Ler os resultados a partir de outro programa |
-| 15 | [Como funciona](how-it-works.md) | As etapas dentro do TokenTidy e os princípios dele |
-| 16 | [Exemplos](examples.md) | Execuções reais de cada comando, da primeira análise até scripts |
+| 11 | [validate](validate.md) | Conferir arquivos de tokens DTCG |
+| 12 | [Temas](themes.md) | Tokens claro e escuro a partir do tema que o código já tem |
+| 13 | [Micro-frontends](micro-frontends.md) | Vários apps de uma vez: colisões, desvios e um pacote de tokens compartilhado |
+| 14 | [Configuração](configuration.md) | O arquivo `tokentidy.config.json` |
+| 15 | [Códigos de saída](exit-codes.md) | O que quer dizer o número no fim de cada comando |
+| 16 | [Scripts e CI](ci-and-scripts.md) | Scripts do npm, GitHub Actions e verificação antes do commit |
+| 17 | [Saída JSON](json-output.md) | Ler os resultados a partir de outro programa |
+| 18 | [Como funciona](how-it-works.md) | As etapas dentro do TokenTidy e os princípios dele |
+| 19 | [Exemplos](examples.md) | Execuções reais de cada comando, da primeira análise até scripts |
 
 ---
 
@@ -64,9 +67,9 @@ O **TokenTidy** ataca dois problemas: **detectar e corrigir desvios** onde já e
 |---|---|
 | 🔍 **Detectar** | Varre o projeto e encontra valores visuais fixos (cores, espaçamentos, tamanhos, bordas arredondadas, tipografia, sombras, animação…), com arquivo, linha e coluna |
 | 🎯 **Sugerir** | Compara cada valor com os tokens do projeto e aponta o token exato ou o mais próximo, explicando a escolha |
-| 🔁 **Corrigir** | Troca valores por tokens editando só o trecho necessário, com prévia (`--dry-run`) e, por padrão, só para valores exatamente iguais |
+| 🔁 **Corrigir** | Troca valores por tokens editando só o trecho necessário, com prévia (`--dry-run`); valores próximos só quando você autoriza e as guardas de coerência permitem |
 | 🏷️ **Gerar** | Quando o projeto não tem tokens, agrupa os valores repetidos e propõe um arquivo de tokens com nomes conhecidos |
-| 🛡️ **Verificar** | Saída previsível, `--json` e códigos de saída próprios para rodar no CI e em hooks de pre-commit |
+| 🛡️ **Verificar** | Saída previsível, `--json` e códigos de saída próprios para rodar no CI e em hooks de pre-commit; o `validate` confere os arquivos de tokens |
 
 O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (a propriedade, o seletor, as declarações ao lado) antes de decidir se ele deveria ser um token. Mais em [Como funciona](how-it-works.md).
 
@@ -81,7 +84,7 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | CSS-in-JS: styled-components, Emotion, prop `css`, `sx` do MUI | React Native |
 | Angular: estilos de componentes, arquivos de estilo, templates, `host`, `@HostBinding`, `Renderer2.setStyle` | |
 | HTML (`<style>` e `style=""`) | Inteligência artificial e serviços externos |
-| Arquivos de design tokens no formato [DTCG](https://www.designtokens.org/) | |
+| Arquivos de design tokens no formato [DTCG](https://www.designtokens.org/), o Resolver Module para temas, e tokens de pacotes de design system instalados e de temas JS | |
 
 ---
 
@@ -111,12 +114,18 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | Avisos sobre tokens: nomes desconhecidos, `$deprecated`, valores reserva do `var()` que discordam, tokens sem uso | 🟢 |
 | Baseline para projetos que já têm violações | 🟢 |
 | Uso no CI e publicação no npm | 🟡 CI em Linux/Windows/macOS |
-| Correção de valores próximos de um token (`fix --approximate`) | ⚪ |
 | Argumentos e padrões de mixin do SCSS, mapas `mat.*-overrides` | 🟢 |
 | Objetos de estilo fora do `style={{}}`, estilos no DOM, canvas e gráficos | 🟢 |
 | CSS-in-JS (styled-components, Emotion, `sx`) | 🟢 |
 | `host`, `@HostBinding` e `Renderer2.setStyle` do Angular | 🟢 |
 | Relatórios: `check --summary`, `--format github`, `schemaVersion` | 🟢 |
+| Tokens de pacotes npm e de temas JS; alias semântico sugerido no lugar de um primitivo | 🟢 |
+| Guardas de coerência (estados, contraste, ordem dos espaçamentos, raio aninhado, escala tipográfica, variantes) | 🟢 |
+| Consolidação de valores próximos no `generate`; `fix --approximate` com pergunta, `--yes`, `--no-input` e decisões salvas | 🟢 |
+| Módulo `tokens.ts` e `fix` para canvas e bibliotecas de gráficos | 🟢 |
+| Micro-frontends: colisões no `:root`, desvios, versões do design system, `generate --shared` | 🟢 |
+| `validate` contra o schema DTCG 2025.10 e regras de referência | 🟢 |
+| Temas claro/escuro com o Resolver Module do DTCG | 🟢 |
 | Unidades relativas (`%`, `vw`, `vh`): comparar com valores absolutos usados no mesmo papel | ⚪ |
 | Avaliação comparativa nos projetos base | ⚪ |
 | Escrita do texto do TCC | ⚪ |
@@ -138,8 +147,13 @@ tokentidy/
 │   ├── values/           # normalização de valores e informações de cor
 │   ├── token-index.ts    # tokens que o projeto já define, e onde cada sintaxe funciona
 │   ├── generate/         # geração de tokens: agrupamento, nomes (naming/), arquivos de saída (output/)
+│   ├── check/            # sugestões de token, baseline, resumo, anotações do GitHub, micro-frontends
+│   ├── coherence/        # modelo de elemento e guardas de coerência (estados, contraste, espaçamento, raio, tipografia)
+│   ├── consolidate/      # valores próximos juntados por papel, e as decisões salvas
 │   ├── fix/              # correção automática: candidatos a token, plano, diff, aplicação segura
+│   ├── validate/         # verificação do schema e das referências DTCG
 │   └── safe-write.ts     # gravação atômica dentro do projeto
+├── schemas/              # schemas JSON do DTCG 2025.10 usados pelo validate
 ├── test/                 # testes automatizados e projetos de exemplo (fixtures)
 └── docs/                 # documentação de uso (inglês, com traduções em pt-br/)
 ```

@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { CLI_ENTRY, FIXTURES, copyFixture } from '../helpers.ts';
+import { CLI_ENTRY, FIXTURES, copyFixture, tempDir } from '../helpers.ts';
 
 const project = path.join(FIXTURES, 'basic-project');
 
@@ -66,6 +66,37 @@ test('a missing path goes to stderr and exits with 2', () => {
     assert.equal(status, 2);
     assert.equal(stdout, '');
     assert.match(stderr, /Path not found: \/path\/that\/does\/not\/exist/);
+});
+
+test('fix with a --tokens folder that does not exist is a usage error, not a project without tokens', () => {
+    const { stdout, stderr, status } = run('fix', project, '--dry-run', '--tokens', 'no-such-tokens');
+
+    assert.equal(status, 2);
+    assert.equal(stdout, '');
+    assert.match(stderr, /Tokens folder not found: no-such-tokens/);
+});
+
+test('fix on one app of a monorepo can use the shared tokens folder next to it', async () => {
+    const dir = await tempDir();
+    try {
+        await mkdir(path.join(dir, 'apps', 'checkout'), { recursive: true });
+        await mkdir(path.join(dir, 'apps', 'cart'), { recursive: true });
+        await writeFile(path.join(dir, 'package.json'), '{"workspaces":["apps/*"]}\n');
+        await writeFile(path.join(dir, 'apps', 'checkout', 'package.json'), '{}\n');
+        await writeFile(path.join(dir, 'apps', 'cart', 'package.json'), '{}\n');
+        await writeFile(path.join(dir, 'apps', 'checkout', 'a.css'), '.a { color: #4f46e5; }\n');
+        await writeFile(path.join(dir, 'apps', 'cart', 'a.css'), '.a { color: #4f46e5; }\n');
+        const shared = runIn(dir, 'generate', '.', '--shared', 'packages/tokens');
+        assert.equal(shared.status, 0, shared.stderr);
+
+        // A raiz do app (com o próprio package.json) não contém a pasta compartilhada: a raiz passa a ser a comum
+        const { stderr, status } = runIn(dir, 'fix', 'apps/checkout', '--tokens', 'packages/tokens');
+        assert.equal(status, 0, stderr);
+        assert.match(await readFile(path.join(dir, 'apps', 'checkout', 'a.css'), 'utf8'), /^\.a \{ color: var\(--color-[\w-]+\); \}\n$/);
+        assert.equal(await readFile(path.join(dir, 'apps', 'cart', 'a.css'), 'utf8'), '.a { color: #4f46e5; }\n', 'só o app pedido muda');
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });
 
 test('an unknown option is a usage error: exit code 2', () => {

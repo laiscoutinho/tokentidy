@@ -90,14 +90,21 @@ async function runCheck(paths: string[], options: CheckOptions): Promise<void> {
         minOccurrences: config.minOccurrences,
         gridBase: config.gridBase,
     });
-    process.exitCode = result.findings.length > 0 || result.errors.length > 0 ? EXIT.findings : EXIT.ok;
+    const { analyzeMicroFrontends, detectProjects } = await import('../check/microfrontends.ts');
+    const projects = await detectProjects(paths.length > 0 ? paths : ['.'], analysis.root);
+    const microFrontends = projects.length >= 2 ? await analyzeMicroFrontends(analysis, projects) : [];
+    const collisions = microFrontends.some((issue) => issue.severity === 'violation');
+    process.exitCode = result.findings.length > 0 || result.errors.length > 0 || collisions ? EXIT.findings : EXIT.ok;
 
     if (options.json) {
+        // `elements` é insumo interno das guardas, e pode ser enorme
+        const { elements: _elements, ...data } = result;
         console.log(JSON.stringify({
             schemaVersion: JSON_SCHEMA_VERSION,
-            ...result,
+            ...data,
             ...(options.baseline === undefined ? {} : { baselined }),
             ...(summary ? { summary } : {}),
+            ...(projects.length >= 2 ? { microFrontends: { projects, issues: microFrontends } } : {}),
         }, null, 2));
         return;
     }
@@ -105,7 +112,7 @@ async function runCheck(paths: string[], options: CheckOptions): Promise<void> {
     if (options.format === 'github') {
         const { githubAnnotations } = await import('../check/github.ts');
         // Relativo à pasta atual: no Actions é a raiz do repositório, que pode não ser a do projeto
-        const annotations = githubAnnotations(result, (file) => display(result, file).replaceAll('\\', '/'));
+        const annotations = githubAnnotations({ ...result, microFrontends }, (file) => display(result, file).replaceAll('\\', '/'));
         if (annotations.length > 0) {
             process.stdout.write(`${annotations.join('\n')}\n`);
         }
@@ -126,6 +133,8 @@ async function runCheck(paths: string[], options: CheckOptions): Promise<void> {
     const lines = [
         ...result.findings.map((item) => ({ item, severity: 'violation' })),
         ...result.review.map((item) => ({ item, severity: 'review' })),
+        ...result.aliasHints.map((hint) => ({ item: { ...hint, rule: 'token/prefer-alias', value: hint.token, suggestion: { token: hint.alias, match: 'exact' as const } }, severity: 'suggestion' })),
+        ...microFrontends.map((item) => ({ item, severity: item.severity as string })),
     ].sort((a, b) => (a.item.file < b.item.file ? -1 : a.item.file > b.item.file ? 1 : 0)
         || a.item.line - b.item.line || a.item.column - b.item.column);
     // Uma escrita só: milhares de `console.log` custam mais que a análise em projeto grande
@@ -133,11 +142,18 @@ async function runCheck(paths: string[], options: CheckOptions): Promise<void> {
         process.stdout.write(`${lines.map(({ item, severity }) => {
             const columns = `${display(result, item.file)}:${item.line}:${item.column}\t${severity}\t${item.rule}\t${printable(item.property)}\t${printable(oneLine(item.value))}`;
             const suggestion = 'suggestion' in item ? (item as Finding).suggestion : undefined;
-            return suggestion ? `${columns}\t${suggestionText(suggestion, item.type === 'color')}` : columns;
+            if ('detail' in item) {
+                return `${columns}\t${printable(item.detail)}`;
+            }
+            return suggestion ? `${columns}\t${suggestionText(suggestion, 'type' in item && item.type === 'color')}` : columns;
         }).join('\n')}\n`);
     }
     printDiagnostics(result);
     printCheckSummary(result, baselined);
+    if (projects.length >= 2) {
+        const count = (rule: string) => microFrontends.filter((issue) => issue.rule === rule).length;
+        console.error(`${projects.length} micro-frontends: ${count('mfe/root-collision')} global token collisions, ${count('mfe/drift')} role drifts, ${count('mfe/version-mismatch')} design-system version mismatches`);
+    }
     if (result.repeatedWithoutToken.length > 0) {
         const values = new Set(result.repeatedWithoutToken.map((f) => `${f.type}\u0000${normalizeFinding(f)}`)).size;
         console.error(`${values} repeated ${values === 1 ? 'value has' : 'values have'} no token yet; run tokentidy generate --extend`);

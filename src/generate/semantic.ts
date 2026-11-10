@@ -24,7 +24,7 @@ export interface SemanticAlias {
 }
 
 /** Papel da cor pela propriedade. Propriedades sem papel claro (`fill`, `caret-color`) ficam de fora. */
-function roleOf(property: string): string | undefined {
+export function roleOf(property: string): string | undefined {
     if (property === 'color') {
         return 'text';
     }
@@ -78,6 +78,13 @@ function contextOf(selector: string | undefined): { intent: string; state?: stri
         return undefined;
     }
     return states[0] ? { intent: intents[0]!, state: states[0] } : { intent: intents[0]! };
+}
+
+/** Caminho do alias para uma cor usada aqui (`['color', 'text', 'danger']`), se o papel for inequívoco. */
+export function semanticPath(property: string, selector: string | undefined): string[] | undefined {
+    const role = roleOf(property);
+    const context = contextOf(selector);
+    return role && context ? ['color', role, context.intent, ...(context.state ? [context.state] : [])] : undefined;
 }
 
 /** Aliases das cores com papel inequívoco e usados pelo menos `minOccurrences` vezes. */
