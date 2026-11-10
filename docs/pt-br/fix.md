@@ -22,6 +22,55 @@ Nesta ordem:
 2. um **token escrito à mão** no projeto: uma custom property global (`:root`/`html`/`body`, nunca redefinida com outro valor por um tema ou media query), ou um `$x`/`@x` de nível superior visível no arquivo (no mesmo arquivo, ou em um arquivo que ele carrega com `@import`/`@use … as *`). Entre dois, vence o mais usado, e um empate é pulado como `ambiguous-token`;
 3. um **token gerado** da pasta de tokens (`design-tokens/`, ou `output` na configuração), quando o arquivo dele existe: `tokens.css` para `var()`, `_tokens.scss` para `$x`, `_tokens.less` para `@x`.
 
+### Tokens escritos à mão
+
+Você não precisa do `generate` nem de um arquivo DTCG. Basta um `tokens.css` assim:
+
+```css
+:root {
+  --space-4: 16px;
+  --radius-md: 8px;
+  --font-size-base: 16px;
+}
+```
+
+`16px` é espaçamento num `padding` e tamanho de fonte num `font-size`. Então o `fix` precisa saber o que cada token é. Ele olha estas fontes, nesta ordem, e para na primeira que responde:
+
+1. **Como o projeto usa o token:** `font-size: var(--space-4)` faz do `--space-4` um tamanho de fonte.
+2. **O `$type`** de um token DTCG (`dimension` também é lido pelo caminho: `space.4` é espaçamento).
+3. **O nome.** Foi a equipe que escolheu, então ele vale como uma declaração. A tabela abaixo lista as palavras. O nome precisa apontar um só tipo, e o valor precisa ter a forma certa para ele (um comprimento para espaçamento, um inteiro para `z-index`, um tempo para duração).
+4. **O valor:** uma cor é uma cor.
+
+| Palavras no nome | Tipo |
+|---|---|
+| `space`, `spacing`, `spacer`, `gap`, `gutter`, `inset`, `stack` | espaçamento |
+| `radius`, `radii`, `rounded`, `corner`, `border-radius` | raio |
+| `font-size`, `text`, `fs` | tamanho de fonte |
+| `line-height`, `leading` | altura de linha |
+| `letter-spacing`, `tracking` | espaçamento entre letras |
+| `font-weight`, `weight` | peso da fonte |
+| `font`, `font-family`, `typeface` | família da fonte |
+| `border`, `border-width`, `stroke` | largura da borda |
+| `shadow`, `elevation` | sombra |
+| `z`, `z-index`, `layer` | z-index |
+| `opacity`, `alpha` | opacidade |
+| `duration` / `ease`, `easing` | duração / curva |
+| `breakpoint`, `bp`, `screen` / `container` | breakpoint / container |
+
+O nome é separado por `-`, `_`, `.` e camelCase. Um token não é usado quando nada diz o tipo dele. Exemplos: `--card-16` (sem tipo no nome), `--space-radius` (dois tipos), `--size-4` (`size` pode ser espaçamento ou tamanho de um elemento) e `--space-x: #fff` (o valor não combina). Um valor assim é contado como sem token.
+
+Os tokens escritos à mão são lidos do projeto inteiro, mesmo quando o `fix` roda numa pasta só. Se você os guarda numa pasta própria, pode indicá-la: `--tokens tokens`. Se essa pasta não tem tokens gerados pelo TokenTidy, ela é lida como escrita à mão. Os arquivos DTCG `.json` dela contam mesmo sem o sufixo `.tokens.json`.
+
+### Um arquivo DTCG ainda não compilado
+
+Um arquivo DTCG (`*.tokens.json`) também é uma fonte. Os tokens dele recebem o nome que o Style Dictionary dá: o caminho unido por `-` (`space.4` → `var(--space-4)`). Se nenhum CSS do projeto define esse nome ainda, o `fix` faz a troca mesmo assim e avisa:
+
+```
+Tokens from tokens/design.tokens.json are used as var() but no CSS defines them yet; compile it to CSS (tokentidy generate writes them with the same names, or use Style Dictionary) and load the result
+```
+
+Se o CSS compilado já está no projeto, é o mesmo token: ele é usado uma vez, sem aviso.
+
 ## Como o token é escrito
 
 | Onde | Escrito como |
@@ -123,8 +172,11 @@ Apply? [y]es [n]o [a]ll in this group [q]uit
 Na saída de erro:
 
 ```
-12 values replaced in 4 files; 1 skipped; 9 without a token; 10 violations remain
+src/app.css:1:28	no-token	used fewer than 2 times	#ffffff
+12 values replaced in 4 files; 1 skipped; 9 without a token (1 used fewer than 2 times); 10 violations remain
 ```
+
+Um valor usado menos vezes que o `minOccurrences` não ganha token do `generate`, e o `fix` o deixa como está. Cada um é listado numa linha, para você ver que ele ficou de fora de propósito. Para dar um token a ele, escreva-o à mão ou diminua o `minOccurrences`.
 
 Quando tokens gerados foram escritos como `var()`, ele também lembra que o app precisa carregar `design-tokens/tokens.css`.
 
@@ -132,7 +184,7 @@ Quando tokens gerados foram escritos como `var()`, ele também lembra que o app 
 
 | Opção | O que faz |
 |---|---|
-| `--tokens <dir>` | Pasta com os tokens gerados (padrão: `output` da configuração, `design-tokens`). Fora do app, como um pacote compartilhado num monorepo, a raiz passa a ser a pasta que contém os dois ([micro-frontends](micro-frontends.md)) |
+| `--tokens <dir>` | Pasta com os tokens: gerados, ou escritos à mão ([acima](#tokens-escritos-à-mão)) (padrão: `output` da configuração, `design-tokens`). Fora do app, como um pacote compartilhado num monorepo, a raiz passa a ser a pasta que contém os dois ([micro-frontends](micro-frontends.md)) |
 | `--config <file>` | Arquivo de configuração (padrão: `tokentidy.config.json` no projeto) |
 | `--dry-run` | Mostra um diff unificado em vez de gravar |
 | `--json` | Mostra o resultado em JSON ([Saída JSON](json-output.md)) |

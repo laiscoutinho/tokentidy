@@ -94,11 +94,12 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
             dryRun: result.dryRun,
             files: result.files.map(({ file, replacements, diff }) => ({
                 file,
-                replacements: replacements.map(({ finding, token, source, text, reason, definedAt, alternatives }) => ({
+                replacements: replacements.map(({ finding, token, source, text, reason, definedAt, alternatives, uncompiledFrom }) => ({
                     line: finding.line, column: finding.column, type: finding.type, property: finding.property,
                     value: finding.value, token, source, text, reason,
                     ...(definedAt ? { definedAt } : {}),
                     ...(alternatives ? { alternatives } : {}),
+                    ...(uncompiledFrom ? { uncompiledFrom } : {}),
                 })),
                 ...(result.dryRun ? { diff } : {}),
             })),
@@ -115,6 +116,10 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
             } : {}),
             withoutToken: result.withoutToken.length,
             repeatedWithoutToken: result.repeatedWithoutToken.map((finding) => ({
+                file: finding.file, line: finding.line, column: finding.column, type: finding.type,
+                property: finding.property, value: finding.value,
+            })),
+            belowThreshold: result.belowThreshold.map((finding) => ({
                 file: finding.file, line: finding.line, column: finding.column, type: finding.type,
                 property: finding.property, value: finding.value,
             })),
@@ -143,7 +148,7 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
         console.error(`${display(result, finding.file)}:${finding.line}:${finding.column}\tskipped\t${reason}\t${printable(oneLine(finding.value))}\t${printable(message)}`);
     }
     printDiagnostics(after);
-    printFixSummary(result, tokensDir);
+    printFixSummary(result, tokensDir, config.minOccurrences);
 }
 
 /**
@@ -158,7 +163,7 @@ function printableDiff(diff: string): string {
     }).join('\n');
 }
 
-function printFixSummary(result: FixResult, tokensDir: string): void {
+function printFixSummary(result: FixResult, tokensDir: string, minOccurrences: number): void {
     const replaced = result.files.reduce((sum, f) => sum + f.replacements.length, 0);
     const remaining = result.after.findings.length;
     if (result.tokens === 0 && result.withoutToken.length > 0) {
@@ -168,9 +173,13 @@ function printFixSummary(result: FixResult, tokensDir: string): void {
     const parts = [
         `${replaced} ${replaced === 1 ? 'value' : 'values'} ${verb} in ${result.files.length} ${result.files.length === 1 ? 'file' : 'files'}`,
         `${result.skipped.length} skipped`,
-        `${result.withoutToken.length} without a token`,
+        `${result.withoutToken.length} without a token${result.belowThreshold.length > 0 ? ` (${result.belowThreshold.length} used fewer than ${minOccurrences} times)` : ''}`,
         `${remaining} ${remaining === 1 ? 'violation remains' : 'violations remain'}`,
     ];
+    // Um a um: quem avalia a saída vê que o valor foi encontrado e por que ficou solto
+    for (const finding of result.belowThreshold) {
+        console.error(`${display(result, finding.file)}:${finding.line}:${finding.column}\tno-token\tused fewer than ${minOccurrences} times\t${printable(oneLine(finding.value))}`);
+    }
     console.error(parts.join('; '));
     if (result.tokens > 0 && result.repeatedWithoutToken.length > 0) {
         const values = new Set(result.repeatedWithoutToken.map((f) => `${f.type}\u0000${normalizeFinding(f)}`)).size;
@@ -182,5 +191,11 @@ function printFixSummary(result: FixResult, tokensDir: string): void {
     const generatedVar = result.files.some((f) => f.replacements.some((r) => r.source !== 'project' && r.token.startsWith('--')));
     if (generatedVar) {
         console.error(`Generated tokens are used as var(); make sure the app loads ${displayPath(path.join(tokensDir, 'tokens.css'))} (import it in the global stylesheet or add it to the build)`);
+    }
+    // Um DTCG escrito à mão sem CSS: `var(--x)` só resolve depois de compilado e carregado
+    const uncompiled = [...new Set(result.files.flatMap((f) => f.replacements.flatMap((r) => (r.uncompiledFrom ? [r.uncompiledFrom] : []))))].sort();
+    if (uncompiled.length > 0) {
+        const files = uncompiled.map((file) => displayPath(path.join(result.root, file))).join(', ');
+        console.error(`Tokens from ${files} are used as var() but no CSS defines them yet; compile ${uncompiled.length === 1 ? 'it' : 'them'} to CSS (tokentidy generate writes them with the same names, or use Style Dictionary) and load the result`);
     }
 }

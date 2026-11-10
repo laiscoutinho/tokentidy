@@ -126,6 +126,7 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | Micro-frontends: colisões no `:root`, desvios, versões do design system, `generate --shared` | 🟢 |
 | `validate` contra o schema DTCG 2025.10 e regras de referência | 🟢 |
 | Temas claro/escuro com o Resolver Module do DTCG | 🟢 |
+| Tokens escritos à mão no `fix` sem DTCG (tipo pelo uso, `$type` ou nome), DTCG não compilado, valores usados uma vez listados | 🟢 |
 | Unidades relativas (`%`, `vw`, `vh`): comparar com valores absolutos usados no mesmo papel | ⚪ |
 | Avaliação comparativa nos projetos base | ⚪ |
 | Escrita do texto do TCC | ⚪ |

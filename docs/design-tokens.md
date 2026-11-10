@@ -51,7 +51,7 @@ Code that uses semantic tokens says *why* a color is there, not only *which* col
 | Less variables | `@spacing-4: 16px;` |
 | [DTCG](https://www.designtokens.org/) JSON (`*.tokens.json`) | The W3C community format, read by tools such as Style Dictionary and Tokens Studio |
 
-TokenTidy reads all of them as the project's existing tokens, and writes all of them when it [generates tokens](generate.md).
+TokenTidy reads all of them as the project's existing tokens, and writes all of them when it [generates tokens](generate.md). Tokens you write by hand are enough for [`fix`](fix.md#hand-written-tokens): a name like `--space-4` or `--radius-md` says what the token is for.
 
 ## Where TokenTidy fits
 

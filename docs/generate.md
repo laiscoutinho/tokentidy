@@ -51,12 +51,18 @@ The standard output lists the files written; the summary goes to the error outpu
 design-tokens/tokens.tokens.json
 design-tokens/tokens.css
 design-tokens/_tokens.scss
-7 new tokens, 0 kept, 0 semantic aliases
-16 values used fewer than 2 times were not turned into tokens
+7 new tokens, 0 kept, 1 semantic alias
+1 semantic alias names the role of a value:
+  color.text.danger -> color.red.500	(2 uses)
+2 values used fewer than 2 times were not turned into tokens:
+  color	#ffffff	src/app.css:12:14 (1 use)
+  radius	3px	src/card.css:4:18 (1 use)
 diagnosis	color	9 values, 5 tokens, 82% of uses on a token
 diagnosis	spacing	18 values, 6 tokens, 71% of uses on a token; above Carbon's 13 spacing steps, 9 values used once
 suggestion	spacing	10px is off the 4px grid (nearest: 8px or 12px)
 ```
+
+Each semantic alias is listed with the primitive it points to: that name is what [`fix`](fix.md) writes where the role applies. Each value left out by the threshold is listed with its first place in the code.
 
 With `--dry-run`, each file is printed as `==> file <==` followed by its content (like the `head` command), and nothing is written.
 
@@ -102,7 +108,7 @@ Aliases come already resolved, since there is no `var()` there. [`fix`](fix.md#c
 
 ## Tokens the project already has
 
-**Tokens written by hand** (`--x` in `:root`, `$x`, `@x`, `*.tokens.json`) are always reused: they are your decisions.
+**Tokens written by hand** (`--x` in `:root`, `$x`, `@x`, `*.tokens.json`) are always reused: they are your decisions. A token the code doesn't use yet gets its type from its name or `$type`, as in [`fix`](fix.md#hand-written-tokens): with `--space-4: 16px`, a `padding: 16px` reuses it, and no `--spacing-4` is created.
 
 - If a token already exists for a value and works everywhere the value is used (a CSS custom property), it is reused and listed (`N values already have a token in the project`).
 - If the existing token doesn't work in some place (a `$scss` variable, but the value is also used in JSX or an Angular template), a CSS token is created even for a single use, and the SCSS variable is recorded as its equivalent.

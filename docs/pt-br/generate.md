@@ -51,12 +51,18 @@ A saída padrão lista os arquivos gravados; o resumo vai para a saída de erro:
 design-tokens/tokens.tokens.json
 design-tokens/tokens.css
 design-tokens/_tokens.scss
-7 new tokens, 0 kept, 0 semantic aliases
-16 values used fewer than 2 times were not turned into tokens
+7 new tokens, 0 kept, 1 semantic alias
+1 semantic alias names the role of a value:
+  color.text.danger -> color.red.500	(2 uses)
+2 values used fewer than 2 times were not turned into tokens:
+  color	#ffffff	src/app.css:12:14 (1 use)
+  radius	3px	src/card.css:4:18 (1 use)
 diagnosis	color	9 values, 5 tokens, 82% of uses on a token
 diagnosis	spacing	18 values, 6 tokens, 71% of uses on a token; above Carbon's 13 spacing steps, 9 values used once
 suggestion	spacing	10px is off the 4px grid (nearest: 8px or 12px)
 ```
+
+Cada alias semântico é listado com o primitivo para o qual ele aponta: esse nome é o que o [`fix`](fix.md) escreve onde o papel se aplica. Cada valor que ficou de fora pelo limite é listado com o primeiro lugar onde aparece no código.
 
 Com `--dry-run`, cada arquivo aparece como `==> arquivo <==` seguido do conteúdo (como o comando `head`), e nada é gravado.
 
@@ -102,7 +108,7 @@ Os aliases já vêm resolvidos, já que ali não existe `var()`. O [`fix`](fix.m
 
 ## Tokens que o projeto já tem
 
-**Tokens escritos à mão** (`--x` no `:root`, `$x`, `@x`, `*.tokens.json`) são sempre reaproveitados: são decisões suas.
+**Tokens escritos à mão** (`--x` no `:root`, `$x`, `@x`, `*.tokens.json`) são sempre reaproveitados: são decisões suas. Um token que o código ainda não usa ganha o tipo pelo nome ou pelo `$type`, como no [`fix`](fix.md#tokens-escritos-à-mão): com `--space-4: 16px`, um `padding: 16px` o reaproveita, e nenhum `--spacing-4` é criado.
 
 - Se já existe um token para um valor e ele funciona em todo lugar onde o valor é usado (uma custom property do CSS), ele é reaproveitado e listado (`N values already have a token in the project`).
 - Se o token existente não funciona em algum lugar (uma variável `$scss`, mas o valor também aparece em JSX ou em um template Angular), um token CSS é criado mesmo com um uso só, e a variável SCSS fica registrada como equivalente.

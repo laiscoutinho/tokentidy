@@ -94,9 +94,10 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
 | Field | Meaning |
 |---|---|
 | `root`, `dryRun` | As above |
-| `files` | Each changed file, with its `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason`, and `definedAt`/`alternatives` when they apply) and, with `--dry-run`, its `diff` |
+| `files` | Each changed file, with its `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason`, and `definedAt`/`alternatives` when they apply; `uncompiledFrom` is the DTCG file of a token that no CSS defines yet) and, with `--dry-run`, its `diff` |
 | `skippedValues` | Values not replaced, with the reason ([fix](fix.md#values-it-skips)); `alternatives` lists the tokens in a tie |
 | `withoutToken` | Values with no token of the same value |
+| `belowThreshold` | The part of those used fewer than `minOccurrences` times (`file`, `line`, `column`, `type`, `property`, `value`) |
 | `repeatedWithoutToken` | The part of those that `generate` would turn into tokens: the tokens folder is out of date |
 | `approximate` | With `--approximate`: each group with `id`, `type`, `label`, `to`, `token`, `status` (`applied`, `rejected`, `pending`, `blocked`), `from`, `changes`, `blocked`, `kept` |
 | `remaining` | Violations left after the fix |

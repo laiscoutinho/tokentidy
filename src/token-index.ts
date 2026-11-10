@@ -7,6 +7,7 @@
 import { rulesForProperty } from './analysis/rules.ts';
 import { normalizeValue } from './values/normalize.ts';
 import { colorInfo } from './values/color-info.ts';
+import { typeFromName } from './values/type-from-name.ts';
 import type { Host, TokenDefinition, TokenReference, TokenType } from './types.ts';
 
 export interface ReusableDefinition {
@@ -26,8 +27,9 @@ export const DTCG_TYPES = new Map<string, TokenType>([
 /**
  * Tokens do projeto que podem substituir um valor solto. O tipo vem de onde o token é usado
  * (`var(--x)` em `padding` → espaçamento) ou do próprio valor quando ele não deixa dúvida (uma cor).
- * Token sem uso e com valor ambíguo (`$base: 16px`: tamanho de fonte? espaçamento?) não entra:
- * reutilizar por palpite seria uma afirmação falsa.
+ * Sem uso, o nome decide quando declara um único tipo e o valor combina (`--space-4: 16px` → espaçamento):
+ * o nome é a equipe dizendo o que o token é. Token sem uso, com nome que não diz o tipo e valor ambíguo
+ * (`$base: 16px`: tamanho de fonte? espaçamento?) não entra: reutilizar por palpite seria uma afirmação falsa.
  * Tokens que apontam para outros (`--a: var(--b)`) também não: o valor final depende de outro arquivo.
  * Custom property só entra se vale no documento todo e tem um único valor: redefinida com outro valor é
  * variável de tema, e trocar o valor solto por ela mudaria a aparência no outro tema.
@@ -72,6 +74,11 @@ function typesOf(definition: TokenDefinition, usedAs: ReadonlyMap<string, Readon
     }
     if (definition.declaredType) {
         types.add(definition.declaredType);
+    }
+    // Sem uso e sem tipo declarado, o nome é a declaração da equipe (`--space-4: 16px`, `space.4` no DTCG)
+    const named = types.size === 0 ? typeFromName(definition.name, definition.value) : undefined;
+    if (named) {
+        types.add(named);
     }
     if (types.size === 0 && colorInfo(definition.value)) {
         types.add('color');

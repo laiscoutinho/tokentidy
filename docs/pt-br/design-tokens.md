@@ -51,7 +51,7 @@ Código que usa tokens semânticos diz *por que* uma cor está ali, não só *qu
 | Variáveis Less | `@spacing-4: 16px;` |
 | JSON [DTCG](https://www.designtokens.org/) (`*.tokens.json`) | O formato da comunidade do W3C, lido por ferramentas como Style Dictionary e Tokens Studio |
 
-O TokenTidy lê todos eles como os tokens que o projeto já tem, e escreve todos quando [gera tokens](generate.md).
+O TokenTidy lê todos eles como os tokens que o projeto já tem, e escreve todos quando [gera tokens](generate.md). Tokens escritos à mão bastam para o [`fix`](fix.md#tokens-escritos-à-mão): um nome como `--space-4` ou `--radius-md` diz para que o token serve.
 
 ## Onde o TokenTidy entra
 

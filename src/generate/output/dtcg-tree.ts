@@ -16,6 +16,7 @@ import { TOKEN_TYPES } from '../generate.ts';
 import type { SemanticAlias } from '../semantic.ts';
 import { DTCG_TYPES } from '../../token-index.ts';
 import { dtcgValueOf } from './dtcg-values.ts';
+import { typeFromName } from '../../values/type-from-name.ts';
 
 /** Chave das extensões do TokenTidy no DTCG (notação de domínio invertido, como a especificação pede). */
 export const EXTENSION = 'dev.tokentidy';
@@ -175,7 +176,7 @@ export interface TreeToken {
 
 /**
  * Todos os tokens da árvore com tipo e valor. Tokens sem a extensão do TokenTidy (escritos à mão no JSON)
- * têm o tipo pelo `$type` ou pela categoria (`spacing.4`) e o valor pelo `$value`.
+ * têm o tipo pelo `$type`, pela categoria (`spacing.4`) ou pelo nome (`space.4`) e o valor pelo `$value`.
  */
 export function treeTokensOf(tree: DtcgTree): TreeToken[] {
     const result: TreeToken[] = [];
@@ -192,8 +193,10 @@ export function treeTokensOf(tree: DtcgTree): TreeToken[] {
             continue;
         }
         const category = trail[0] as TokenType;
-        const tokenType = (type ? DTCG_TYPES.get(type) : undefined) ?? (TOKEN_TYPES.includes(category) ? category : undefined);
         const css = cssValueOf(token.$value, type);
+        // `dimension`/`number` não dizem o papel: a categoria (`spacing.4`) ou o caminho (`space.4`) dizem
+        const tokenType = (type ? DTCG_TYPES.get(type) : undefined) ?? (TOKEN_TYPES.includes(category) ? category : undefined)
+            ?? (css === undefined ? undefined : typeFromName(trail.join('.'), css));
         if (tokenType && css !== undefined) {
             result.push({ path: trail, type: tokenType, key: normalizeValue(tokenType, css), occurrences });
         }

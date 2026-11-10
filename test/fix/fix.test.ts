@@ -270,7 +270,8 @@ test('the CLI exits with 1 while violations remain, 0 when clean, and --json is 
         const dry = run('--dry-run');
         assert.equal(dry.status, 1);
         assert.match(dry.stdout, /^--- a\/src\/a\.css\n\+\+\+ b\/src\/a\.css\n@@ -1 \+1 @@\n-\.a \{ padding: 16px; \}\n\+\.a \{ padding: var\(--spacing-4\); \}\n$/);
-        assert.match(dry.stderr, /1 value would be replaced in 1 file; 0 skipped; 1 without a token; 1 violation remains/);
+        assert.match(dry.stderr, /1 value would be replaced in 1 file; 0 skipped; 1 without a token \(1 used fewer than 2 times\); 1 violation remains/);
+        assert.match(dry.stderr, /^src\/b\.css:1:14\tno-token\tused fewer than 2 times\t8px$/m);
 
         const json = run('src/a.css', '--json');
         assert.equal(json.status, 0);

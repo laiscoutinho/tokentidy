@@ -94,9 +94,10 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
 | Campo | Significado |
 |---|---|
 | `root`, `dryRun` | Como acima |
-| `files` | Cada arquivo alterado, com as `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason`, e `definedAt`/`alternatives` quando se aplicam) e, com `--dry-run`, o `diff` |
+| `files` | Cada arquivo alterado, com as `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason`, e `definedAt`/`alternatives` quando se aplicam; `uncompiledFrom` é o arquivo DTCG de um token que nenhum CSS define ainda) e, com `--dry-run`, o `diff` |
 | `skippedValues` | Valores não trocados, com o motivo ([fix](fix.md#valores-que-ele-pula)); `alternatives` lista os tokens empatados |
 | `withoutToken` | Valores sem token de mesmo valor |
+| `belowThreshold` | A parte deles usada menos vezes que o `minOccurrences` (`file`, `line`, `column`, `type`, `property`, `value`) |
 | `repeatedWithoutToken` | A parte deles que o `generate` transformaria em token: a pasta de tokens está desatualizada |
 | `approximate` | Com `--approximate`: cada grupo com `id`, `type`, `label`, `to`, `token`, `status` (`applied`, `rejected`, `pending`, `blocked`), `from`, `changes`, `blocked`, `kept` |
 | `remaining` | Violações que sobraram depois da correção |

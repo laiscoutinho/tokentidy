@@ -26,6 +26,8 @@ export interface Replacement {
     alternatives?: string[];
     /** Troca aproximada, já autorizada: o valor que o token tem. */
     approximate?: string;
+    /** Token de um DTCG escrito à mão ainda sem CSS: o arquivo que precisa ser compilado e carregado. */
+    uncompiledFrom?: string;
 }
 
 export type ReplacementReason = 'alias' | 'most-used' | 'only-match' | 'generated';

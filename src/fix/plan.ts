@@ -249,6 +249,7 @@ class FilePlanner {
             ...(candidate.definition ? { definedAt: candidate.definition } : {}),
             ...(alternatives.length > 0 ? { alternatives } : {}),
             ...(approximate === undefined ? {} : { approximate }),
+            ...(candidate.uncompiledFrom ? { uncompiledFrom: candidate.uncompiledFrom } : {}),
         });
         return undefined;
     }

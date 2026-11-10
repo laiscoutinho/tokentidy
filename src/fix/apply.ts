@@ -14,7 +14,7 @@ import { assertInsideRoot, OutsideRootError, writeFileAtomic } from '../safe-wri
 import { isInside } from '../project/scope.ts';
 import type { Scope } from '../project/scope.ts';
 import type { Finding } from '../types.ts';
-import { projectTokenIndex, repeatedValues } from '../token-lookup.ts';
+import { belowThresholdValues, projectTokenIndex, repeatedValues } from '../token-lookup.ts';
 import { applyEdits, unifiedDiff } from './diff.ts';
 import { resolveApproximate } from './approximate.ts';
 import type { ApproximateGroup, ApproximateOptions } from './approximate.ts';
@@ -49,6 +49,8 @@ export interface FixResult {
     withoutToken: Finding[];
     /** Parte de `withoutToken` repetida o bastante para virar token: a pasta de tokens está desatualizada. */
     repeatedWithoutToken: Finding[];
+    /** Parte de `withoutToken` usada menos que `minOccurrences` vezes: o `generate` não cria token para ela. */
+    belowThreshold: Finding[];
     /** Quantos tokens podiam ser usados (0: o projeto não tem tokens nem pasta gerada). */
     tokens: number;
     /** Grupos de trocas aproximadas, com o destino de cada um (só com `approximate`). */
@@ -171,6 +173,7 @@ export async function fixScope(scope: Scope, options: FixOptions): Promise<FixRe
             || a.finding.offset - b.finding.offset),
         withoutToken: plan.withoutToken,
         repeatedWithoutToken: repeatedValues(plan.withoutToken, index, minOccurrences),
+        belowThreshold: belowThresholdValues(plan.withoutToken, minOccurrences),
         tokens: index.size,
         ...(resolution ? { approximate: resolution.groups } : {}),
         after: { ...after, findings: after.findings.filter((f) => !insideTokens(f.file)) },

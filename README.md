@@ -127,6 +127,7 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 | Micro-frontends: `:root` collisions, drift, design-system versions, `generate --shared` | 🟢 |
 | `validate` against the DTCG 2025.10 schema and reference rules | 🟢 |
 | Light/dark themes with the DTCG Resolver Module | 🟢 |
+| Hand-written tokens in `fix` without DTCG (type from usage, `$type` or name), uncompiled DTCG, values used once listed | 🟢 |
 | Relative units (`%`, `vw`, `vh`): compare with absolute values used in the same role | ⚪ |
 | Comparative evaluation on the base projects | ⚪ |
 | Writing the TCC text | ⚪ |

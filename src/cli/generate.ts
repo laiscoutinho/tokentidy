@@ -10,7 +10,7 @@ import type { GuardedGroup } from '../consolidate/consolidate.ts';
 import type { GenerationResult } from '../generate/generate.ts';
 import { findProjectRoot, isInside } from '../project/scope.ts';
 import { EXIT, JSON_SCHEMA_VERSION, UsageError } from './errors.ts';
-import { displayPath, link, printable, printDiagnostics } from './print.ts';
+import { displayPath, link, oneLine, printable, printDiagnostics } from './print.ts';
 
 interface GenerateOptions {
     minOccurrences?: string;
@@ -196,8 +196,20 @@ function printGenerationSummary(result: AnalysisResult, generation: GenerationRe
             console.error(`  ${printable(r.key)}\t${printable(r.definition.name)}\t${where}:${r.definition.line} (${r.count} ${r.count === 1 ? 'use' : 'uses'})`);
         }
     }
+    // Os aliases dão nome de papel ao primitivo (`color.text.danger` → `color.red.600`) e são o que o `fix` escreve ali
+    if (aliases.length > 0) {
+        console.error(`${aliases.length} semantic ${aliases.length === 1 ? 'alias names' : 'aliases name'} the role of a value:`);
+        for (const alias of aliases) {
+            console.error(`  ${printable(alias.path.join('.'))} -> ${printable(alias.target.join('.'))}\t(${alias.count} ${alias.count === 1 ? 'use' : 'uses'})`);
+        }
+    }
+    // Listados um a um: um valor usado uma vez não virou token por decisão (minOccurrences), não por ter passado despercebido
     if (belowThreshold.length > 0) {
-        console.error(`${belowThreshold.length} values used fewer than ${minOccurrences} times were not turned into tokens`);
+        console.error(`${belowThreshold.length} ${belowThreshold.length === 1 ? 'value' : 'values'} used fewer than ${minOccurrences} times ${belowThreshold.length === 1 ? 'was' : 'were'} not turned into tokens:`);
+        for (const value of belowThreshold) {
+            const first = value.occurrences[0]!;
+            console.error(`  ${value.type}\t${printable(oneLine(value.key))}\t${displayPath(path.join(result.root, first.file))}:${first.line}:${first.column} (${value.count} ${value.count === 1 ? 'use' : 'uses'})`);
+        }
     }
     for (const d of diagnosis) {
         console.error(`diagnosis\t${d.type}\t${describe(d)}`);
