@@ -20,9 +20,12 @@ export function oneLine(value: string): string {
     return value.replace(/[ \t\r\n\f]+/g, ' ');
 }
 
-/** Caminho relativo à pasta atual: o terminal e o editor transformam `arquivo:linha:coluna` em link. */
+/**
+ * Caminho relativo à pasta atual: o terminal e o editor transformam `arquivo:linha:coluna` em link.
+ * Sempre com `/`, como no JSON: a saída é a mesma em qualquer sistema, e o Windows aceita `/` nos caminhos.
+ */
 export function displayPath(file: string): string {
-    return printable(path.relative(process.cwd(), file) || '.');
+    return printable(path.relative(process.cwd(), file).split(path.sep).join('/') || '.');
 }
 
 /** Caminho de um arquivo do resultado (relativo à raiz) para exibição. */

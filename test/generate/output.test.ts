@@ -81,7 +81,7 @@ test('with many tokens, the CSS is split by category with an index and a README'
     assert.deepEqual(files.map((f) => path.relative('/out', f.file)), [
         'tokens.tokens.json', path.join('css', 'color.css'), path.join('css', 'spacing.css'), path.join('css', 'duration.css'), 'tokens.css', 'README.md',
     ]);
-    assert.match(files.find((f) => f.file === '/out/tokens.css')!.content, /@import "\.\/css\/color\.css";/);
+    assert.match(files.find((f) => f.file === path.join('/out', 'tokens.css'))!.content, /@import "\.\/css\/color\.css";/);
 });
 
 test('ownTokensOf reads back the names generated before (extend keeps them)', () => {

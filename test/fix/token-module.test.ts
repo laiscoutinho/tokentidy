@@ -8,7 +8,8 @@ import path from 'node:path';
 
 import { CLI_ENTRY, tempDir } from '../helpers.ts';
 
-const TSC = path.resolve(import.meta.dirname, '../../node_modules/.bin/tsc');
+// Pelo `node`: no Windows, `.bin/tsc` é um script de shell que o spawnSync não executa
+const TSC = path.resolve(import.meta.dirname, '../../node_modules/typescript/bin/tsc');
 
 async function withProject<T>(files: Record<string, string>, run: (dir: string) => Promise<T>): Promise<T> {
     const dir = await tempDir();
@@ -28,7 +29,7 @@ const cli = (dir: string, ...args: string[]) => spawnSync(process.execPath, [CLI
 const CANVAS = "const ctx = document.querySelector('canvas')!.getContext('2d')!;\nctx.fillStyle = '#4f46e5';\nctx.strokeStyle = '#4f46e5';\n";
 
 function typeCheck(dir: string, ...files: string[]) {
-    return spawnSync(TSC, ['--ignoreConfig', '--noEmit', '--strict', '--target', 'esnext', '--module', 'esnext', '--moduleResolution', 'bundler', '--lib', 'dom,esnext', '--types', '', ...files], { encoding: 'utf8', cwd: dir });
+    return spawnSync(process.execPath, [TSC, '--ignoreConfig', '--noEmit', '--strict', '--target', 'esnext', '--module', 'esnext', '--moduleResolution', 'bundler', '--lib', 'dom,esnext', '--types', '', ...files], { encoding: 'utf8', cwd: dir });
 }
 
 test('canvas: the token module is generated, imported, and type-checks', () => withProject({ 'src/draw.ts': CANVAS }, async (dir) => {

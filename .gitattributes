@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# Fixture com CRLF de propósito: testa as posições com fim de linha do Windows
+test/fixtures/css/crlf.css -text
