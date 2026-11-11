@@ -3,7 +3,7 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { isInside, ScopeError } from '../project/scope.ts';
+import { ignoreVerdict, isInside, ScopeError } from '../project/scope.ts';
 import { isResolverFileName, isTokenFileName, listFiles } from '../project/scanner.ts';
 import { MAX_NESTING, nestingOf, referenceProblems } from './references.ts';
 import type { TokenDocument, ValidationProblem } from './references.ts';
@@ -31,6 +31,7 @@ const toPosix = (file: string) => file.split(path.sep).join('/');
 /** Arquivos de tokens e resolvers dos caminhos pedidos. Arquivo citado por nome entra, mesmo com outro nome. */
 export async function discoverTokenFiles(paths: readonly string[], options: ValidateOptions): Promise<string[]> {
     const { root, ignore = [] } = options;
+    const verdict = ignoreVerdict(ignore);
     const found = new Set<string>();
     for (const given of paths) {
         const absolute = path.resolve(given);
@@ -45,7 +46,7 @@ export async function discoverTokenFiles(paths: readonly string[], options: Vali
         for await (const relative of listFiles(absolute)) {
             const name = path.basename(relative);
             const file = toPosix(path.relative(root, path.join(absolute, relative)));
-            if ((isTokenFileName(name) || isResolverFileName(name)) && !ignore.some((pattern) => path.matchesGlob(file, pattern))) {
+            if ((isTokenFileName(name) || isResolverFileName(name)) && verdict(file) === 'in') {
                 found.add(file);
             }
         }

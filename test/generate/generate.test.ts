@@ -95,7 +95,7 @@ test('semantic aliases come only from unambiguous roles used enough times', () =
 
     assert.deepEqual(aliases.map((a) => [a.name, a.target.join('.'), a.count]), [
         ['color-bg-primary', 'color.indigo.600', 2],
-        ['color-text-danger', 'color.red.500', 2],
+        ['color-text-danger', 'color.red.600', 2],
     ]);
     assert.deepEqual(generateTokens(times(2, 'color', 'color', '#dc2626', { selector: '.erro' }), { ...options, semanticTokens: false }).aliases, []);
 });

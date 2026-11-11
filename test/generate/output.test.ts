@@ -43,7 +43,7 @@ test('DTCG values follow the 2025.10 format', () => {
 });
 
 test('each token keeps its occurrences in the extension: the base for autofix', () => {
-    const red = (tree['color'] as Record<string, Record<string, Record<string, unknown>>>)['red']!['500']!;
+    const red = (tree['color'] as Record<string, Record<string, Record<string, unknown>>>)['red']!['600']!;
     const extension = (red['$extensions'] as Record<string, Record<string, unknown>>)[EXTENSION]!;
 
     assert.equal(extension['type'], 'color');
@@ -57,7 +57,7 @@ test('each token keeps its occurrences in the extension: the base for autofix', 
 
 test('semantic aliases are DTCG references to the primitive', () => {
     const danger = (tree['color'] as Record<string, Record<string, Record<string, unknown>>>)['text']!['danger']!;
-    assert.equal(danger['$value'], '{color.red.500}');
+    assert.equal(danger['$value'], '{color.red.600}');
 });
 
 test('CSS, SCSS and Less are generated from the DTCG tree, sorted by category and size', () => {
@@ -65,8 +65,8 @@ test('CSS, SCSS and Less are generated from the DTCG tree, sorted by category an
     const content = (name: string) => files.find((f) => f.file === path.join('/out', name))?.content;
 
     assert.deepEqual(files.map((f) => path.basename(f.file)), ['tokens.tokens.json', 'tokens.css', '_tokens.scss', '_tokens.less']);
-    assert.match(content('tokens.css')!, /:root \{\n {2}\/\* color \*\/\n {2}--color-red-500: #dc2626;\n {2}--color-text-danger: var\(--color-red-500\);\n\n {2}\/\* spacing \*\/\n {2}--spacing-2_5: 10px;\n {2}--spacing-3: 12px;/);
-    assert.match(content('_tokens.scss')!, /\$color-text-danger: \$color-red-500;/);
+    assert.match(content('tokens.css')!, /:root \{\n {2}\/\* color \*\/\n {2}--color-red-600: #dc2626;\n {2}--color-text-danger: var\(--color-red-600\);\n\n {2}\/\* spacing \*\/\n {2}--spacing-2_5: 10px;\n {2}--spacing-3: 12px;/);
+    assert.match(content('_tokens.scss')!, /\$color-text-danger: \$color-red-600;/);
     assert.match(content('_tokens.less')!, /@duration-200: 200ms;/);
 });
 
@@ -86,7 +86,7 @@ test('with many tokens, the CSS is split by category with an index and a README'
 
 test('ownTokensOf reads back the names generated before (extend keeps them)', () => {
     assert.deepEqual(ownTokensOf(tree).map((t) => [t.path.join('.'), t.key]), [
-        ['color.red.500', '#dc2626'], ['spacing.3', '12px'], ['spacing.2_5', '10px'], ['duration.200', '200ms'],
+        ['color.red.600', '#dc2626'], ['spacing.3', '12px'], ['spacing.2_5', '10px'], ['duration.200', '200ms'],
     ]);
 });
 

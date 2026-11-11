@@ -55,6 +55,7 @@ test('expectation fixtures: no false positives and no false negatives', async ()
 
     assert.deepEqual({ falsePositives, falseNegatives }, { falsePositives: [], falseNegatives: [] });
     assert.deepEqual(result.errors, []);
-    assert.deepEqual(result.warnings, []);
+    // O único aviso: `var(--fg)` sem fallback, que ninguém define e aparece uma vez só (token/undefined)
+    assert.deepEqual(result.warnings.map((w) => `${w.file}:${w.line} ${w.rule}`), ['src/edge.css:28 token/undefined']);
     assert.equal(result.ignored, 3);
 });

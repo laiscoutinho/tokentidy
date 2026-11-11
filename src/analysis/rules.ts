@@ -39,11 +39,12 @@ export interface PropertyRule {
  * - `size/no-context`: largura ou altura sem o contexto que diz o papel (container, quadrado);
  * - `breakpoint/plain-css`: breakpoint em CSS puro, onde `var()` não funciona em media query;
  * - `custom-property/unknown-use`: custom property local com medida, sem uso que diga o tipo.
- * - `value/unknown-destination`: medida passada a uma mixin que não dá para seguir.
+ * - `value/unknown-destination`: medida passada a uma mixin que não dá para seguir;
+ * - `value/hack`: truque de CSS (`1ms`, `0.1px`, `-9999em`, visually-hidden), com o motivo em `analysis/hacks.ts`.
  */
-export type ReviewRule = 'size/no-context' | 'breakpoint/plain-css' | 'custom-property/unknown-use' | 'value/unknown-destination';
+export type ReviewRule = 'size/no-context' | 'breakpoint/plain-css' | 'custom-property/unknown-use' | 'value/unknown-destination' | 'value/hack';
 
-export const REVIEW_RULES: readonly ReviewRule[] = ['size/no-context', 'breakpoint/plain-css', 'custom-property/unknown-use', 'value/unknown-destination'];
+export const REVIEW_RULES: readonly ReviewRule[] = ['size/no-context', 'breakpoint/plain-css', 'custom-property/unknown-use', 'value/unknown-destination', 'value/hack'];
 
 /** Ordem dos tipos na saída: cores, espaço e tamanho, forma, tipografia, efeitos e movimento, camadas, breakpoints. */
 export const TOKEN_TYPES: readonly TokenType[] = [

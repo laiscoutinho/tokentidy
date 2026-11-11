@@ -36,8 +36,10 @@ export type TokenType =
 /**
  * Onde o valor está escrito, o que decide como o `fix` escreve o token.
  * `css-in-js`: CSS em template literal. `js-value`: valor lido por JavaScript (canvas, gráfico, destino desconhecido), onde `var()` pode não funcionar. `svg-attribute`: atributo de apresentação do SVG (`fill="#fff"`), onde o suporte a `var()` varia entre navegadores.
+ * `css-string`: CSS num template sem tag (folha montada no JavaScript), que costuma ir para um iframe ou outra janela onde os tokens podem não estar.
+ * `component-prop`: prop de componente que recebe valor de CSS (`<Flex gap="1rem">`); o tipo da prop é do componente, que pode não aceitar `var()`.
  */
-export type Host = 'css' | 'scss' | 'sass' | 'less' | 'html' | 'jsx' | 'angular-template' | 'css-in-js' | 'js-value' | 'svg-attribute';
+export type Host = 'css' | 'scss' | 'sass' | 'less' | 'html' | 'jsx' | 'angular-template' | 'css-in-js' | 'js-value' | 'svg-attribute' | 'css-string' | 'component-prop';
 
 /**
  * Um valor visual solto encontrado no código.

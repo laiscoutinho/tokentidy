@@ -33,7 +33,37 @@ export function familyOf(oklch: readonly [number, number, number]): string {
             bestDistance = distance;
         }
     }
-    return NEUTRAL_FAMILIES.has(best.family) ? 'gray' : best.family;
+    if (NEUTRAL_FAMILIES.has(best.family)) {
+        return 'gray';
+    }
+    return chroma >= GRAY_CHROMA && !Number.isNaN(hue) ? familyByHue(lightness, hue) : best.family;
+}
+
+/**
+ * Com croma, a família é a do matiz mais próximo no degrau de luminosidade parecida. Só a distância OKLab
+ * não basta nas cores claras, onde o croma da paleta é pequeno e o matiz quase não pesa: `#f5f5dc`
+ * (bege, matiz 107) ficava `orange` (matiz 74) em vez de `yellow` (matiz 102).
+ */
+function familyByHue(lightness: number, hue: number): string {
+    let best = '';
+    let bestDistance = Infinity;
+    for (const [family, steps] of PALETTE) {
+        if (NEUTRAL_FAMILIES.has(family)) {
+            continue;
+        }
+        const step = steps.reduce((a, b) => (Math.abs(b[0] - lightness) < Math.abs(a[0] - lightness) ? b : a));
+        const distance = hueDistance(hue, step[2]);
+        if (distance < bestDistance) {
+            best = family;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+function hueDistance(a: number, b: number): number {
+    const difference = Math.abs(a - b) % 360;
+    return difference > 180 ? 360 - difference : difference;
 }
 
 function oklabOf([lightness, chroma, hue]: readonly [number, number, number]): [number, number, number] {

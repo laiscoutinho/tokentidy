@@ -5,6 +5,7 @@
  */
 
 import { createPositionLookup } from './position.ts';
+import { hackOf } from '../analysis/hacks.ts';
 import { rulesForProperty, violationRule } from '../analysis/rules.ts';
 import type { PropertyRule, Siblings } from '../analysis/rules.ts';
 import type { AnalysisError, DefinitionSyntax, ElementFact, Finding, Host, ReviewItem, TokenDefinition, TokenReference, TokenType } from '../types.ts';
@@ -18,6 +19,7 @@ export const REVIEW_MESSAGES: Readonly<Record<NonNullable<PropertyRule['review']
     'breakpoint/plain-css': 'breakpoint in plain CSS: var() does not work in media queries',
     'custom-property/unknown-use': 'local custom property with a literal; no use tells its token type',
     'value/unknown-destination': 'measure passed to a mixin that could not be followed',
+    'value/hack': 'CSS trick, not a design value',
 };
 
 /** Tamanho da fonte raiz definido no projeto (`html { font-size: 62.5% }`), em px. Base para converter `rem`. */
@@ -44,6 +46,12 @@ export interface CustomPropertyCandidate {
     atRules?: string[];
     /** Está num bloco de tokens (`:root`, `html`, ou uma regra só de custom properties que não é `:host`). */
     tokenBlock: boolean;
+}
+
+/** O que muda como um arquivo é lido, vindo da configuração. */
+export interface ParseOptions {
+    /** Props de componente que recebem valor de CSS; sem a opção, a lista padrão. */
+    componentProps?: ReadonlySet<string>;
 }
 
 export interface ParseResult {
@@ -170,7 +178,7 @@ export class FileCollector {
      */
     breakpoint(atRule: string, params: string, offset: number, host: Host, selector?: string): void {
         // CSS-in-JS: também não há como escrever um `$x` ali; `var()` não funciona em media query
-        const rule: PropertyRule = host === 'css' || host === 'css-in-js'
+        const rule: PropertyRule = host === 'css' || host === 'css-in-js' || host === 'css-string'
             ? { type: 'breakpoint', match: 'length', review: 'breakpoint/plain-css' }
             : { type: 'breakpoint', match: 'length' };
         this.#report(
@@ -234,7 +242,11 @@ export class FileCollector {
                 ...(decl.branch === undefined ? {} : { branch: decl.branch }),
                 ...(starts.length > 1 && index >= 0 ? { part: { index, count: starts.length } } : {}),
             };
-            if (rule.review) {
+            // O motivo do truque é mais útil que o genérico de "tamanho sem contexto"
+            const hack = rule.review === undefined || rule.review === 'size/no-context' ? hackOf(decl, type, item.value) : undefined;
+            if (hack) {
+                this.result.review.push({ ...item, rule: 'value/hack', message: hack });
+            } else if (rule.review) {
                 this.result.review.push({ ...item, message: REVIEW_MESSAGES[rule.review] });
             } else {
                 this.result.findings.push(item);

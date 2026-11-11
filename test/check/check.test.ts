@@ -121,6 +121,27 @@ test('a generated tree older than the code is reported, and only then', async (t
     assert.doesNotMatch(cli(fresh, 'check').stderr, /repeated/);
 });
 
+test('token/undefined: a name nobody defines, without fallback, used only once', async (t) => {
+    const dir = await project({
+        'tokens.css': ':root { --color-primary: #000; }\n',
+        'a.css': [
+            '.a { width: var(--panle-width); }',
+            // Com fallback, a falta já foi prevista; usado duas vezes, o nome vem de fora de propósito
+            '.b { gap: var(--missing-gap, 8px); color: var(--wp--preset--color--x); }',
+            '.c { background: var(--wp--preset--color--x); color: var(--color-primry); }',
+        ].join('\n'),
+    });
+    t.after(() => rm(dir, { recursive: true }));
+    const warnings = json(dir).warnings.map((w: { rule: string; message: string; line: number }) => `${w.line} ${w.rule} ${w.message}`);
+    // `--color-primry` já tem sugestão em token/unknown: não ganha um segundo aviso
+    assert.deepEqual(warnings, [
+        '1 token/undefined --panle-width is never defined, has no fallback and is used only here; check the name',
+        '3 token/unknown --color-primry is not defined; did you mean --color-primary?',
+    ]);
+    // Aviso não muda o código de saída
+    assert.equal(cli(dir, 'check', 'tokens.css').status, 0);
+});
+
 test('token/unknown only speaks with a single close name', async (t) => {
     const dir = await project({
         'tokens.css': ':root { --color-primary: #000; --spacing-4: 4px; --spacing-6: 6px; --abc: 1px; }\n',

@@ -25,12 +25,14 @@ export interface Config {
     splitThreshold: number;
     /** Gera aliases semânticos (`color.text.danger` → `color.red.600`) quando o uso é inequívoco. */
     semanticTokens: boolean;
-    /** Padrões glob (relativos à raiz, estilo `.gitignore` sem negação) de arquivos que não são analisados. */
+    /** Padrões glob (relativos à raiz, estilo `.gitignore`) de arquivos que não são analisados; `!` traz de volta (testes e stories, por exemplo). */
     ignore: string[];
     /** Analisa arquivos minificados (`*.min.css` ou linha média longa). Padrão: não. */
     includeMinified: boolean;
     /** Distância OKLab (ΔEOK) até onde duas cores são a mesma decisão escrita de jeitos quase iguais. */
     colorTolerance: number;
+    /** Props de componente JSX que recebem valor de CSS (`<Flex gap="1rem">`). Sem a opção, a lista padrão. */
+    componentProps?: string[];
 }
 
 export const DEFAULT_CONFIG: Readonly<Config> = {
@@ -122,6 +124,12 @@ export function validateConfig(raw: unknown, source: string): Config {
                     throw new ConfigError(`${source}: colorTolerance must be a number >= 0 (OKLab distance)`);
                 }
                 config.colorTolerance = value;
+                break;
+            case 'componentProps':
+                if (!Array.isArray(value) || value.some((prop) => typeof prop !== 'string' || !/^[A-Za-z_$][\w$]*$/.test(prop))) {
+                    throw new ConfigError(`${source}: componentProps must be a list of prop names (e.g. ["gap", "padding"])`);
+                }
+                config.componentProps = [...value];
                 break;
             default:
                 throw new ConfigError(`${source}: unknown option "${key}"`);

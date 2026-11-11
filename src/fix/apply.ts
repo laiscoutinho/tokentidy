@@ -15,12 +15,13 @@ import { isInside } from '../project/scope.ts';
 import type { Scope } from '../project/scope.ts';
 import type { Finding } from '../types.ts';
 import { belowThresholdValues, projectTokenIndex, repeatedValues } from '../token-lookup.ts';
+import type { TokenIndex } from '../token-lookup.ts';
 import { applyEdits, unifiedDiff } from './diff.ts';
 import { resolveApproximate } from './approximate.ts';
 import type { ApproximateGroup, ApproximateOptions } from './approximate.ts';
-import { planFixes } from './plan.ts';
+import { NO_USABLE_TOKEN, planFixes } from './plan.ts';
 import type { ScriptFacts } from './script-facts.ts';
-import type { FilePlan, Replacement, SkippedValue, SkipReason } from './plan.ts';
+import type { FilePlan, FixPlan, Replacement, SkippedValue, SkipReason } from './plan.ts';
 
 export interface FixOptions extends ScopeAnalysisOptions {
     /** Pasta dos tokens gerados (absoluta): fonte de tokens e nunca editada. */
@@ -71,65 +72,16 @@ const MESSAGES: Record<FileReason, string> = {
 
 export async function fixScope(scope: Scope, options: FixOptions): Promise<FixResult> {
     const { root } = scope;
-    const { tokensDir, dryRun = false, minOccurrences = 2, approximate, ...analysisOptions } = options;
+    const { tokensDir, dryRun = false, minOccurrences = 2, approximate: _approximate, ...analysisOptions } = options;
     await assertInsideRoot(tokensDir, root);
-    const before = await analyzeScope(scope, analysisOptions);
     // A pasta de tokens é a saída do `generate`: fonte de tokens, nunca alvo de troca
     const insideTokens = (file: string) => isInside(path.join(root, file), tokensDir);
-
-    const index = await projectTokenIndex(before, tokensDir);
-    const findings = before.findings.filter((f) => !insideTokens(f.file));
-
-    // Lê cada arquivo e confere as posições: o trecho tem que ser exatamente o valor encontrado
-    const sources = new Map<string, string>();
-    const refused = new Map<string, FileReason>();
-    for (const [file, ofFile] of Map.groupBy(findings, (f) => f.file)) {
-        const absolute = path.join(root, file);
-        const source = await readFile(absolute, 'utf8');
-        sources.set(file, source);
-        const reason = await refusal(absolute, root)
-            ?? (ofFile.every((f) => source.slice(f.offset, f.endOffset) === f.value) ? undefined : 'changed-on-disk');
-        if (reason) {
-            refused.set(file, reason);
-        }
-    }
-
-    const relative = (file: string) => path.relative(root, path.join(tokensDir, file)).split(path.sep).join('/');
-    const moduleFiles = {
-        ...(existsSync(path.join(tokensDir, 'tokens.ts')) ? { ts: relative('tokens.ts') } : {}),
-        ...(existsSync(path.join(tokensDir, 'tokens.js')) ? { js: relative('tokens.js') } : {}),
-    };
-    // O Babel só entra quando há valor lido pelo JavaScript e módulo para importar
-    const moduleScripts = Object.keys(moduleFiles).length > 0 ? [...new Set(findings.filter((f) => f.host === 'js-value').map((f) => f.file))] : [];
-    const scripts = new Map<string, ScriptFacts>();
-    if (moduleScripts.length > 0) {
-        const { scriptFacts } = await import('./script-facts.ts');
-        for (const file of moduleScripts) {
-            const facts = sources.has(file) ? scriptFacts(sources.get(file)!, file) : undefined;
-            if (facts) {
-                scripts.set(file, facts);
-            }
-        }
-    }
-    const context = { index, sources, scripts, generatedFiles: { scss: relative('_tokens.scss'), less: relative('_tokens.less'), ...moduleFiles } };
-    let plan = planFixes(findings, context);
-    const resolution = approximate
-        ? await resolveApproximate({ root, analysis: before, findings, withoutToken: plan.withoutToken, index, dryRun }, approximate)
-        : undefined;
-    if (resolution && resolution.approved.size > 0) {
-        plan = planFixes(findings, { ...context, approximate: resolution.approved });
-    }
-    const skipped = [...plan.skipped];
-    let files = plan.files.filter((filePlan) => {
-        const reason = refused.get(filePlan.file);
-        if (reason) {
-            skipped.push(...skipAll(filePlan, reason));
-        }
-        return !reason;
-    });
+    // A primeira análise fica só dentro do planejamento: a segunda não precisa conviver com ela na memória
+    const { index, sources, plan, resolution, errorsBefore, ...planned } = await prepare(scope, options, insideTokens);
+    const skipped = [...planned.skipped];
+    let files = planned.files;
 
     // Analisa o projeto com os arquivos corrigidos em memória; arquivo com mais erros de sintaxe que antes não é escrito
-    const errorsBefore = errorCounts(before);
     let fixed = new Map(files.map((f) => [f.file, applyEdits(sources.get(f.file)!, f.edits)]));
     let after = await analyzeScope(scope, { ...analysisOptions, sources: fixed });
     for (;;) {
@@ -172,12 +124,88 @@ export async function fixScope(scope: Scope, options: FixOptions): Promise<FixRe
         skipped: skipped.sort((a, b) => (a.finding.file < b.finding.file ? -1 : a.finding.file > b.finding.file ? 1 : 0)
             || a.finding.offset - b.finding.offset),
         withoutToken: plan.withoutToken,
-        repeatedWithoutToken: repeatedValues(plan.withoutToken, index, minOccurrences),
-        belowThreshold: belowThresholdValues(plan.withoutToken, minOccurrences),
+        repeatedWithoutToken: repeatedValues(noUsableToken(plan), index, minOccurrences),
+        belowThreshold: belowThresholdValues(noUsableToken(plan), minOccurrences),
         tokens: index.size,
         ...(resolution ? { approximate: resolution.groups } : {}),
         after: { ...after, findings: after.findings.filter((f) => !insideTokens(f.file)) },
     };
+}
+
+interface Prepared {
+    index: TokenIndex;
+    /** Texto lido de cada arquivo com troca: base das edições, do diff e da conferência antes de escrever. */
+    sources: Map<string, string>;
+    plan: FixPlan;
+    resolution: Awaited<ReturnType<typeof resolveApproximate>> | undefined;
+    errorsBefore: Map<string, number>;
+    files: FilePlan[];
+    skipped: SkippedValue[];
+}
+
+/** Analisa, lê os arquivos e planeja as trocas. */
+async function prepare(scope: Scope, options: FixOptions, insideTokens: (file: string) => boolean): Promise<Prepared> {
+    const { root } = scope;
+    const { tokensDir, dryRun = false, approximate, ...analysisOptions } = options;
+    const before = await analyzeScope(scope, analysisOptions);
+    const index = await projectTokenIndex(before, tokensDir);
+    const findings = before.findings.filter((f) => !insideTokens(f.file));
+
+    // Lê cada arquivo e confere as posições: o trecho tem que ser exatamente o valor encontrado
+    const sources = new Map<string, string>();
+    const refused = new Map<string, FileReason>();
+    for (const [file, ofFile] of Map.groupBy(findings, (f) => f.file)) {
+        const absolute = path.join(root, file);
+        const source = await readFile(absolute, 'utf8');
+        sources.set(file, source);
+        const reason = await refusal(absolute, root)
+            ?? (ofFile.every((f) => source.slice(f.offset, f.endOffset) === f.value) ? undefined : 'changed-on-disk');
+        if (reason) {
+            refused.set(file, reason);
+        }
+    }
+
+    const relative = (file: string) => path.relative(root, path.join(tokensDir, file)).split(path.sep).join('/');
+    const moduleFiles = {
+        ...(existsSync(path.join(tokensDir, 'tokens.ts')) ? { ts: relative('tokens.ts') } : {}),
+        ...(existsSync(path.join(tokensDir, 'tokens.js')) ? { js: relative('tokens.js') } : {}),
+    };
+    // O Babel só entra quando há valor lido pelo JavaScript e módulo para importar
+    const moduleScripts = Object.keys(moduleFiles).length > 0 ? [...new Set(findings.filter((f) => f.host === 'js-value').map((f) => f.file))] : [];
+    const scripts = new Map<string, ScriptFacts>();
+    if (moduleScripts.length > 0) {
+        const { scriptFacts } = await import('./script-facts.ts');
+        for (const file of moduleScripts) {
+            const facts = sources.has(file) ? scriptFacts(sources.get(file)!, file) : undefined;
+            if (facts) {
+                scripts.set(file, facts);
+            }
+        }
+    }
+    const context = { index, sources, scripts, generatedFiles: { scss: relative('_tokens.scss'), less: relative('_tokens.less'), ...moduleFiles } };
+    let plan = planFixes(findings, context);
+    const resolution = approximate
+        ? await resolveApproximate({ root, analysis: before, findings, withoutToken: noUsableToken(plan), index, dryRun }, approximate)
+        : undefined;
+    if (resolution && resolution.approved.size > 0) {
+        plan = planFixes(findings, { ...context, approximate: resolution.approved });
+    }
+    const skipped = [...plan.skipped];
+    const files = plan.files.filter((filePlan) => {
+        const reason = refused.get(filePlan.file);
+        if (reason) {
+            skipped.push(...skipAll(filePlan, reason));
+        }
+        return !reason;
+    });
+    // Arquivo sem troca não precisa do texto daqui em diante
+    const kept = new Set(files.map((f) => f.file));
+    for (const file of sources.keys()) {
+        if (!kept.has(file)) {
+            sources.delete(file);
+        }
+    }
+    return { index, sources, plan, resolution, errorsBefore: errorCounts(before), files, skipped };
 }
 
 /** Link simbólico ou arquivo fora do projeto (por uma pasta que é link): não é escrito. */
@@ -194,6 +222,11 @@ async function refusal(absolute: string, root: string): Promise<FileReason | und
         throw error;
     }
     return undefined;
+}
+
+/** Sem token, ou só com tokens que não servem (outro tipo, outro papel, de teste): o valor ainda precisa de um token. */
+function noUsableToken(plan: FixPlan): Finding[] {
+    return [...plan.withoutToken, ...plan.skipped.filter((s) => NO_USABLE_TOKEN.has(s.reason)).map((s) => s.finding)];
 }
 
 function skipAll(filePlan: FilePlan, reason: FileReason): SkippedValue[] {

@@ -61,6 +61,22 @@ test('objects: imported from a relative file, reported where they are written', 
     }), ['src/theme.ts color/hardcoded color #111111', 'src/theme.ts spacing/hardcoded margin 20']);
 });
 
+test('objects: a file keeps its syntax tree for other files only when an export reaches an object', async () => {
+    const { parseScript } = await import('../../src/parsers/script.ts');
+    const links = async (source: string) => (await parseScript(source, 'a.tsx')).styleLinks;
+    // Só componentes e funções: nada para outro arquivo pedir, a árvore do Babel é liberada
+    assert.equal(await links(`export const A = () => <i />;\nexport default function B() {}\n`), undefined);
+    const exporter = await links(`const theme = { card: { color: '#111111' } };\nexport default theme;\n`);
+    assert.ok(exporter);
+    // Quem só importa guarda os pedidos, sem árvore para emitir
+    const importer = await links(`import theme from './theme';\nexport const A = () => <i style={theme.card} />;\n`);
+    assert.deepEqual(importer?.imports.map((r) => [r.source, r.name, r.path]), [['./theme', 'default', ['card']]]);
+    assert.deepEqual(await found({
+        'src/A.tsx': `import theme from './theme';\nexport const A = () => <i style={theme.card} />;\n`,
+        'src/theme.ts': `const theme = { card: { color: '#111111' } };\nexport default theme;\n`,
+    }), ['src/theme.ts color/hardcoded color #111111']);
+});
+
 test('DOM: style assignments, setProperty, cssText, setAttribute and Object.assign', async () => {
     assert.deepEqual(await values(`
 el.style.color = '#111111';

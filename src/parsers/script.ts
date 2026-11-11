@@ -9,7 +9,7 @@ import type { ParserPlugin } from '@babel/parser';
 import type * as t from '@babel/types';
 
 import { FileCollector, offsetAt } from './collector.ts';
-import type { ParseResult } from './collector.ts';
+import type { ParseOptions, ParseResult } from './collector.ts';
 import { walkStylesheet } from './css/stylesheet.ts';
 import { angularHost } from './js/angular-host.ts';
 import { jsxElements } from './js/elements.ts';
@@ -20,7 +20,7 @@ import type { Literal } from './js/style-object.ts';
 /** Atalho barato antes de montar a árvore: sem nada disso no texto, não há o que procurar. */
 const MAY_HAVE_STYLES = /style|component|css|sx=|fill|stroke|chart|color|theme|keyframes|hostbinding|matchmedia/i;
 
-export async function parseScript(source: string, file: string): Promise<ParseResult> {
+export async function parseScript(source: string, file: string, options: ParseOptions = {}): Promise<ParseResult> {
     const collector = new FileCollector(file, source);
     if (!MAY_HAVE_STYLES.test(source)) {
         return collector.result;
@@ -40,10 +40,10 @@ export async function parseScript(source: string, file: string): Promise<ParseRe
     }
 
     const component: AngularComponent = { templates: [], templateUrls: [] };
-    const sinks = new ScriptSinks(collector, program);
+    const sinks = new ScriptSinks(collector, program, options.componentProps);
     walkTree(program.program, (node) => {
         if (node.type === 'Decorator') {
-            angularComponent(collector, node, component);
+            angularComponent(collector, node, component, (claimed) => sinks.claim(claimed));
         } else {
             sinks.visit(node);
         }
@@ -105,7 +105,7 @@ interface AngularComponent {
 }
 
 /** `@Component({ styles: [...], template: '...', templateUrl: './x.html' })` */
-function angularComponent(collector: FileCollector, decorator: t.Decorator, component: AngularComponent): void {
+function angularComponent(collector: FileCollector, decorator: t.Decorator, component: AngularComponent, claim: (node: t.Node) => void): void {
     const call = decorator.expression;
     if (call.type !== 'CallExpression' || call.callee.type !== 'Identifier' || (call.callee.name !== 'Component' && call.callee.name !== 'Directive')) {
         return;
@@ -119,6 +119,9 @@ function angularComponent(collector: FileCollector, decorator: t.Decorator, comp
             continue;
         }
         const value = prop.value as t.Expression;
+        if (prop.key.name === 'styles' || prop.key.name === 'template') {
+            walkTree(value, (node) => node.type === 'TemplateLiteral' && claim(node));
+        }
         switch (prop.key.name) {
             case 'styles': {
                 // `styles: '...'` (Angular 17+) ou `styles: ['...', '...']`

@@ -32,7 +32,7 @@ const COMPOUNDS: ReadonlyArray<readonly [readonly string[], TokenType]> = [
 
 const WORDS = new Map<string, TokenType>([
     ['space', 'spacing'], ['spaces', 'spacing'], ['spacing', 'spacing'], ['spacer', 'spacing'], ['spacers', 'spacing'],
-    ['gap', 'spacing'], ['gutter', 'spacing'], ['inset', 'spacing'], ['stack', 'spacing'],
+    ['gap', 'spacing'], ['gutter', 'spacing'], ['inset', 'spacing'], ['stack', 'spacing'], ['padding', 'spacing'], ['margin', 'spacing'],
     ['border', 'border-width'], ['stroke', 'border-width'],
     ['radius', 'radius'], ['radii', 'radius'], ['rounded', 'radius'], ['corner', 'radius'],
     ['fs', 'font-size'], ['text', 'font-size'], ['fontsize', 'font-size'],
@@ -68,6 +68,19 @@ export function nameParts(name: string): string[] {
 
 /** Tipos que o nome declara (vazio, um ou mais: mais de um é ambíguo). */
 export function typesInName(name: string): Set<TokenType> {
+    return namedParts(name).types;
+}
+
+/**
+ * O nome tem a palavra `size` solta (`--wpds-dimension-size-sm`, `--size-4`), fora de `font-size`/`text-size`.
+ * Não declara um tipo: no Open Props é espaçamento, em outros sistemas é tamanho de elemento. Quem desempata é o uso.
+ */
+export function hasSizeWord(name: string): boolean {
+    const { parts, used } = namedParts(name);
+    return parts.some((part, i) => part === 'size' && !used[i]);
+}
+
+function namedParts(name: string): { parts: string[]; used: boolean[]; types: Set<TokenType> } {
     const parts = nameParts(name);
     const used = new Array<boolean>(parts.length).fill(false);
     const types = new Set<TokenType>();
@@ -85,20 +98,17 @@ export function typesInName(name: string): Set<TokenType> {
             types.add(type);
         }
     });
-    return types;
+    return { parts, used, types };
 }
 
 /**
- * Tipo de um token pelo nome, se o nome apontar um só tipo e o valor combinar com ele.
- * `--space-4: 16px` → `spacing`; `--card-16: 16px` (nome sem tipo) e `--space-x: #fff` (valor que não combina) → nada.
+ * Tipo de um token pelo nome, se, entre os tipos que o nome aponta, só um combinar com o valor.
+ * `--space-4: 16px` → `spacing`; `--color-stroke-focus: #3858e9` → `color` (`stroke` como largura não combina com uma cor);
+ * `--card-16: 16px` (nome sem tipo), `--space-x: #fff` (valor que não combina) e `--space-radius: 8px` (dois tipos) → nada.
  */
 export function typeFromName(name: string, value: string): TokenType | undefined {
-    const types = typesInName(name);
-    if (types.size !== 1) {
-        return undefined;
-    }
-    const [type] = types as unknown as [TokenType];
-    return fits(type, value) ? type : undefined;
+    const fitting = [...typesInName(name)].filter((type) => fits(type, value));
+    return fitting.length === 1 ? fitting[0] : undefined;
 }
 
 /** O valor tem a forma que o tipo pede. */

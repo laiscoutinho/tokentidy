@@ -11,6 +11,8 @@ import { walkDeclarationList } from '../css/stylesheet.ts';
 import type { Host } from '../../types.ts';
 import { hostBinding } from './angular-host.ts';
 import { isCssTag, rootName, walkCssTemplate } from './css-in-js.ts';
+import { walkCssString } from './css-strings.ts';
+import { DEFAULT_COMPONENT_PROPS, componentProp, isComponent } from './component-props.ts';
 import { ObjectFlow, memberName } from './flow.ts';
 import { chartColors, unknownColors } from './js-values.ts';
 import { themeDefinitions } from './theme.ts';
@@ -31,12 +33,17 @@ export class ScriptSinks {
     readonly #collector: FileCollector;
     readonly #flow: ObjectFlow;
     readonly #seen = new WeakSet<t.ObjectExpression>();
+    /** Templates já lidos por um destino conhecido (tag `css`, prop `css`, `styles:` do Angular): não são lidos de novo. */
+    readonly #claimed = new WeakSet<t.Node>();
     readonly #imports: StyleRequest[] = [];
     /** Objetos passados a funções desconhecidas: olhados no fim, depois dos destinos conhecidos. */
     readonly #unknown: t.ObjectExpression[] = [];
 
-    constructor(collector: FileCollector, program: t.File) {
+    readonly #componentProps: ReadonlySet<string>;
+
+    constructor(collector: FileCollector, program: t.File, componentProps: ReadonlySet<string> = DEFAULT_COMPONENT_PROPS) {
         this.#collector = collector;
+        this.#componentProps = componentProps;
         this.#flow = new ObjectFlow(program);
     }
 
@@ -55,8 +62,15 @@ export class ScriptSinks {
                 this.#construct(node);
                 break;
             case 'TaggedTemplateExpression':
+                // Template com tag desconhecida (`gql`, `html`) não é CSS solto
+                this.#claimed.add(node.quasi);
                 if (isCssTag(node.tag)) {
                     walkCssTemplate(this.#collector, node.quasi);
+                }
+                break;
+            case 'TemplateLiteral':
+                if (!this.#claimed.has(node)) {
+                    walkCssString(this.#collector, node);
                 }
                 break;
             case 'ClassProperty':
@@ -67,24 +81,26 @@ export class ScriptSinks {
         }
     }
 
+    /** O template é lido por outro caminho (`styles:`/`template:` do Angular). */
+    claim(node: t.Node): void {
+        this.#claimed.add(node);
+    }
+
     finish(): void {
         for (const object of this.#unknown.filter((o) => !this.#seen.has(o))) {
             unknownColors(this.#collector.source, object, (text, offset) => {
                 this.#collector.declaration({ property: 'color', value: text, offset, host: 'js-value', siblings: new Map() });
             });
         }
-        if (this.#imports.length > 0 || this.#hasExports()) {
+        // O `emit` prende a árvore do Babel até o fim da análise: só fica quando algum export chega a um objeto
+        const exportsObjects = this.#collector.source.includes('export') && this.#flow.exportsObjects();
+        if (this.#imports.length > 0 || exportsObjects) {
             this.#collector.result.styleLinks = {
                 file: this.#collector.file,
                 imports: this.#imports,
-                emit: (request) => this.#emitExported(request),
+                emit: exportsObjects ? (request) => this.#emitExported(request) : () => undefined,
             };
         }
-    }
-
-    /** Não vale a análise cruzada num arquivo sem `export`. */
-    #hasExports(): boolean {
-        return this.#collector.source.includes('export');
     }
 
     #emitExported(request: StyleRequest): void {
@@ -136,6 +152,7 @@ export class ScriptSinks {
                 continue;
             }
             if (name === 'css' && value.expression.type === 'TemplateLiteral') {
+                this.#claimed.add(value.expression);
                 walkCssTemplate(this.#collector, value.expression);
             } else {
                 this.#emit(value.expression, kind, selector);
@@ -145,9 +162,16 @@ export class ScriptSinks {
         if (tagName === 'ThemeProvider' && theme?.type === 'JSXExpressionContainer' && theme.expression.type !== 'JSXEmptyExpression') {
             this.#theme(theme.expression);
         }
+        const component = isComponent(element.name);
         for (const attr of attributes) {
-            if (attr.name.type === 'JSXIdentifier' && SVG_COLOR_ATTRIBUTES.has(attr.name.name)) {
+            if (attr.name.type !== 'JSXIdentifier') {
+                continue;
+            }
+            // `fill` num componente continua sendo cor de SVG, como antes da lista de props
+            if (SVG_COLOR_ATTRIBUTES.has(attr.name.name)) {
                 this.#svgAttribute(attr, attr.name.name, selector);
+            } else if (component && this.#componentProps.has(attr.name.name)) {
+                componentProp(this.#collector, attr, attr.name.name, selector);
             }
         }
     }

@@ -30,7 +30,8 @@ export interface Replacement {
     uncompiledFrom?: string;
 }
 
-export type ReplacementReason = 'alias' | 'most-used' | 'only-match' | 'generated';
+/** `name-matches-property`: ganhou de um token mais usado porque o nome é desta propriedade (papel da cor, `padding`). */
+export type ReplacementReason = 'alias' | 'most-used' | 'only-match' | 'generated' | 'name-matches-property';
 
 /**
  * Por que um valor com token não foi trocado:
@@ -40,7 +41,13 @@ export type ReplacementReason = 'alias' | 'most-used' | 'only-match' | 'generate
  * - `unit-in-binding`: `[style.width.px]="a ? 16 : 24"`: a unidade no nome vale para os dois valores;
  * - `needs-token-module`: valor lido por JavaScript (canvas, gráfico), onde `var()` não funciona;
  * - `svg-attribute`: atributo de apresentação do SVG, onde o suporte a `var()` varia entre navegadores;
+ * - `css-string`: CSS num template sem tag, que pode ir para um iframe ou outra janela sem os tokens;
+ * - `component-prop`: prop de componente (`<Flex gap="1rem">`), cujo tipo é do componente e pode não aceitar `var()`;
  * - `ambiguous-token`: dois tokens do projeto com o mesmo valor e o mesmo uso: quem escolhe é a pessoa;
+ * - `token-family-mismatch`: o único token com o valor tem nome de outro tipo (`$border-width` num `margin`);
+ * - `token-role-mismatch`: a única cor com o valor é de outro papel (`--bg-surface` num `color`);
+ * - `test-token`: o único token com o valor foi definido em teste, fixture ou story;
+ * - `negative-value`: valor negativo onde o sinal não pode ir junto do token (módulo JS, `-` colado);
  * - `overlap`: duas trocas no mesmo trecho;
  * - `breaks-syntax`: o arquivo corrigido teria erro de sintaxe;
  * - `changed-on-disk`: o arquivo mudou durante a execução;
@@ -53,7 +60,13 @@ export type SkipReason =
     | 'unit-in-binding'
     | 'needs-token-module'
     | 'svg-attribute'
+    | 'css-string'
+    | 'component-prop'
     | 'ambiguous-token'
+    | 'token-family-mismatch'
+    | 'token-role-mismatch'
+    | 'test-token'
+    | 'negative-value'
     | 'overlap'
     | 'breaks-syntax'
     | 'changed-on-disk'
@@ -64,7 +77,7 @@ export interface SkippedValue {
     finding: Finding;
     reason: SkipReason;
     message: string;
-    /** `ambiguous-token`: os tokens empatados. */
+    /** `ambiguous-token`: os tokens empatados; `token-*-mismatch` e `test-token`: os tokens recusados. */
     alternatives?: string[];
 }
 
@@ -81,6 +94,9 @@ export interface FixPlan {
     /** Valores sem token com o mesmo valor: o `generate` cria os tokens. */
     withoutToken: Finding[];
 }
+
+/** Motivos em que o projeto não tem um token que sirva: o valor também conta como sem token (aproximado, `generate`). */
+export const NO_USABLE_TOKEN: ReadonlySet<SkipReason> = new Set(['token-family-mismatch', 'token-role-mismatch', 'test-token']);
 
 export interface PlanContext {
     index: TokenIndex;

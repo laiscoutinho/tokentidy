@@ -4,7 +4,7 @@
  * Aqui só se calcula quem iria para onde: quem autoriza são as guardas e a pessoa.
  */
 
-import { deltaEOK } from '../check/near.ts';
+import { deltaEOK, sameHue } from '../check/near.ts';
 import { checkChanges } from '../coherence/guards.ts';
 import type { Blocked, Change, GuardOptions } from '../coherence/guards.ts';
 import { buildModel } from '../coherence/model.ts';
@@ -71,16 +71,19 @@ export const propertyFamily = (property: string) => property.replace(/^-+/, '').
 
 const onGrid = (px: number, grid: number) => Math.abs(px / grid - Math.round(px / grid)) < EPSILON;
 
-/** Para onde vai um valor fora da grade: o valor na grade mais próximo já usado no papel; senão, o passo mais próximo. */
+/**
+ * Para onde vai um valor fora da grade: o passo mais próximo, nunca mais de meia grade (`15px` → `16px`, não `12px`).
+ * No empate (`14px` entre 12 e 16), o mais usado no projeto naquele tipo, e depois o múltiplo do dobro da grade.
+ * Só depende do valor e do tipo: o mesmo valor vai para o mesmo alvo em todo o projeto.
+ */
 function targetOf(px: number, used: ReadonlyMap<number, number>, grid: number): number {
-    const near = [...used].filter(([value]) => Math.abs(value - px) <= grid + EPSILON);
-    const options: (readonly [number, number])[] = near.length > 0 ? near : [[Math.floor(px / grid) * grid, 0], [Math.ceil(px / grid) * grid, 0]];
+    const options = [Math.floor(px / grid) * grid, Math.ceil(px / grid) * grid];
     // Dois múltiplos vizinhos da grade nunca são ambos múltiplos do dobro dela: o critério "mais grosso" sempre desempata
     const coarser = (value: number) => (onGrid(value, grid * 2) ? 0 : 1);
-    return options.toSorted(([a, usesA], [b, usesB]) => {
+    return options.toSorted((a, b) => {
         const distance = Math.abs(a - px) - Math.abs(b - px);
-        return (Math.abs(distance) > EPSILON ? distance : 0) || usesB - usesA || coarser(a) - coarser(b);
-    })[0]![0];
+        return (Math.abs(distance) > EPSILON ? distance : 0) || (used.get(b) ?? 0) - (used.get(a) ?? 0) || coarser(a) - coarser(b);
+    })[0]!;
 }
 
 function inUnitOf(key: string, px: number, root: number): string {
@@ -111,24 +114,27 @@ class GroupBuilder {
 }
 
 function addMeasures(builder: GroupBuilder, findings: readonly Finding[], grid: number, root: number): void {
-    const inRole = Map.groupBy(findings.filter((f) => GRID_TYPES.has(f.type)), (f) => `${f.type}\u0000${propertyFamily(f.property)}\u0000${componentOf(f)}`);
-    for (const ofRole of inRole.values()) {
-        const byKey = [...Map.groupBy(ofRole, normalizeFinding)];
-        const used = new Map<number, number>();
-        for (const [key, ofKey] of byKey) {
-            const px = lengthInPx(key, root);
-            if (px !== undefined && onGrid(px, grid)) {
-                used.set(px, (used.get(px) ?? 0) + ofKey.length);
-            }
+    const measures = findings.filter((f) => GRID_TYPES.has(f.type));
+    // Uso de cada passo no projeto inteiro, por tipo: só desempata, e igual para todos os papéis
+    const used = new Map<TokenType, Map<number, number>>();
+    for (const finding of measures) {
+        const px = lengthInPx(normalizeFinding(finding), root);
+        if (px !== undefined && onGrid(px, grid)) {
+            const ofType = used.get(finding.type) ?? new Map<number, number>();
+            ofType.set(px, (ofType.get(px) ?? 0) + 1);
+            used.set(finding.type, ofType);
         }
+    }
+    const inRole = Map.groupBy(measures, (f) => `${f.type}\u0000${propertyFamily(f.property)}\u0000${componentOf(f)}`);
+    for (const ofRole of inRole.values()) {
         const { type, property } = ofRole[0]!;
-        for (const [key, ofKey] of byKey) {
+        for (const [key, ofKey] of Map.groupBy(ofRole, normalizeFinding)) {
             const px = lengthInPx(key, root);
             // Abaixo da grade (`1px`) é detalhe deliberado: o passo seguinte seria 0 ou o dobro
             if (px === undefined || onGrid(px, grid) || px < grid || (type === 'radius' && px >= PILL_RADIUS)) {
                 continue;
             }
-            builder.add(type, propertyFamily(property), componentOf(ofRole[0]!), inUnitOf(key, targetOf(px, used, grid), root), key, ofKey);
+            builder.add(type, propertyFamily(property), componentOf(ofRole[0]!), inUnitOf(key, targetOf(px, used.get(type) ?? new Map(), grid), root), key, ofKey);
         }
     }
 }
@@ -148,6 +154,7 @@ function addFontSizes(builder: GroupBuilder, findings: readonly Finding[], root:
 
 /**
  * Cada cor entra na mais usada dentro da tolerância, e não na vizinha: assim não se formam cadeias a≈b≈c.
+ * Nem a mais próxima serve se o tom muda (rosado → cinza): ver `sameHue`.
  * As âncoras (cores que já têm token) vêm antes de todas: perto de um token, o alvo é o token, mesmo que a cor solta seja mais usada.
  */
 function addColors(builder: GroupBuilder, findings: readonly Finding[], tolerance: number, anchors: readonly string[]): void {
@@ -169,7 +176,7 @@ function addColors(builder: GroupBuilder, findings: readonly Finding[], toleranc
         if (!info) {
             continue;
         }
-        const into = representatives.find((r) => r.alpha === info.alpha && deltaEOK(r.oklch, info.oklch) <= tolerance);
+        const into = representatives.find((r) => r.alpha === info.alpha && deltaEOK(r.oklch, info.oklch) <= tolerance && sameHue(r.oklch, info.oklch));
         if (into) {
             builder.add('color', 'color', '', into.key, key, ofKey);
         } else {

@@ -11,6 +11,7 @@ import type { TokenType } from '../../types.ts';
 import { cubicBezierOf, formatNumber, lengthInPx, parseLength, parseShadow } from '../../values/normalize.ts';
 import { colorInfo } from '../../values/color-info.ts';
 import { familyOf } from './color-family.ts';
+import { colorSteps } from './color-steps.ts';
 
 /** Grupo de valores iguais, do ponto de vista do nome. */
 export interface NamingInput {
@@ -52,11 +53,6 @@ const EASING: Record<string, string> = {
     'cubic-bezier(0.4, 0, 0.2, 1)': 'in-out',
 };
 
-/** Luminosidade OKLCH de cada degrau (50 é o mais claro). */
-const LIGHTNESS_STEPS: Scale = [
-    ['50', 0.975], ['100', 0.945], ['200', 0.9], ['300', 0.83], ['400', 0.71], ['500', 0.6],
-    ['600', 0.52], ['700', 0.45], ['800', 0.38], ['900', 0.3], ['950', 0.2],
-];
 /**
  * Dá nome a todos os grupos de um tipo. Devolve o caminho do token (`['color', 'indigo', '600']`):
  * no DTCG vira grupos aninhados; no CSS, `--color-indigo-600`.
@@ -215,10 +211,8 @@ function nameColors(groups: readonly NamingInput[]): Map<NamingInput, string[]> 
 
     // Degrau por luminosidade dentro de cada família, do mais claro (50) para o mais escuro (950)
     for (const [family, members] of solid) {
-        const steps = byScale(members, family, LIGHTNESS_STEPS.map(([n, l]) => [n, -l] as const), (g) => -info.get(g)!.oklch[0], Infinity);
-        for (const [group, [, step]] of steps) {
-            const isStep = LIGHTNESS_STEPS.some(([name]) => name === step);
-            names.set(group, ['color', family, isStep ? step! : formatNumber(Math.round(info.get(group)!.oklch[0] * 1000))]);
+        for (const [group, step] of colorSteps(members, family, (g) => info.get(g)!.oklch[0])) {
+            names.set(group, ['color', family, step]);
         }
     }
 
@@ -267,16 +261,32 @@ export function slug(text: string): string {
         .replace(/^-+|-+$/g, '') || 'value';
 }
 
-/** Dois grupos com o mesmo nome (ex.: duas cores no mesmo degrau) ganham sufixo: `-2`, `-3`. */
+/**
+ * Dois grupos com o mesmo nome ganham sufixo. O mesmo tamanho em outra unidade (`48px` e `3rem`) leva a
+ * unidade (`size-12-rem`): não viram um token só porque o `rem` acompanha a fonte da pessoa e o `px` não.
+ * Nos outros casos (duas cores no mesmo degrau), um número: `-2`, `-3`.
+ */
 function uniqueNames(names: Map<NamingInput, string[]>): Map<NamingInput, string[]> {
+    const first = new Map<string, NamingInput>();
     const seen = new Map<string, number>();
+    const used = new Set([...names.values()].map((path) => path.join('-')));
     for (const [group, path] of names) {
         const id = path.join('-');
-        const count = (seen.get(id) ?? 0) + 1;
-        seen.set(id, count);
-        if (count > 1) {
-            names.set(group, [...path.slice(0, -1), `${path.at(-1)}-${count}`]);
+        const owner = first.get(id);
+        if (!owner) {
+            first.set(id, group);
+            continue;
         }
+        const unit = parseLength(group.key)?.unit;
+        const byUnit = unit && unit !== parseLength(owner.key)?.unit ? `${path.at(-1)}-${slug(unit)}` : undefined;
+        if (byUnit && !used.has([...path.slice(0, -1), byUnit].join('-'))) {
+            used.add([...path.slice(0, -1), byUnit].join('-'));
+            names.set(group, [...path.slice(0, -1), byUnit]);
+            continue;
+        }
+        const count = (seen.get(id) ?? 1) + 1;
+        seen.set(id, count);
+        names.set(group, [...path.slice(0, -1), `${path.at(-1)}-${count}`]);
     }
     return names;
 }

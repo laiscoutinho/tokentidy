@@ -77,8 +77,8 @@ test('pointing --tokens at the hand-written folder keeps its tokens', async () =
     }
 });
 
-test('a token in use keeps the type of its use, not of its name', async () => {
-    // `--space-4` usado como `font-size`: o uso é a evidência, o nome não acrescenta `spacing`
+test('a name that declares a type wins over where the token is used', async () => {
+    // `--space-4` usado (por engano) como `font-size`: o nome é a decisão da equipe, o uso errado não a muda
     const dir = await project({
         'tokens/tokens.css': ':root { --space-4: 16px; }\n',
         'src/app.css': '.a { font-size: var(--space-4); }\n.b { padding: 16px; }\n.c { font-size: 16px; }\n',
@@ -86,7 +86,8 @@ test('a token in use keeps the type of its use, not of its name', async () => {
     try {
         const result = await fix(dir);
         const replaced = result.files.flatMap((f) => f.replacements.map((r) => r.finding.property));
-        assert.deepEqual(replaced, ['font-size']);
+        assert.deepEqual(replaced, ['padding']);
+        assert.deepEqual(result.skipped.map((s) => s.reason), ['token-family-mismatch']);
     } finally {
         await rm(dir, { recursive: true });
     }
@@ -213,7 +214,7 @@ test('generate lists each value used once and each semantic alias', async () => 
         assert.match(stderr, /^1 value used fewer than 2 times was not turned into tokens:$/m);
         assert.match(stderr, /^ {2}radius\t3px\tsrc\/app\.css:3:56 \(1 use\)$/m);
         assert.match(stderr, /^1 semantic alias names the role of a value:$/m);
-        assert.match(stderr, /^ {2}color\.text\.danger -> color\.red\.500\t\(2 uses\)$/m);
+        assert.match(stderr, /^ {2}color\.text\.danger -> color\.red\.600\t\(2 uses\)$/m);
     } finally {
         await rm(dir, { recursive: true });
     }

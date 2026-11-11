@@ -89,27 +89,41 @@ export class ObjectFlow {
 
     /** O que o arquivo exporta com este nome, no nível de cima. */
     exported(name: string): t.Expression | undefined {
+        return this.#exports().find(([exported]) => exported === name)?.[1];
+    }
+
+    /**
+     * Algum export chega a um objeto? Sem nenhum, nenhum caminho dentro dele chega também
+     * (`follow` com caminho só desce de um objeto que o caminho vazio já devolveria).
+     */
+    exportsObjects(): boolean {
+        return this.#exports().some(([, expression]) => this.follow(expression).objects.length > 0);
+    }
+
+    #exports(): [string, t.Expression][] {
+        const found: [string, t.Expression][] = [];
         for (const statement of this.#file.program.body) {
-            if (statement.type === 'ExportDefaultDeclaration' && name === 'default') {
-                return statement.declaration as t.Expression;
+            if (statement.type === 'ExportDefaultDeclaration') {
+                found.push(['default', statement.declaration as t.Expression]);
             }
             if (statement.type !== 'ExportNamedDeclaration' || statement.source) {
                 continue;
             }
             if (statement.declaration?.type === 'VariableDeclaration') {
                 for (const declarator of statement.declaration.declarations) {
-                    if (declarator.id.type === 'Identifier' && declarator.id.name === name && declarator.init) {
-                        return declarator.init;
+                    if (declarator.id.type === 'Identifier' && declarator.init) {
+                        found.push([declarator.id.name, declarator.init]);
                     }
                 }
             }
             for (const specifier of statement.specifiers) {
-                if (specifier.type === 'ExportSpecifier' && keyName(specifier.exported) === name) {
-                    return specifier.local;
+                const name = specifier.type === 'ExportSpecifier' ? keyName(specifier.exported) : undefined;
+                if (name !== undefined && specifier.type === 'ExportSpecifier') {
+                    found.push([name, specifier.local]);
                 }
             }
         }
-        return undefined;
+        return found;
     }
 
     #followIdentifier(node: t.Identifier, path: readonly string[], depth: number): Followed {

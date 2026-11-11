@@ -29,7 +29,7 @@ interface CheckOptions {
 export async function analyzeProject(paths: readonly string[], configFile?: string): Promise<{ result: AnalysisResult; config: Config }> {
     const root = await findProjectRoot(paths);
     const { config } = await loadConfig(root, configFile);
-    const result = await analyzePaths(paths, { root, ignore: config.ignore, includeMinified: config.includeMinified });
+    const result = await analyzePaths(paths, { root, ignore: config.ignore, includeMinified: config.includeMinified, ...(config.componentProps ? { componentProps: config.componentProps } : {}) });
     return { result, config };
 }
 

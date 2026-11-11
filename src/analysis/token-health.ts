@@ -1,6 +1,6 @@
 /**
- * Avisos sobre o uso dos tokens: nome quase igual a um token que existe, token depreciado e fallback que
- * discorda do token. Nada aqui é violação: o código pode estar certo, e o exit code não muda.
+ * Avisos sobre o uso dos tokens: nome quase igual a um token que existe, nome que ninguém define usado uma vez só,
+ * token depreciado e fallback que discorda do token. Nada aqui é violação: o código pode estar certo, e o exit code não muda.
  */
 
 import { findValues } from '../parsers/css/values.ts';
@@ -21,7 +21,40 @@ export function tokenWarnings(
     isReported: (item: { file: string }) => boolean,
 ): AnalysisWarning[] {
     const reported = references.filter(isReported);
-    return [...typoWarnings(reported, definitions), ...deprecationWarnings(reported, definitions), ...fallbackWarnings(reported, definitions)];
+    const typos = typoWarnings(reported, definitions);
+    return [...typos, ...undefinedWarnings(references, definitions, isReported, typos),
+        ...deprecationWarnings(reported, definitions), ...fallbackWarnings(reported, definitions)];
+}
+
+function knownNames(definitions: readonly TokenDefinition[]): Set<string> {
+    return new Set(definitions.filter((d) => d.syntax === 'custom-property' || d.syntax === 'dtcg')
+        .map((d) => (d.syntax === 'dtcg' ? `--${bareName(d.name)}` : d.name)));
+}
+
+/**
+ * `var(--x)` sem fallback, que ninguém no projeto define e que aparece uma vez só: provável erro de digitação
+ * sem nome parecido para sugerir. Usado em vários lugares, o nome é de propósito (vem de fora: tema do WordPress,
+ * biblioteca, `style` montado no servidor). Com fallback, quem escreveu já contou com a falta.
+ * Conta os usos no projeto inteiro, também na parte só de contexto de uma execução parcial.
+ */
+function undefinedWarnings(
+    references: readonly TokenReference[],
+    definitions: readonly TokenDefinition[],
+    isReported: (item: { file: string }) => boolean,
+    typos: readonly AnalysisWarning[],
+): AnalysisWarning[] {
+    const known = knownNames(definitions);
+    const uses = new Map<string, number>();
+    for (const ref of references) {
+        uses.set(ref.name, (uses.get(ref.name) ?? 0) + 1);
+    }
+    const suggested = new Set(typos.map((w) => `${w.file}:${w.line}:${w.column}`));
+    return references.filter((ref) => ref.name.startsWith('--') && ref.fallback === undefined && !known.has(ref.name)
+        && uses.get(ref.name) === 1 && isReported(ref) && !suggested.has(`${ref.file}:${ref.line}:${ref.column}`))
+        .map((ref) => ({
+            file: ref.file, line: ref.line, column: ref.column, rule: 'token/undefined',
+            message: `${ref.name} is never defined, has no fallback and is used only here; check the name`,
+        }));
 }
 
 /**
@@ -29,8 +62,7 @@ export function tokenWarnings(
  * Só avisa com um candidato único: `--spacing-5` perto de `--spacing-4` e de `--spacing-6` é escala, não erro de digitação.
  */
 function typoWarnings(references: readonly TokenReference[], definitions: readonly TokenDefinition[]): AnalysisWarning[] {
-    const known = new Set(definitions.filter((d) => d.syntax === 'custom-property' || d.syntax === 'dtcg')
-        .map((d) => (d.syntax === 'dtcg' ? `--${bareName(d.name)}` : d.name)));
+    const known = knownNames(definitions);
     const closest = new Map<string, string | undefined>();
     const warnings: AnalysisWarning[] = [];
     for (const ref of references) {

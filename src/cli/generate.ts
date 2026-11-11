@@ -61,7 +61,7 @@ async function runGenerate(paths: string[], options: GenerateOptions): Promise<v
     const mode = previous ? await chooseMode(path.join(outDir, dtcgTree.DTCG_FILE), options) : 'extend';
     const existingTree = mode === 'extend' ? previous : undefined;
     const { analyzePaths } = await import('../analysis/analyze.ts');
-    const result = await analyzePaths(given, { root, ignore: config.ignore, includeMinified: config.includeMinified });
+    const result = await analyzePaths(given, { root, ignore: config.ignore, includeMinified: config.includeMinified, ...(config.componentProps ? { componentProps: config.componentProps } : {}) });
     // Os tokens da própria pasta de saída entram pelo JSON (mantêm o nome), não como "tokens do projeto"
     const insideOut = (file: string) => isInside(path.join(result.root, file), outDir);
 

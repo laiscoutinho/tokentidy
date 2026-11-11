@@ -11,7 +11,7 @@ import { collectFiles } from '../project/scope.ts';
 import type { Scope, ScopeOptions } from '../project/scope.ts';
 import type { SkippedFile } from '../project/scanner.ts';
 import type { AnalysisError, AnalysisWarning, ElementFact, Finding, ReviewItem, TokenDefinition, TokenReference } from '../types.ts';
-import type { ParseResult, RootFontSize } from '../parsers/collector.ts';
+import type { ParseOptions, ParseResult, RootFontSize } from '../parsers/collector.ts';
 import type { StyleSyntax } from '../parsers/css/stylesheet.ts';
 
 export interface AnalysisResult {
@@ -56,7 +56,7 @@ export interface AnalyzeOptions extends ScopeOptions {
     root?: string;
 }
 
-type Parser = (source: string, file: string) => ParseResult | Promise<ParseResult>;
+type Parser = (source: string, file: string, options: ParseOptions) => ParseResult | Promise<ParseResult>;
 
 const STYLE_SYNTAX = new Map<string, StyleSyntax>([
     ['.css', 'css'], ['.pcss', 'css'], ['.postcss', 'css'], ['.scss', 'scss'], ['.sass', 'sass'], ['.less', 'less'],
@@ -135,6 +135,7 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
     const allFiles = [...scope.files, ...(scope.context?.files ?? [])].sort();
     const allTokenFiles = [...scope.tokenFiles, ...(scope.context?.tokenFiles ?? [])].sort();
     let filesAnalyzed = 0;
+    const parseOptions: ParseOptions = options.componentProps ? { componentProps: new Set(options.componentProps) } : {};
     // Folhas de estilo com `@import`/`@use`: podem trazer tokens de um pacote
     const styleSources = new Map<string, string>();
 
@@ -160,7 +161,7 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
             styleSources.set(file, source);
         }
         const parse = await parserFor(kind);
-        const result = await parse(source, file);
+        const result = await parse(source, file, parseOptions);
         results.push(result);
         if (reported.has(file)) {
             filesAnalyzed++;
@@ -201,7 +202,7 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
 
     if (styleSources.size > 0) {
         const { packageDefinitions } = await import('./package-tokens.ts');
-        const definitions = await packageDefinitions(styleSources, root, async (source, file, kind) => (await parserFor(kind))(source, file));
+        const definitions = await packageDefinitions(styleSources, root, async (source, file, kind) => (await parserFor(kind))(source, file, parseOptions));
         if (definitions.length > 0) {
             results.push({ findings: [], review: [], errors: [], definitions, references: [], declarations: 0 });
         }

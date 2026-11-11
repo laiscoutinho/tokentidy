@@ -69,12 +69,13 @@ test('two on-grid values are never merged', async () => {
     assert.deepEqual(await groupsOf('.card { padding: 12px; }\n.tile { padding: 16px; }\n'), []);
 });
 
-test('a role does not borrow a step from another component', async () => {
-    const groups = await groupsOf('.card { padding: 15px; }\n.card-x { padding: 12px; }\n.btn { padding: 16px; }\n');
-    assert.deepEqual(summary(groups), [['15px', '12px']], 'o 16px do botão não conta para o card');
+test('a value goes to the nearest step, never more than half the grid away, and to the same step everywhere', async () => {
+    // Antes o card usava o 12px do próprio papel (3px de diferença) e o botão o 16px: dois alvos para o mesmo valor
+    const groups = await groupsOf('.card { padding: 15px; }\n.card-x { padding: 12px; }\n.btn { padding: 15px; }\n.btn-x { padding: 16px; }\n');
+    assert.deepEqual(summary(groups), [['15px', '16px'], ['15px', '16px']]);
 });
 
-test('a tie goes to the value used more in that role', async () => {
+test('a tie goes to the step used more in the project', async () => {
     const groups = await groupsOf('.card { padding: 14px; }\n.card-a { padding: 12px; }\n.card-b { padding: 12px; }\n.card-c { padding: 16px; }\n');
     assert.deepEqual(summary(groups), [['14px', '12px']]);
 });

@@ -87,7 +87,7 @@ export function walkStylesheet(collector: FileCollector, css: string, baseOffset
                     collector.breakpoint(name, params.text, baseOffset + params.offset, host, selectorOf(node));
                 }
             }
-            if ((name === 'include' || name === 'mixin') && (syntax === 'scss' || syntax === 'sass') && host !== 'css-in-js') {
+            if ((name === 'include' || name === 'mixin') && (syntax === 'scss' || syntax === 'sass') && host !== 'css-in-js' && host !== 'css-string') {
                 const params = paramsOf(node, css);
                 if (params) {
                     const selector = selectorOf(node);
@@ -184,8 +184,28 @@ function isTokenBlock(node: PostcssDeclaration, selector: string | undefined): b
     if (parts.every((part) => /^(:root|html)(?![\w-])/i.test(part))) {
         return true;
     }
-    const onlyCustomProperties = (node.parent?.nodes ?? []).every((child) => child.type !== 'decl' || child.prop.startsWith('--'));
-    return onlyCustomProperties && !/:host(?![\w-])/i.test(selector);
+    // `--_x`: convenção de propriedade privada do componente (`--_wp-components-select-control-padding`)
+    if (node.prop.startsWith('--_')) {
+        return false;
+    }
+    return onlyCustomProperties(node.parent) && !/:host(?![\w-])/i.test(selector) && !insideComponentRule(node.parent);
+}
+
+function onlyCustomProperties(container: PostcssDeclaration['parent']): boolean {
+    return (container?.nodes ?? []).every((child) => child.type !== 'decl' || child.prop.startsWith('--'));
+}
+
+/**
+ * Bloco aninhado numa regra que tem estilo de verdade (`.input { padding: …; &.is-small { --pad: 8px } }`):
+ * é um estado do componente, não um tema. Um tema aninhado em outro bloco só de variáveis continua tema.
+ */
+function insideComponentRule(container: PostcssDeclaration['parent']): boolean {
+    for (let ancestor = container?.parent; ancestor && ancestor.type !== 'root'; ancestor = ancestor.parent) {
+        if (ancestor.type === 'rule' && !onlyCustomProperties(ancestor as PostcssDeclaration['parent'])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

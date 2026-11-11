@@ -20,8 +20,23 @@ export const UNSUPPORTED_EXTENSIONS: ReadonlySet<string> = new Set(['.vue', '.sv
 
 const IGNORED_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', 'out']);
 
-/** Arquivos que não são código de interface escrito pela pessoa: declarações de tipo, testes e stories. */
-const IGNORED_FILE = /\.d\.[cm]?ts$|\.(spec|test|stories)\.[^.]+$/;
+/** Declarações de tipo: não são código de interface. Testes e stories ficam de fora por `isTestPath`. */
+const DECLARATION_FILE = /\.d\.[cm]?ts$/;
+
+/** Testes, fixtures, stories e e2e: pelo nome do arquivo ou por uma pasta do caminho. */
+const TEST_FILE = /\.(spec|test|stories|story)\.[^./]+$/;
+export const TEST_DIRS: ReadonlySet<string> = new Set([
+    'stories', 'test', 'tests', '__tests__', 'e2e', 'e2e-tests', 'fixtures', '__fixtures__', 'test-utils',
+]);
+
+/**
+ * Arquivo de teste, fixture, story ou e2e (caminho relativo, com `/`). Valor dali é exemplo ou entrada de teste,
+ * não decisão de design: não é analisado por padrão (o `ignore` com `!` traz de volta) e um token definido ali
+ * nunca substitui um valor do produto, nem quando os testes são analisados.
+ */
+export function isTestPath(file: string): boolean {
+    return TEST_FILE.test(file) || file.split('/').slice(0, -1).some((dir) => TEST_DIRS.has(dir));
+}
 
 /** Minificado pelo nome (`app.min.css`). O conteúdo também é conferido na análise (ver `isMinified`). */
 const MINIFIED_NAME = /\.min\.[^.]+$/;
@@ -63,7 +78,8 @@ export function isSupportedExtension(ext: string): ext is SupportedExtension {
 
 /**
  * Classifica um arquivo pelo nome. `explicit`: a pessoa passou o arquivo na linha de comando,
- * então testes e stories entram (ela pediu); minificado continua fora, mas é listado.
+ * então uma declaração `.d.ts` entra (ela pediu); minificado continua fora, mas é listado.
+ * Testes e stories não são decididos aqui, e sim no escopo (`isTestPath`), onde o `ignore` pode trazê-los de volta.
  */
 export function classifyFile(name: string, explicit = false): FileKind {
     const base = path.basename(name);
@@ -80,7 +96,7 @@ export function classifyFile(name: string, explicit = false): FileKind {
     if (MINIFIED_NAME.test(base)) {
         return 'minified';
     }
-    return !explicit && IGNORED_FILE.test(base) ? 'other' : 'supported';
+    return !explicit && DECLARATION_FILE.test(base) ? 'other' : 'supported';
 }
 
 /**
@@ -124,6 +140,9 @@ export async function scanDirectory(dir: string): Promise<ScanResult> {
     const tokenFiles: string[] = [];
     const skipped: SkippedFile[] = [];
     for await (const relative of listFiles(root)) {
+        if (isTestPath(relative.split(path.sep).join('/'))) {
+            continue;
+        }
         const kind = classifyFile(relative);
         if (kind === 'supported') {
             files.push(relative);

@@ -61,7 +61,7 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
     // A raiz contém também a pasta de tokens: num monorepo, `fix apps/checkout --tokens packages/tokens` sobe até a raiz comum
     const root = await findProjectRoot(options.tokens ? [...given, options.tokens] : given);
     const { config } = await loadConfig(root, options.config);
-    const scopeOptions = { ignore: config.ignore, includeMinified: config.includeMinified };
+    const scopeOptions = { ignore: config.ignore, includeMinified: config.includeMinified, ...(config.componentProps ? { componentProps: config.componentProps } : {}) };
     const scope = await collectFiles(given, root, scopeOptions);
     const tokensDir = options.tokens ? path.resolve(options.tokens) : path.resolve(root, config.output);
 

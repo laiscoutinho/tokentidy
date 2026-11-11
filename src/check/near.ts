@@ -5,6 +5,7 @@
 
 import type { Candidate, TokenIndex } from '../token-lookup.ts';
 import type { Finding, TokenSuggestion, TokenType } from '../types.ts';
+import { roleFit } from '../fix/token-fit.ts';
 import { colorInfo } from '../values/color-info.ts';
 import { lengthInPx, normalizeFinding } from '../values/normalize.ts';
 
@@ -20,7 +21,9 @@ export interface NearOptions {
 }
 
 export function nearSuggestion(finding: Finding, index: TokenIndex, options: NearOptions): TokenSuggestion | undefined {
-    const candidates = index.ofType(finding.type).filter((c) => c.source !== 'alias' && fitsHost(c, finding));
+    // Cor de outro papel não é sugerida nem por proximidade (`--bg-surface` para um `color`)
+    const candidates = index.ofType(finding.type).filter((c) => c.source !== 'alias' && fitsHost(c, finding)
+        && (finding.type !== 'color' || roleFit(finding.property, c.name) < 2));
     if (finding.type === 'color') {
         return nearColor(finding, candidates);
     }
@@ -28,7 +31,7 @@ export function nearSuggestion(finding: Finding, index: TokenIndex, options: Nea
 }
 
 function fitsHost(candidate: Candidate, finding: Finding): boolean {
-    if (finding.host === 'js-value' || finding.host === 'svg-attribute' || candidate.scope || candidate.form === 'js-theme') {
+    if (finding.host === 'js-value' || finding.host === 'svg-attribute' || finding.host === 'css-string' || finding.host === 'component-prop' || candidate.scope || candidate.form === 'js-theme') {
         return false;
     }
     if (candidate.form === 'custom-property') {
@@ -50,7 +53,7 @@ function nearColor(finding: Finding, candidates: readonly Candidate[]): TokenSug
         }
         const distance = deltaEOK(color.oklch, other.oklch);
         // Os candidatos vêm do mais usado para o menos: em empate fica o primeiro
-        if (distance > 0 && distance <= COLOR_NEAR && (!best || distance < best.distance)) {
+        if (distance > 0 && distance <= COLOR_NEAR && sameHue(color.oklch, other.oklch) && (!best || distance < best.distance)) {
             best = { candidate, distance };
         }
     }
@@ -66,6 +69,24 @@ export function deltaEOK(a: readonly [number, number, number], b: readonly [numb
     const [la, aa, ba] = lab(a);
     const [lb, ab, bb] = lab(b);
     return Math.hypot(la - lb, aa - ab, ba - bb);
+}
+
+/** Abaixo deste croma a cor é neutra: cinza, branco, preto. */
+export const NEUTRAL_CHROMA = 0.005;
+/** Quanto o matiz pode mudar entre duas cores com tom. */
+export const MAX_HUE_SHIFT = 15;
+
+/**
+ * A troca não muda o tom: as duas são neutras, ou as duas têm tom com matiz parecido.
+ * O ΔE sozinho deixa passar `#fcf0f1` (rosado) → `#f0f0f0` (cinza): perto em distância, mas outra cor.
+ */
+export function sameHue(a: readonly [number, number, number], b: readonly [number, number, number]): boolean {
+    const neutral = (c: number, h: number) => c < NEUTRAL_CHROMA || Number.isNaN(h);
+    if (neutral(a[1], a[2]) || neutral(b[1], b[2])) {
+        return neutral(a[1], a[2]) && neutral(b[1], b[2]);
+    }
+    const shift = Math.abs(a[2] - b[2]) % 360;
+    return Math.min(shift, 360 - shift) <= MAX_HUE_SHIFT;
 }
 
 /** Só valor fora do grid: `16px` perto de um token de `12px` é outra decisão, `15px` perto de `16px` é deslize. */

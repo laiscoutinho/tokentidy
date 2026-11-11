@@ -7,7 +7,8 @@ import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { reusableDefinitions, scopedOverrides } from './token-index.ts';
+import { classifyDefinitions, scopedOverrides } from './token-index.ts';
+import type { RejectionReason } from './token-index.ts';
 import { ownTokensOf, readDtcgTree, treeTokensOf } from './generate/output/dtcg-tree.ts';
 import { parseDtcg } from './parsers/dtcg.ts';
 import { isResolverFileName, isTokenFileName, listFiles } from './project/scanner.ts';
@@ -64,11 +65,21 @@ export interface IndexInput {
     deprecated?: ReadonlySet<string>;
 }
 
+export interface RejectedToken {
+    name: string;
+    reason: RejectionReason;
+    /** `family`: o tipo que o nome declara. */
+    declared?: TokenType;
+    definition: Pick<TokenDefinition, 'file' | 'line'>;
+}
+
 export interface TokenIndex {
     /** Candidatos para um valor, em ordem de preferência. */
     lookup(type: TokenType, key: string): readonly Candidate[];
     /** Todos os candidatos de um tipo: base da sugestão por proximidade. */
     ofType(type: TokenType): readonly Candidate[];
+    /** Tokens do projeto com este valor que não servem: o nome diz outro tipo ou foram definidos em teste. */
+    rejected(type: TokenType, key: string): readonly RejectedToken[];
     /** Como ler o valor no módulo gerado (`tokens.ts`), para onde `var()` não funciona. */
     module(type: TokenType, key: string): ModuleAccess | undefined;
     size: number;
@@ -88,7 +99,7 @@ export function buildTokenIndex(input: IndexInput): TokenIndex {
     }
 
     const seen = new Set<string>();
-    const reusable = reusableDefinitions(input.definitions, input.references);
+    const { reusable, rejected } = classifyDefinitions(input.definitions, input.references);
     // Nomes que já existem como CSS: um DTCG com o mesmo caminho é a mesma decisão, já compilada
     const generatedNames = new Set(input.outputs.css ? input.generated.filter((t) => t.path.every((s) => SAFE_SEGMENT.test(s))).map((t) => `--${t.path.join('-')}`) : []);
     const cssNames = new Set([
@@ -179,10 +190,18 @@ export function buildTokenIndex(input: IndexInput): TokenIndex {
         .map(({ candidate }) => candidate)
         .filter((candidate) => !input.deprecated?.has(bareName(candidate.name)));
     const index = Map.groupBy(sorted, (c) => `${c.type}\u0000${c.key}`);
+    const refused = Map.groupBy(
+        rejected.filter((r) => !input.deprecated?.has(bareName(r.definition.name))).map((r): RejectedToken & { id: string } => ({
+            id: `${r.type}\u0000${r.key}`, name: r.definition.syntax === 'dtcg' ? `--${r.definition.name.split('.').join('-')}` : r.definition.name,
+            reason: r.reason, ...(r.declared ? { declared: r.declared } : {}), definition: { file: r.definition.file, line: r.definition.line },
+        })),
+        (r) => r.id,
+    );
     const byType = Map.groupBy(sorted, (c) => c.type);
     return {
         lookup: (type, key) => index.get(`${type}\u0000${key}`) ?? [],
         ofType: (type) => byType.get(type) ?? [],
+        rejected: (type, key) => (refused.get(`${type}\u0000${key}`) ?? []).map(({ id: _id, ...token }) => token),
         module: (type, key) => {
             const trail = modules.get(`${type}\u0000${key}`);
             return trail ? moduleAccess(trail) : undefined;

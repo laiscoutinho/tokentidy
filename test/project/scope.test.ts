@@ -176,3 +176,35 @@ test('.mts and .cts are analyzed like .ts', async () => {
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test('tests, stories and fixtures are left out by default, and a ! pattern in ignore brings them back', async () => {
+    const dir = await project({
+        'package.json': '{}',
+        'src/Button.css': '.a { color: red; }',
+        'src/Button.story.tsx': 'x',
+        'src/Button.stories.tsx': 'x',
+        'src/stories/demo.css': '.a { color: red; }',
+        'src/test/a.css': '.a { color: red; }',
+        'src/__tests__/a.css': '.a { color: red; }',
+        'src/e2e-tests/a.css': '.a { color: red; }',
+        'tools/fixtures/theme.css': ':root { --my-custom-color: red; }',
+        'tools/test-utils/a.css': '.a { color: red; }',
+        'src/testing/a.css': '.a { color: red; }',
+    });
+    try {
+        const plain = await collectFiles([dir], dir);
+        assert.deepEqual(plain.files, ['src/Button.css', 'src/testing/a.css']);
+        assert.deepEqual(plain.skipped, []);
+
+        const back = await collectFiles([dir], dir, { ignore: ['!**/stories/**', 'src/testing/**', '!src/testing/a.css'] });
+        assert.deepEqual(back.files, ['src/Button.css', 'src/stories/demo.css', 'src/testing/a.css']);
+
+        // A pasta de testes passada diretamente é analisada: o caminho conta a partir dela
+        const given = await collectFiles([path.join(dir, 'src', 'test')], dir);
+        assert.deepEqual(given.files, ['src/test/a.css']);
+        // O contexto da execução parcial também deixa os testes de fora
+        assert.ok(!given.context!.files.some((f) => f.includes('fixtures') || f.includes('stories')));
+    } finally {
+        await rm(dir, { recursive: true });
+    }
+});

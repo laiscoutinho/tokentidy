@@ -8,13 +8,14 @@ import path from 'node:path';
 import { normalizeFinding } from '../values/normalize.ts';
 import type { Finding } from '../types.ts';
 import type { Candidate } from '../token-lookup.ts';
-import { resolvesUnder } from '../token-index.ts';
 import { importInsertion, loadedFiles, styleId } from './imports.ts';
 import type { LoadedFile, Preprocessor } from './imports.ts';
 import { ModuleImport } from './module-import.ts';
 import { angularQuote, jsQuote, nextToOperator } from './surrounding-syntax.ts';
-import type { Edit, FilePlan, FixPlan, PlanContext, Replacement, SkipReason, SkippedValue } from './plan-types.ts';
+import { candidatesFor, describeContext, fit, hostSkip, isNegative, rejectedReason, roleMismatch, skippedValue } from './plan-reasons.ts';
+import type { Edit, FilePlan, FixPlan, PlanContext, Replacement, SkippedValue } from './plan-types.ts';
 
+export { NO_USABLE_TOKEN } from './plan-types.ts';
 export type { Edit, FilePlan, FixPlan, PlanContext, Replacement, ReplacementReason, SkipReason, SkippedValue } from './plan-types.ts';
 
 /**
@@ -86,23 +87,18 @@ class FilePlanner {
 
     /** Troca planejada (`undefined`), sem token (`'no-token'`) ou o motivo de não trocar. */
     plan(finding: Finding): SkippedValue | 'no-token' | undefined {
-        const candidates = this.#context.index.lookup(finding.type, this.#context.approximate?.get(finding) ?? normalizeFinding(finding))
-            .filter((c) => c.form !== 'js-theme'
-                && (c.source !== 'alias' || c.occurrences?.some((o) => sameOccurrence(o, finding)))
-                && (!c.scope || resolvesUnder(finding.selector, c.scope.selector, c.scope.rivals)));
+        const key = this.#context.approximate?.get(finding) ?? normalizeFinding(finding);
+        const { found, candidates } = candidatesFor(finding, key, this.#context.index);
         if (candidates.length === 0) {
-            return 'no-token';
+            return found.length > 0 ? roleMismatch(finding, found) : rejectedReason(finding, key, this.#context.index);
         }
-        if (finding.host === 'angular-template' && finding.impliedUnit && !finding.unitSuffix) {
-            return skippedValue(finding, 'unit-in-binding', 'the unit in the binding name applies to more than one value; edit it by hand');
+        // Destinos em que o `var()` não entra sem mais cuidado; o JavaScript que lê o valor usa o módulo gerado
+        const byHost = hostSkip(finding);
+        if (byHost) {
+            return byHost;
         }
-
         if (finding.host === 'js-value') {
             return this.#moduleValue(finding);
-        }
-
-        if (finding.host === 'svg-attribute') {
-            return skippedValue(finding, 'svg-attribute', 'var() in an SVG attribute does not work the same in every browser; move it to style or edit it by hand');
         }
 
         const buildTime = this.#needsBuildTimeValue(finding);
@@ -189,6 +185,7 @@ class FilePlanner {
             return undefined;
         }
         const others = candidates.filter((c) => c.source === 'project' && c.form === chosen.form && c.uses === chosen.uses && c.name !== chosen.name
+            && fit(finding, c) === fit(finding, chosen)
             && (c.form === 'custom-property' || this.#variableUsable(finding, c, buildTime) === true));
         if (others.length === 0) {
             return undefined;
@@ -210,6 +207,9 @@ class FilePlanner {
         if (!facts.isModule) {
             return unavailable('this file has no import or export, so the token module can\'t be imported; edit it by hand');
         }
+        if (isNegative(finding)) {
+            return skippedValue(finding, 'negative-value', 'the value is negative and the token module only has the positive value; edit it by hand');
+        }
         const quote = this.#source[finding.offset - 1];
         if (!quote || !'\'"`'.includes(quote) || this.#source[finding.endOffset] !== quote) {
             return unavailable('the value is part of a longer string; edit it by hand');
@@ -223,9 +223,16 @@ class FilePlanner {
         return undefined;
     }
 
-    #replace(finding: Finding, candidate: Candidate, token: string, candidates: readonly Candidate[]): undefined {
+    #replace(finding: Finding, candidate: Candidate, token: string, candidates: readonly Candidate[]): SkippedValue | undefined {
         let text = token;
-        if (finding.numeric) {
+        if (isNegative(finding)) {
+            // O token tem o valor positivo (`-8px` é o espaçamento `8px` ao contrário): o sinal fica no uso
+            const negated = this.#negated(finding, candidate, token);
+            if (!negated) {
+                return skippedValue(finding, 'negative-value', `the value is negative and ${candidate.name} has the positive value; edit it by hand`);
+            }
+            text = negated;
+        } else if (finding.numeric) {
             // Número de JS/Angular: o token só existe como string (`padding: 'var(--x)'`)
             const quote = finding.host === 'angular-template' ? angularQuote(this.#source, finding) : (this.#quote ??= jsQuote(this.#source));
             text = `${quote}${token}${quote}`;
@@ -241,17 +248,42 @@ class FilePlanner {
         }
         this.#edits.push(...edits);
         this.#furthestEnd = Math.max(this.#furthestEnd, ...edits.map((e) => e.endOffset));
-        const alternatives = [...new Set(candidates.filter((c) => c.source === 'project' && c.name !== candidate.name).map((c) => c.name))];
+        const projectOthers = candidates.filter((c) => c.source === 'project' && c.name !== candidate.name);
+        const alternatives = [...new Set(projectOthers.map((c) => c.name))];
         const approximate = this.#context.approximate?.get(finding);
+        // Ganhou pelo nome (papel da cor, `padding` no `padding`) de um token mais usado: o motivo diz isso
+        const byName = candidate.source === 'project' && projectOthers.some((c) => c.uses > candidate.uses);
         this.#replacements.push({
             finding, token: candidate.name, source: candidate.source, text,
-            reason: candidate.source === 'alias' ? 'alias' : candidate.source === 'generated' ? 'generated' : alternatives.length > 0 ? 'most-used' : 'only-match',
+            reason: candidate.source === 'alias' ? 'alias' : candidate.source === 'generated' ? 'generated'
+                : byName ? 'name-matches-property' : alternatives.length > 0 ? 'most-used' : 'only-match',
             ...(candidate.definition ? { definedAt: candidate.definition } : {}),
             ...(alternatives.length > 0 ? { alternatives } : {}),
             ...(approximate === undefined ? {} : { approximate }),
             ...(candidate.uncompiledFrom ? { uncompiledFrom: candidate.uncompiledFrom } : {}),
         });
         return undefined;
+    }
+
+    /**
+     * O uso negativo do token: `calc(-1 * var(--x))` no CSS (e como string no JS), `-$x` no SCSS e `-@x` no Less.
+     * Depois de outro valor (`margin: 0 -8px`) vira `(-$x)`: `0 -$x` é conta para o Sass e o Less (dá `-8px`),
+     * enquanto `0 -8px` é uma lista de dois valores.
+     */
+    #negated(finding: Finding, candidate: Candidate, token: string): string | undefined {
+        if (candidate.form === 'custom-property') {
+            const text = `calc(-1 * ${token})`;
+            if (!finding.numeric) {
+                return text;
+            }
+            const quote = finding.host === 'angular-template' ? angularQuote(this.#source, finding) : (this.#quote ??= jsQuote(this.#source));
+            return `${quote}${text}${quote}`;
+        }
+        if (finding.numeric) {
+            return undefined;
+        }
+        const before = this.#source.slice(0, finding.offset).trimEnd().at(-1) ?? '';
+        return before === '' || '(,:'.includes(before) ? `-${token}` : `(-${token})`;
     }
 
     result(): FilePlan {
@@ -267,23 +299,4 @@ class FilePlanner {
         }
         return { file: this.#file, replacements: this.#replacements, edits: edits.sort((a, b) => a.offset - b.offset || a.endOffset - b.endOffset) };
     }
-}
-
-function skippedValue(finding: Finding, reason: SkipReason, message: string): SkippedValue {
-    return { finding, reason, message };
-}
-
-function describeContext(finding: Finding): string {
-    if (finding.property.startsWith('@')) {
-        return `the ${finding.property} condition`;
-    }
-    if (finding.function?.startsWith('@')) {
-        return `this ${finding.function} argument`;
-    }
-    return finding.function ? `${finding.function}()` : 'this expression';
-}
-
-/** O alias foi criado para esta ocorrência: mesmo arquivo, propriedade e seletor. */
-function sameOccurrence(occurrence: { file: string; property: string; selector?: string }, finding: Finding): boolean {
-    return occurrence.file === finding.file && occurrence.property === finding.property && occurrence.selector === finding.selector;
 }
