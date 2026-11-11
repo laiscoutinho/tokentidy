@@ -26,9 +26,9 @@ test('check prints one finding per line (file:line:column, severity, rule, prope
     assert.equal(status, 1);
     assert.equal(stderr, '3 violations, 0 review in 3 files\n');
     assert.deepEqual(stdout.trim().split('\n'), [
-        `${path.join('basic-project', 'src', 'App.jsx')}:2:32\tviolation\tcolor/hardcoded\tcolor\t#ff0000`,
-        `${path.join('basic-project', 'src', 'App.scss')}:2:10\tviolation\tcolor/hardcoded\tcolor\t#ff0000`,
-        `${path.join('basic-project', 'src', 'components', 'Button.css')}:2:12\tviolation\tspacing/hardcoded\tpadding\t12px`,
+        `basic-project/src/App.jsx:2:32\tviolation\tcolor/hardcoded\tcolor\t#ff0000`,
+        `basic-project/src/App.scss:2:10\tviolation\tcolor/hardcoded\tcolor\t#ff0000`,
+        `basic-project/src/components/Button.css:2:12\tviolation\tspacing/hardcoded\tpadding\t12px`,
     ]);
 });
 
@@ -124,9 +124,9 @@ test('generate writes DTCG + CSS + SCSS into design-tokens/ and lists the files 
 
         assert.equal(status, 0);
         assert.deepEqual(stdout.trim().split('\n'), [
-            path.join('design-tokens', 'tokens.tokens.json'),
-            path.join('design-tokens', 'tokens.css'),
-            path.join('design-tokens', '_tokens.scss'),
+            'design-tokens/tokens.tokens.json',
+            'design-tokens/tokens.css',
+            'design-tokens/_tokens.scss',
         ]);
         assert.match(stderr, /^6 new tokens, 0 kept, 0 semantic aliases$/m);
         assert.match(stderr, /values used fewer than 2 times were not turned into tokens/);
@@ -218,7 +218,7 @@ test('check on one file inside a project reports paths from where it runs, with 
     const { stdout, stderr, status } = runIn(project, 'check', path.join('src', 'App.scss'));
 
     assert.equal(status, 1);
-    assert.equal(stdout, `${path.join('src', 'App.scss')}:2:10\tviolation\tcolor/hardcoded\tcolor\t#ff0000\n`);
+    assert.equal(stdout, `src/App.scss:2:10\tviolation\tcolor/hardcoded\tcolor\t#ff0000\n`);
     assert.equal(stderr, '1 violation, 0 review in 1 file\n');
 });
 
