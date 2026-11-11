@@ -22,6 +22,15 @@ In this order:
 2. a **hand-written token** of the project: a global custom property (`:root`/`html`/`body`, never redefined with another value by a theme or media query), or a top-level `$x`/`@x` visible in the file (same file, or a file it loads with `@import`/`@use … as *`). Between two, the most used wins, and a tie is skipped as `ambiguous-token`;
 3. a **generated token** from the tokens folder (`design-tokens/`, or `output` in the config), when its file exists: `tokens.css` for `var()`, `_tokens.scss` for `$x`, `_tokens.less` for `@x`.
 
+**The same value is not enough: the token must fit the property.** Among the tokens with the value:
+
+- a token whose name is of another type is refused: `$border-width-thin: 1px` never goes into a `margin`, `--font-size-sm: 12px` never into a `gap`. Names that say nothing about the type (`--space-3`, `$base`) are accepted;
+- a color token whose name gives it a role (text/`fg`, background/`bg`/`surface`, `border`/`outline`/`divider`) only goes where that role is: `--color-bg-surface: #fff` never goes into `color`. A color with no role in the name (`$gray-900`, `$white`) fits anywhere;
+- a token defined in a test, story or fixture file never replaces a product value;
+- a token whose name is of this property (`--padding-md` in a `padding`, `--color-text` in a `color`) wins over a more used one with another name.
+
+When the only token with the value is refused, the value is skipped with the reason, and still counts as having no token (for [`--approximate`](#values-close-to-a-token---approximate) and `generate`). Each replacement tells why that token was chosen, in `--json` (`reason`, with `alternatives` and `definedAt`): `alias` (created for this use), `only-match`, `most-used`, `name-matches-property` or `generated`.
+
 ### Hand-written tokens
 
 You don't need `generate` or a DTCG file. A `tokens.css` like this is enough:
@@ -79,6 +88,7 @@ If the compiled CSS is already in the project, it is the same token: it is used 
 | SCSS/Sass/Less inside another function (`darken`, `math.div`), next to `* / + % -`, or in `@media` | `$name` / `@name`. A generated one comes with `@use '<path>/tokens' as *;` (Sass: no `;`) or `@import (reference) '<path>/_tokens.less';` |
 | JSX number (`padding: 16`) | `'var(--name)'`, in the quote style the file uses most |
 | JSX string (`'8px 16px'`) | `'8px var(--name)'` |
+| A negative value (`margin: -8px`) | `calc(-1 * var(--name))` (also as a JSX string), `-$name` / `-@name`, and `(-$name)` after another value (`margin: 0 (-$name)`: `0 -$name` would be a subtraction) |
 | Angular `[style.padding.px]="16"` / `{'gap.px': 16}` | `[style.padding]="'var(--name)'"` / `{'gap': 'var(--name)'}` |
 | JS/TS read by JavaScript: canvas, charts, unknown functions (`ctx.fillStyle = '#4f46e5'`) | `color.indigo[600]` from the generated `tokens.ts`/`tokens.js`, with the `import` added (see below) |
 
@@ -114,7 +124,13 @@ src/App.scss:12:10	skipped	needs-preprocessor-variable	16px	…
 | `unit-in-binding` | `[style.width.px]="a ? 16 : 24"`: the unit in the name belongs to both values. Also a number in `host: { '[style.width.px]': '16' }` |
 | `needs-token-module` | The value is read by JavaScript (canvas, chart or unknown function), where `var()` doesn't work, and the `tokens.ts` module can't be used: it wasn't generated, or the file can't import it |
 | `svg-attribute` | The value is in an SVG presentation attribute (`fill="#fff"`). Browsers don't agree on `var()` there, and the specification is still under discussion: move it to `style` or edit it by hand |
+| `css-string` | The value is in CSS inside an untagged template string, which often goes to an iframe or another window where the tokens may not be loaded |
+| `component-prop` | The value is a component prop (`<Stack gap="12px">`): the prop's type belongs to the component, which may expect a step of its own scale instead of `var()` |
 | `ambiguous-token` | Two tokens of the project have this value and are used equally: picking one would be a guess |
+| `token-family-mismatch` | The only token with the value is named for another type (`$border-width-thin` in a `margin`). `alternatives` lists it |
+| `token-role-mismatch` | The only color token with the value is of another role (`--color-bg-surface` in a `color`). `alternatives` lists it |
+| `test-token` | The only token with the value is defined in a test, story or fixture file |
+| `negative-value` | The value is negative and the sign can't go with the token: in the `tokens.ts` module, or a numeric JSX value |
 | `overlap` | Two replacements on the same text |
 | `breaks-syntax` | The fixed file would have a syntax error (it is analyzed again in memory before writing) |
 | `changed-on-disk` | The file changed while the command was running |
@@ -128,7 +144,7 @@ npx tokentidy fix --approximate --yes         # applies what passes the guards
 npx tokentidy fix --approximate --no-input    # only lists, changes nothing close
 ```
 
-With `--approximate`, `fix` also replaces values that are *almost* a token of the project: off the spacing grid by a little (`15px` next to a `16px` token, in the same role) or a color within `colorTolerance` of it (`#4f46e6` next to `#4f46e5`). The values are grouped by role, the same way [`generate` consolidates](generate.md#close-values-consolidation), and each group is shown before anything happens. A color close to a project token always goes to that token, even when the loose color is used more:
+With `--approximate`, `fix` also replaces values that are *almost* a token of the project: off the spacing grid by a little (`15px` next to a `16px` token, in the same role) or a color within `colorTolerance` of it (`#4f46e6` next to `#4f46e5`). The values are grouped by role, the same way [`generate` consolidates](generate.md#close-values-consolidation), and each group is shown before anything happens. A spacing value goes to its **nearest grid step**, never more than half the grid away (`15px` → `16px`, never `12px`); a tie (`14px` between 12 and 16) goes to the step the project uses more. The target depends only on the value and its type, so the same value goes to the same step everywhere. A color only goes to a token of the **same hue**: at most 15° of hue shift, and a neutral (gray, white, black) never merges with a tinted color, however small ΔE is (a pinkish gray is not a gray). A color close to a project token always goes to that token, even when the loose color is used more:
 
 ```
 .card padding: 15px ×1 → var(--space-m) (16px)

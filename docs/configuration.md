@@ -28,9 +28,20 @@ TokenTidy works without any configuration. To change its defaults, create a file
 | `output` | `design-tokens` | Folder for the generated tokens, relative to the project |
 | `splitThreshold` | `60` | From how many tokens the CSS is split into one file per category |
 | `semanticTokens` | `true` | Generate semantic aliases (`color-text-danger`) |
-| `ignore` | `[]` | Patterns of files and folders to skip, relative to the project root (`legacy/**`). They are listed as skipped, with the reason `ignored` |
+| `ignore` | `[]` | Patterns of files and folders to skip, relative to the project root (`legacy/**`). They are listed as skipped, with the reason `ignored`. A pattern starting with `!` brings files back ([below](#ignore-patterns)) |
+| `componentProps` | `gap`, `rowGap`, `columnGap`, `padding*`, `margin*` (with `X`/`Y`), `color`, `backgroundColor`, `borderColor`, `borderRadius`, `fontSize`, `lineHeight` | Component props read as style values (`<Stack gap="12px">`), as a list of prop names. The list replaces the default; `[]` turns it off. Only text with a unit or a color is read ([check](check.md#where-it-looks)) |
 | `includeMinified` | `false` | Analyze minified files instead of listing them as skipped |
 | `colorTolerance` | `0.02` | How close two colors must be (ΔE in OKLab, `0` or more) to count as the same decision: used by [consolidation](generate.md#close-values-consolidation) and by [`fix --approximate`](fix.md#values-close-to-a-token---approximate) |
+
+## Ignore patterns
+
+Patterns are read in order and the **last one that matches wins**, as in `.gitignore`. A `!` in front brings back what an earlier pattern, or the default exclusion of tests and stories ([check](check.md#what-it-skips)), left out:
+
+```json
+{ "ignore": ["legacy/**", "!legacy/theme.css", "!src/**/*.stories.tsx"] }
+```
+
+Here `legacy/` is skipped except `legacy/theme.css`, and stories in `src/` are analyzed.
 
 ## Which value wins
 

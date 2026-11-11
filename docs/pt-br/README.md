@@ -2,7 +2,7 @@
 
 > 🇺🇸 Para ler este arquivo em inglês, [clique aqui](../../README.md).
 
-Uma ferramenta de linha de comando criada como meu **Trabalho de Conclusão de Curso (TCC)** para ajudar a manter o código front-end **fiel ao design system**. Ela encontra valores visuais fixos no código (como `#4f46e5`, `17px` ou `font-family: Arial`), aponta qual **design token** deveria ser usado no lugar, corrige o código com segurança e, quando o projeto ainda não tem tokens, ajuda a criá-los.
+Uma ferramenta de linha de comando para ajudar a manter o código front-end **fiel ao design system**. Ela encontra valores visuais fixos no código (como `#4f46e5`, `17px` ou `font-family: Arial`), aponta qual **design token** deveria ser usado no lugar, corrige o código com segurança e, quando o projeto ainda não tem tokens, ajuda a criá-los.
 
 > ⚠️ Em desenvolvimento (versão `0.0.x`: cada recurso é uma versão patch; a `0.1.0` será a primeira com todos os recursos planejados). Hoje o TokenTidy encontra valores fixos em CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) e Angular, gera design tokens a partir dos repetidos (com temas claro/escuro e um módulo JS para canvas e gráficos), troca valores fixos por tokens (valores próximos só com a sua autorização e as guardas de coerência), compara micro-frontends e valida arquivos de tokens DTCG. Veja o [roadmap](#️-roadmap).
 
@@ -94,7 +94,6 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 
 | Etapa | Status |
 |---|---|
-| Estudo das ferramentas existentes (design-lint, Design Token Extractor) | 🟢 |
 | Definição de escopo e arquitetura | 🟢 |
 | Esqueleto da CLI em TypeScript (`check`, `--json`, testes) | 🟢 |
 | Detecção de valores fixos em CSS e SCSS | 🟢 |
@@ -127,9 +126,8 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | `validate` contra o schema DTCG 2025.10 e regras de referência | 🟢 |
 | Temas claro/escuro com o Resolver Module do DTCG | 🟢 |
 | Tokens escritos à mão no `fix` sem DTCG (tipo pelo uso, `$type` ou nome), DTCG não compilado, valores usados uma vez listados | 🟢 |
+| Token que serve para a propriedade e o papel da cor, negativos, testes e stories de fora, CSS em strings sem tag e props de componente, truques de CSS para revisão, degraus de cor pela luminosidade, consolidação no passo mais próximo, `token/undefined`, `validate` sem cascata | 🟢 |
 | Unidades relativas (`%`, `vw`, `vh`): comparar com valores absolutos usados no mesmo papel | ⚪ |
-| Avaliação comparativa nos projetos base | ⚪ |
-| Escrita do texto do TCC | ⚪ |
 
 ---
 
@@ -178,15 +176,9 @@ npm run check      # checagem de tipos + testes
 
 ## 🤝 Comunidade
 
-O TokenTidy é meu **Trabalho de Conclusão de Curso (TCC)**, então por enquanto **não aceita contribuições externas** (pull requests). Issues relatando bugs ou ideias são bem-vindas.
+Por enquanto o TokenTidy **não aceita contribuições externas** (pull requests). Issues relatando bugs ou ideias são bem-vindas.
 
-Depois da apresentação do TCC, o projeto vai se abrir a contribuições como código aberto. Qualquer uso, cópia ou trabalho derivado deve sempre **citar este repositório** ([github.com/laiscoutinho/tokentidy](https://github.com/laiscoutinho/tokentidy)) **e a autoria, de Laís Coutinho**.
-
-- **Tema:** uma ferramenta para detectar, corrigir e gerar design tokens em projetos front-end
-- **Autoria:** Laís Coutinho
-- **Curso / Instituição:** _a preencher_
-- **Orientador(a):** _a preencher_
-- **Laboratório de experimentos:** [tcc-labs](https://github.com/laiscoutinho/tcc-labs)
+Qualquer uso, cópia ou trabalho derivado deve sempre **citar este repositório** ([github.com/laiscoutinho/tokentidy](https://github.com/laiscoutinho/tokentidy)) **e a autoria, de Laís Coutinho**.
 
 ---
 

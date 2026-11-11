@@ -52,7 +52,7 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
 | `findings` | The violations. `file` is relative to `root` and always uses `/`, also on Windows |
 | `suggestion` | Optional, on a finding: `token`, `match` (`exact` or `near`), `distance` on `near` (px difference, or ΔEOK for colors), `alternatives` on a tie ([check](check.md#which-token-fits)) |
 | `offset`, `endOffset` | The exact slice of the value in the file (starting at 0, end not included) |
-| `host` | Where the value was written: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `js-value`, `svg-attribute` |
+| `host` | Where the value was written: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `css-string`, `component-prop`, `js-value`, `svg-attribute` |
 | `selector` | The CSS selector, or `tag.class` for inline styles |
 | `atRules`, `function`, `impliedUnit` | Optional: the at-rules around the rule (`@media (...)`), the function around the value (`darken`), the unit implied by the code (`px` for `padding: 8` in JSX, `rem` for `[style.gap.rem]`) |
 | `review` | Review items: the same fields as a finding, plus `message` |
@@ -94,8 +94,8 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
 | Field | Meaning |
 |---|---|
 | `root`, `dryRun` | As above |
-| `files` | Each changed file, with its `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason`, and `definedAt`/`alternatives` when they apply; `uncompiledFrom` is the DTCG file of a token that no CSS defines yet) and, with `--dry-run`, its `diff` |
-| `skippedValues` | Values not replaced, with the reason ([fix](fix.md#values-it-skips)); `alternatives` lists the tokens in a tie |
+| `files` | Each changed file, with its `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason` (`alias`, `only-match`, `most-used`, `name-matches-property` or `generated`, [fix](fix.md#which-token-is-used)), and `definedAt`/`alternatives` when they apply; `uncompiledFrom` is the DTCG file of a token that no CSS defines yet) and, with `--dry-run`, its `diff` |
+| `skippedValues` | Values not replaced, with the reason ([fix](fix.md#values-it-skips)); `alternatives` lists the tokens in a tie, or the refused ones (`token-family-mismatch`, `token-role-mismatch`, `test-token`) |
 | `withoutToken` | Values with no token of the same value |
 | `belowThreshold` | The part of those used fewer than `minOccurrences` times (`file`, `line`, `column`, `type`, `property`, `value`) |
 | `repeatedWithoutToken` | The part of those that `generate` would turn into tokens: the tokens folder is out of date |

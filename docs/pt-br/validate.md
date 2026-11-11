@@ -29,7 +29,7 @@ Dentro das pastas indicadas (padrão: a pasta atual), todo `*.tokens.json` e `*.
 | `resolver/unknown-default` | Um modificador de resolver cujo `default` não é um dos seus contextos |
 | `resolver/missing-source`, `resolver/outside-root` | Um resolver aponta para um arquivo que não existe, ou que fica fora do projeto |
 
-Quando um arquivo não segue o schema, as regras de referência são puladas para ele: só repetiriam o mesmo erro.
+Quando um arquivo não segue o schema, as regras de referência são puladas para ele: só repetiriam o mesmo erro. Cada erro é **um problema**, no lugar onde ele está: o schema tenta todos os ramos (grupo ou token, valor ou referência, cada `$type`), e só o ramo que serve é informado. O `$value` de um token é conferido contra o próprio `$type` (ou o do grupo), então uma cor errada é um `schema/invalid`, não um por tipo, e um `#fff` num grupo de 100 cores não deixa os 100 vizinhos "não permitidos". Várias propriedades obrigatórias faltando no mesmo lugar saem num problema só.
 
 ## O que ele mostra
 

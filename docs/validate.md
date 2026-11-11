@@ -29,7 +29,7 @@ Inside the folders you give (default: the current folder), every `*.tokens.json`
 | `resolver/unknown-default` | A resolver modifier whose `default` isn't one of its contexts |
 | `resolver/missing-source`, `resolver/outside-root` | A resolver points to a file that doesn't exist, or that is outside the project |
 
-When a file doesn't follow the schema, the reference rules are skipped for it: they would only repeat the same error.
+When a file doesn't follow the schema, the reference rules are skipped for it: they would only repeat the same error. Each mistake is **one problem**, at the place where it is: the schema tries every branch (group or token, value or reference, each `$type`), and only the branch that fits is reported. A token's `$value` is checked against its own `$type` (or its group's), so a wrong color is one `schema/invalid`, not one per type, and a `#fff` in a group of 100 colors doesn't make the 100 siblings "not allowed". Several required properties missing in one place are listed in one problem.
 
 ## What it prints
 

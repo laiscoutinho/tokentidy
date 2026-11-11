@@ -52,7 +52,7 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
 | `findings` | As violações. `file` é relativo a `root` e sempre usa `/`, também no Windows |
 | `suggestion` | Opcional, em um achado: `token`, `match` (`exact` ou `near`), `distance` em `near` (diferença em px, ou ΔEOK nas cores), `alternatives` em um empate ([check](check.md#qual-token-serve)) |
 | `offset`, `endOffset` | O trecho exato do valor no arquivo (começando em 0, fim não incluído) |
-| `host` | Onde o valor foi escrito: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `js-value`, `svg-attribute` |
+| `host` | Onde o valor foi escrito: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `css-string`, `component-prop`, `js-value`, `svg-attribute` |
 | `selector` | O seletor CSS, ou `tag.classe` para estilos inline |
 | `atRules`, `function`, `impliedUnit` | Opcionais: as at-rules em volta da regra (`@media (...)`), a função em volta do valor (`darken`), a unidade implícita no código (`px` para `padding: 8` no JSX, `rem` para `[style.gap.rem]`) |
 | `review` | Itens de revisão: os mesmos campos de uma violação, mais `message` |
@@ -94,8 +94,8 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
 | Campo | Significado |
 |---|---|
 | `root`, `dryRun` | Como acima |
-| `files` | Cada arquivo alterado, com as `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason`, e `definedAt`/`alternatives` quando se aplicam; `uncompiledFrom` é o arquivo DTCG de um token que nenhum CSS define ainda) e, com `--dry-run`, o `diff` |
-| `skippedValues` | Valores não trocados, com o motivo ([fix](fix.md#valores-que-ele-pula)); `alternatives` lista os tokens empatados |
+| `files` | Cada arquivo alterado, com as `replacements` (`line`, `column`, `type`, `property`, `value`, `token`, `source`, `text`, `reason` (`alias`, `only-match`, `most-used`, `name-matches-property` ou `generated`, [fix](fix.md#qual-token-é-usado)), e `definedAt`/`alternatives` quando se aplicam; `uncompiledFrom` é o arquivo DTCG de um token que nenhum CSS define ainda) e, com `--dry-run`, o `diff` |
+| `skippedValues` | Valores não trocados, com o motivo ([fix](fix.md#valores-que-ele-pula)); `alternatives` lista os tokens empatados, ou os recusados (`token-family-mismatch`, `token-role-mismatch`, `test-token`) |
 | `withoutToken` | Valores sem token de mesmo valor |
 | `belowThreshold` | A parte deles usada menos vezes que o `minOccurrences` (`file`, `line`, `column`, `type`, `property`, `value`) |
 | `repeatedWithoutToken` | A parte deles que o `generate` transformaria em token: a pasta de tokens está desatualizada |

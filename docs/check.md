@@ -84,11 +84,12 @@ These go to the error output, in the same `file:line:column` format, and never c
 | Rule | When | Example |
 |---|---|---|
 | `token/unknown` | A `var(--x)` names a custom property nobody defines, and exactly one defined name is at most 2 letters away | `--color-primry is not defined; did you mean --color-primary?` |
+| `token/undefined` | A `var(--x)` with no fallback names a custom property nobody defines, no defined name is close, and it is used only in that one place: probably a typo | `--wp-admin-spacing is never defined, has no fallback and is used only here; check the name` |
 | `token/deprecated` | A token marked `$deprecated` in a DTCG file is used. `fix` never writes it | `--color-old is deprecated: use color.new` |
 | `token/fallback-mismatch` | The fallback in `var(--gap, 12px)` differs from every value of the token, so the screen changes if the token doesn't load | `fallback 12px differs from --gap (16px, tokens.css:1)` |
 | `baseline/stale` | The [baseline](#adopting-it-in-a-project-that-already-has-violations) lists values a file no longer has | `2 baselined values are no longer here; …` |
 
-Only `--x` names are checked for typos: a missing `$x` or `@x` already breaks the build, and loop variables would look unknown. Several close names mean a scale (`--spacing-4`, `--spacing-6`), not a typo, so nothing is said.
+Only `--x` names are checked for typos: a missing `$x` or `@x` already breaks the build, and loop variables would look unknown. Several close names mean a scale (`--spacing-4`, `--spacing-6`), not a typo, so nothing is said. A name used in two or more places, or with a fallback, is taken as set from outside (by JavaScript or a host page), so `token/undefined` stays quiet.
 
 On a run over the whole project, the summary also counts the custom properties nobody uses (`--json` lists them in `unusedTokens`). They are never an error: a token can be used from outside the analyzed files. Sass and Less variables are not counted, because they can be used in places TokenTidy doesn't read yet, such as `@include` arguments.
 
@@ -126,6 +127,8 @@ They stay as two numbers on purpose: one overall score would hide that colors ar
 | `jsx` | `.jsx`, `.tsx`, `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts` | `style={{ ... }}` and objects that reach it (`style={card}`, also from a relative import), `css={{ }}`, `styled.div({ })`, MUI `sx`, `el.style.x`, `setProperty`, `cssText`, `setAttribute`, `Object.assign(el.style, ...)`, `@HostBinding`, `Renderer2.setStyle` |
 | `angular-template` | Angular `template:`, the `.html` of `templateUrl` and `host:` | `style="..."`, `[style.padding.px]="4"`, `[ngStyle]="{...}"` |
 | `css-in-js` | The same script files | Tagged templates: `styled.x`, `css`, `keyframes`, `createGlobalStyle`, `injectGlobal`, and the `css` prop with a template. A value with `${...}` inside it is not reported |
+| `css-string` | The same script files | CSS in a template string **without** a tag (`` const STYLES = `.a { outline: 3px solid #00a32a }` ``), or a `<style>` inside HTML built in JavaScript. Without a tag it is read only when it parses as a real stylesheet: rules with design properties and nothing loose outside them. That CSS often goes to an iframe or another window, where the tokens may not be loaded, so `fix` only reports it |
+| `component-prop` | The same script files | Style props of components (`<Stack gap="12px">`, `<Box padding="8px" color="#fff">`): `gap`, `padding*`, `margin*` (also `X`/`Y`), `color`, `backgroundColor`, `borderColor`, `borderRadius`, `fontSize`, `lineHeight`, or the list in [`componentProps`](configuration.md). Only text with a unit or a color: a bare number is often a step of the component's own scale (`gap={2}`). The prop's type belongs to the component, which may not accept `var()`, so `fix` only reports it |
 | `svg-attribute` | The same script files | SVG presentation attributes in JSX (`fill`, `stroke`, `stopColor`, `floodColor`, `lightingColor`) and `setAttribute('fill' or 'stroke', ...)`. `fix` leaves them alone |
 | `js-value` | The same script files | Colors read by JavaScript: `ctx.fillStyle`, `new Chart`/`new ApexCharts` options, and color keys in objects passed to unknown functions. `fix` writes them from the [`tokens.ts` module](fix.md#canvas-and-charts-the-tokensts-module) |
 
@@ -133,7 +136,9 @@ They stay as two numbers on purpose: one overall score would hide that colors ar
 
 ## What it skips
 
-Inside folders, it skips `node_modules`, `dist`, `build`, `.git`, `coverage`, `.angular`, `.next`, `.nuxt`, `out`, hidden folders, folders that are symbolic links, and `.d.ts`, `*.spec.*`, `*.test.*` and `*.stories.*` files.
+Inside folders, it skips `node_modules`, `dist`, `build`, `.git`, `coverage`, `.angular`, `.next`, `.nuxt`, `out`, hidden folders, folders that are symbolic links, and `.d.ts` files.
+
+**Tests, stories and fixtures are left out by default**: files named `*.spec.*`, `*.test.*`, `*.stories.*` or `*.story.*`, and anything inside a `stories`, `test`, `tests`, `__tests__`, `e2e`, `e2e-tests`, `fixtures`, `__fixtures__` or `test-utils` folder. A value there is an example or a test input, not a design decision: it would count as debt, become a token in `generate` and be rewritten by `fix`. They are left out silently (not listed as `ignored`). To analyze them, bring them back with `!` in [`ignore`](configuration.md#ignore-patterns) (`"!src/**/*.stories.tsx"`), or pass the folder itself (`tokentidy check src/test`). Even then, a token defined in a test file never replaces a product value in `fix`.
 
 **Files are listed, never silently dropped.** Minified files (named `*.min.*`, or with an average line longer than 110 characters) and languages TokenTidy doesn't read yet (`.vue`, `.svelte`, `.styl`, `.stylus`) are listed on the error output:
 

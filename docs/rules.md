@@ -32,6 +32,7 @@ A few details:
 - **Vendor prefixes** (`-webkit-box-shadow`) follow the unprefixed property.
 - **Local custom properties** with a literal (`.card { --gap: 12px }`) are violations too, typed by where they are used (`var(--gap)` in `gap` → `spacing/hardcoded`).
 - **Token blocks** are definitions, not violations: custom properties in `:root`/`html` (also `:root[data-theme=dark]`), in a rule with only custom properties (not `:host`), and overrides of names defined there.
+- A block with only custom properties **nested in a rule with real styles** (`.input { padding: …; &.is-small { --pad: 8px } }`) is a component state, not a theme: its literals are violations. So is any `--_name` (the convention for a component's private property), wherever it is.
 
 ## Review items
 
@@ -42,6 +43,7 @@ Review items are what the code alone can't decide. They are printed and counted,
 | `size/no-context` | `width`, `height`, `min-*`, `max-*`, `inline-size`, `block-size` with a length that matches none of the `size` and `container` contexts above |
 | `breakpoint/plain-css` | A length in a `@media`/`@container` condition in plain CSS, where `var()` doesn't work |
 | `custom-property/unknown-use` | A local custom property whose role can't be told from its uses or its value |
+| `value/hack` | A CSS trick that looks like a design value: a near-zero duration (up to 10ms, the reduced-motion trick), a sub-pixel length (`0.1px` against margin collapse), an extreme length (9999, to push off-screen), a 1px `width`/`height` on `::before`/`::after` (a hairline) and the 1px box of the visually-hidden pattern (`position: absolute` + `overflow: hidden` + `clip`/`clip-path: inset(50%)`). The message says which one. A token would name the trick, and a nearby token would break it. A pill radius (`9999px` in `border-radius`) is a design value and stays a violation |
 | `value/unknown-destination` | A measure passed to a mixin that couldn't be followed. A color in the same position is a normal violation: a color is visual wherever it goes |
 
 ## Suggestions
@@ -82,6 +84,7 @@ These go to the error output and never change the exit code. See [Ignore comment
 - Declarations inside `@font-face` (the font's definition) and `opacity` inside `@keyframes` (animation choreography).
 - SCSS interpolation (`#{...}`), Less mixin calls and comments. SCSS `@include` arguments **are** read.
 - Numbers and non-color values in objects passed to functions TokenTidy doesn't know: `resize({ width: 300 })` is not a style.
-- Props passed down through components, re-exported objects (`export { a } from './b'`), and `${...}` inside a value.
+- Props passed down through components (a style prop like `<Stack gap="12px">` **is** read, see [check](check.md#where-it-looks)), re-exported objects (`export { a } from './b'`), and `${...}` inside a value.
+- Files of tests, stories and fixtures (see [check](check.md#what-it-skips)).
 - Not yet: Vue/Svelte files (listed as skipped).
 - Out of scope: `filter`/`backdrop-filter`, `transform`/`translate`, position offsets (`top`, `right`, `bottom`, `left`, `inset`), `outline-offset`, `text-underline-offset` and unitless `stroke-width`. They place or affect one element; they are not scale decisions.

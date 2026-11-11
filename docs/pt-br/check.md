@@ -84,11 +84,12 @@ Eles vão para a saída de erro, no mesmo formato `arquivo:linha:coluna`, e nunc
 | Regra | Quando | Exemplo |
 |---|---|---|
 | `token/unknown` | Um `var(--x)` cita uma custom property que ninguém define, e exatamente um nome definido está a no máximo 2 letras de distância | `--color-primry is not defined; did you mean --color-primary?` |
+| `token/undefined` | Um `var(--x)` sem valor reserva cita uma custom property que ninguém define, nenhum nome definido está perto, e ele é usado só naquele lugar: provavelmente erro de digitação | `--wp-admin-spacing is never defined, has no fallback and is used only here; check the name` |
 | `token/deprecated` | Um token marcado `$deprecated` em um arquivo DTCG é usado. O `fix` nunca o escreve | `--color-old is deprecated: use color.new` |
 | `token/fallback-mismatch` | O valor reserva em `var(--gap, 12px)` difere de todos os valores do token, então a tela muda se o token não carregar | `fallback 12px differs from --gap (16px, tokens.css:1)` |
 | `baseline/stale` | O [baseline](#adotar-em-um-projeto-que-já-tem-violações) lista valores que um arquivo não tem mais | `2 baselined values are no longer here; …` |
 
-Só nomes `--x` são verificados contra erro de digitação: um `$x` ou `@x` inexistente já quebra o build, e variáveis de laço pareceriam desconhecidas. Vários nomes próximos indicam uma escala (`--spacing-4`, `--spacing-6`), não um erro de digitação, então nada é dito.
+Só nomes `--x` são verificados contra erro de digitação: um `$x` ou `@x` inexistente já quebra o build, e variáveis de laço pareceriam desconhecidas. Vários nomes próximos indicam uma escala (`--spacing-4`, `--spacing-6`), não um erro de digitação, então nada é dito. Um nome usado em dois ou mais lugares, ou com valor reserva, é tomado como definido de fora (pelo JavaScript ou por uma página hospedeira), então o `token/undefined` fica quieto.
 
 Em uma execução sobre o projeto inteiro, o resumo também conta as custom properties que ninguém usa (o `--json` as lista em `unusedTokens`). Isso nunca é erro: um token pode ser usado de fora dos arquivos analisados. Variáveis Sass e Less não entram na conta, porque podem ser usadas em lugares que o TokenTidy ainda não lê, como argumentos de `@include`.
 
@@ -126,6 +127,8 @@ Ficam dois números de propósito: uma nota única esconderia que as cores estã
 | `jsx` | `.jsx`, `.tsx`, `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts` | `style={{ ... }}` e objetos que chegam nele (`style={card}`, também de import relativo), `css={{ }}`, `styled.div({ })`, `sx` do MUI, `el.style.x`, `setProperty`, `cssText`, `setAttribute`, `Object.assign(el.style, ...)`, `@HostBinding`, `Renderer2.setStyle` |
 | `angular-template` | `template:` do Angular, o `.html` do `templateUrl` e `host:` | `style="..."`, `[style.padding.px]="4"`, `[ngStyle]="{...}"` |
 | `css-in-js` | Os mesmos arquivos de script | Templates com tag: `styled.x`, `css`, `keyframes`, `createGlobalStyle`, `injectGlobal` e a prop `css` com template. Um valor com `${...}` dentro não é informado |
+| `css-string` | Os mesmos arquivos de script | CSS em template string **sem** tag (`` const STYLES = `.a { outline: 3px solid #00a32a }` ``), ou um `<style>` dentro de HTML montado no JavaScript. Sem tag, só é lido quando é uma folha de estilo de verdade: regras com propriedades de design e nada solto fora delas. Esse CSS costuma ir para um iframe ou outra janela, onde os tokens podem não estar carregados, então o `fix` só o informa |
+| `component-prop` | Os mesmos arquivos de script | Props de estilo de componentes (`<Stack gap="12px">`, `<Box padding="8px" color="#fff">`): `gap`, `padding*`, `margin*` (também `X`/`Y`), `color`, `backgroundColor`, `borderColor`, `borderRadius`, `fontSize`, `lineHeight`, ou a lista em [`componentProps`](configuration.md). Só texto com unidade ou cor: um número puro costuma ser um passo da escala do próprio componente (`gap={2}`). O tipo da prop é do componente, que pode não aceitar `var()`, então o `fix` só o informa |
 | `svg-attribute` | Os mesmos arquivos de script | Atributos de apresentação do SVG em JSX (`fill`, `stroke`, `stopColor`, `floodColor`, `lightingColor`) e `setAttribute('fill' ou 'stroke', ...)`. O `fix` não mexe neles |
 | `js-value` | Os mesmos arquivos de script | Cores lidas por JavaScript: `ctx.fillStyle`, opções de `new Chart`/`new ApexCharts` e chaves de cor em objetos passados a funções desconhecidas. O `fix` as escreve a partir do [módulo `tokens.ts`](fix.md#canvas-e-gráficos-o-módulo-tokensts) |
 
@@ -133,7 +136,9 @@ Arquivos `.pcss`/`.postcss` são lidos como CSS. Como no próprio TypeScript, JS
 
 ## O que ele pula
 
-Dentro de pastas, ele pula `node_modules`, `dist`, `build`, `.git`, `coverage`, `.angular`, `.next`, `.nuxt`, `out`, pastas ocultas, pastas que são links simbólicos, e arquivos `.d.ts`, `*.spec.*`, `*.test.*` e `*.stories.*`.
+Dentro de pastas, ele pula `node_modules`, `dist`, `build`, `.git`, `coverage`, `.angular`, `.next`, `.nuxt`, `out`, pastas ocultas, pastas que são links simbólicos, e arquivos `.d.ts`.
+
+**Testes, stories e fixtures ficam de fora por padrão**: arquivos com nome `*.spec.*`, `*.test.*`, `*.stories.*` ou `*.story.*`, e tudo dentro de uma pasta `stories`, `test`, `tests`, `__tests__`, `e2e`, `e2e-tests`, `fixtures`, `__fixtures__` ou `test-utils`. Um valor ali é exemplo ou entrada de teste, não decisão de design: contaria como dívida, viraria token no `generate` e seria reescrito pelo `fix`. Eles ficam de fora em silêncio (não aparecem como `ignored`). Para analisá-los, traga-os de volta com `!` no [`ignore`](configuration.md#padrões-do-ignore) (`"!src/**/*.stories.tsx"`), ou passe a própria pasta (`tokentidy check src/test`). Mesmo assim, um token definido em arquivo de teste nunca substitui um valor do produto no `fix`.
 
 **Arquivos são listados, nunca descartados em silêncio.** Arquivos minificados (com nome `*.min.*`, ou com linha média maior que 110 caracteres) e linguagens que o TokenTidy ainda não lê (`.vue`, `.svelte`, `.styl`, `.stylus`) aparecem na saída de erro:
 

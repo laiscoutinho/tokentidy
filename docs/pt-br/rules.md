@@ -32,6 +32,7 @@ Alguns detalhes:
 - **Prefixos de navegador** (`-webkit-box-shadow`) seguem a propriedade sem prefixo.
 - **Custom properties locais** com um valor literal (`.card { --gap: 12px }`) também são violações, com o tipo vindo de onde são usadas (`var(--gap)` em `gap` → `spacing/hardcoded`).
 - **Blocos de tokens** são definições, não violações: custom properties em `:root`/`html` (também `:root[data-theme=dark]`), em uma regra só com custom properties (que não seja `:host`), e sobrescritas de nomes definidos ali.
+- Um bloco só com custom properties **aninhado numa regra com estilo de verdade** (`.input { padding: …; &.is-small { --pad: 8px } }`) é um estado do componente, não um tema: os literais dele são violações. O mesmo vale para qualquer `--_nome` (a convenção de propriedade privada de um componente), onde quer que esteja.
 
 ## Itens de revisão
 
@@ -42,6 +43,7 @@ Itens de revisão são o que o código sozinho não consegue decidir. Eles são 
 | `size/no-context` | `width`, `height`, `min-*`, `max-*`, `inline-size`, `block-size` com uma medida que não se encaixa em nenhum dos contextos de `size` e `container` acima |
 | `breakpoint/plain-css` | Uma medida em uma condição de `@media`/`@container` em CSS puro, onde `var()` não funciona |
 | `custom-property/unknown-use` | Uma custom property local cujo papel não dá para descobrir pelos usos nem pelo valor |
+| `value/hack` | Um truque de CSS que parece valor de design: duração quase zero (até 10ms, o truque do reduced-motion), medida abaixo de 1px (`0.1px` contra o colapso de margem), medida extrema (9999, para tirar da tela), `width`/`height` de 1px em `::before`/`::after` (uma linha fina) e a caixa de 1px do padrão visually-hidden (`position: absolute` + `overflow: hidden` + `clip`/`clip-path: inset(50%)`). A mensagem diz qual é. Um token daria nome ao truque, e um token próximo o quebraria. O raio de pílula (`9999px` em `border-radius`) é valor de design e continua violação |
 | `value/unknown-destination` | Uma medida passada a uma mixin que não deu para seguir. Uma cor na mesma posição é uma violação normal: cor é visual em qualquer lugar |
 
 ## Sugestões
@@ -82,6 +84,7 @@ Vão para a saída de erro e nunca mudam o código de saída. Veja [Comentários
 - Declarações dentro de `@font-face` (a definição da fonte) e `opacity` dentro de `@keyframes` (coreografia de animação).
 - Interpolação SCSS (`#{...}`), chamadas de mixin do Less e comentários. Os argumentos de `@include` do SCSS **são** lidos.
 - Números e valores que não são cor em objetos passados a funções que o TokenTidy não conhece: `resize({ width: 300 })` não é estilo.
-- Props repassadas entre componentes, objetos reexportados (`export { a } from './b'`) e `${...}` dentro de um valor.
+- Props repassadas entre componentes (uma prop de estilo como `<Stack gap="12px">` **é** lida, veja [check](check.md#onde-ele-procura)), objetos reexportados (`export { a } from './b'`) e `${...}` dentro de um valor.
+- Arquivos de testes, stories e fixtures (veja [check](check.md#o-que-ele-pula)).
 - Ainda não: arquivos Vue/Svelte (listados como pulados).
 - Fora do escopo: `filter`/`backdrop-filter`, `transform`/`translate`, deslocamentos de posição (`top`, `right`, `bottom`, `left`, `inset`), `outline-offset`, `text-underline-offset` e `stroke-width` sem unidade. Eles posicionam ou afetam um elemento; não são decisões de escala.

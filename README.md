@@ -2,7 +2,7 @@
 
 > 🇧🇷 To read this file in Brazilian Portuguese, [click here](docs/pt-br/README.md).
 
-A command-line tool built as my **undergraduate capstone project (TCC)** to help keep front-end code **faithful to the design system**. It finds hardcoded visual values in the code (such as `#4f46e5`, `17px` or `font-family: Arial`), points out which **design token** should be used instead, fixes the code safely and, when the project has no tokens yet, helps create them.
+A command-line tool to help keep front-end code **faithful to the design system**. It finds hardcoded visual values in the code (such as `#4f46e5`, `17px` or `font-family: Arial`), points out which **design token** should be used instead, fixes the code safely and, when the project has no tokens yet, helps create them.
 
 > ⚠️ Work in progress (version `0.0.x`: each feature is a patch release; `0.1.0` will be the first with every planned feature). Today TokenTidy finds hardcoded values in CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) and Angular, generates design tokens from the repeated ones (with light/dark themes and a JS module for canvas and charts), replaces hardcoded values with tokens (close values only with your authorization and the coherence guards), compares micro-frontends and validates DTCG token files. See the [roadmap](#️-roadmap).
 
@@ -95,7 +95,6 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 
 | Step | Status |
 |---|---|
-| Study of existing tools (design-lint, Design Token Extractor) | 🟢 |
 | Scope and architecture definition | 🟢 |
 | TypeScript CLI skeleton (`check`, `--json`, tests) | 🟢 |
 | Hardcoded value detection in CSS and SCSS | 🟢 |
@@ -128,9 +127,8 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 | `validate` against the DTCG 2025.10 schema and reference rules | 🟢 |
 | Light/dark themes with the DTCG Resolver Module | 🟢 |
 | Hand-written tokens in `fix` without DTCG (type from usage, `$type` or name), uncompiled DTCG, values used once listed | 🟢 |
+| Token fit by property and color role, negatives, tests and stories left out, untagged CSS strings and component props, CSS tricks to review, color steps by lightness, nearest-step consolidation, `token/undefined`, `validate` without cascades | 🟢 |
 | Relative units (`%`, `vw`, `vh`): compare with absolute values used in the same role | ⚪ |
-| Comparative evaluation on the base projects | ⚪ |
-| Writing the TCC text | ⚪ |
 
 ---
 
@@ -179,15 +177,9 @@ npm run check      # type checking + tests
 
 ## 🤝 Community
 
-TokenTidy is my **undergraduate capstone project (TCC)**, so for now it **doesn't accept external contributions** (pull requests). Issues reporting bugs or ideas are welcome.
+For now TokenTidy **doesn't accept external contributions** (pull requests). Issues reporting bugs or ideas are welcome.
 
-After the TCC presentation, the project will open to contributions as open source. Any use, copy or derived work must always **cite this repository** ([github.com/laiscoutinho/tokentidy](https://github.com/laiscoutinho/tokentidy)) **and its author, Laís Coutinho**.
-
-- **Topic:** a tool for detecting, fixing and generating design tokens in front-end projects
-- **Author:** Laís Coutinho
-- **Program / Institution:** _to fill in_
-- **Advisor:** _to fill in_
-- **Experiment lab:** [tcc-labs](https://github.com/laiscoutinho/tcc-labs)
+Any use, copy or derived work must always **cite this repository** ([github.com/laiscoutinho/tokentidy](https://github.com/laiscoutinho/tokentidy)) **and its author, Laís Coutinho**.
 
 ---
 
