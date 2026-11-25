@@ -56,7 +56,7 @@ npx tokentidy validate --help
 
 ### Version
 
-`tokentidy --version` (or `-V`) prints the installed version, such as `0.0.28`.
+`tokentidy --version` (or `-V`) prints the installed version, such as `0.1.0`.
 
 ## Every option
 
@@ -80,4 +80,4 @@ npx tokentidy validate --help
 
 ## Version
 
-TokenTidy is in version `0.0.x`: each new feature is a patch release, and `0.1.0` will be the first with every planned feature. Names may still change.
+TokenTidy is in version `0.x`: a fix raises the last number (`0.1.1`), and a new feature or a change that breaks something raises the middle one (`0.2.0`). Names may still change until `1.0.0`.

@@ -4,7 +4,7 @@
 
 A command-line tool to help keep front-end code **faithful to the design system**. It finds hardcoded visual values in the code (such as `#4f46e5`, `17px` or `font-family: Arial`), points out which **design token** should be used instead, fixes the code safely and, when the project has no tokens yet, helps create them.
 
-> ⚠️ Work in progress (version `0.0.x`: each feature is a patch release; `0.1.0` will be the first with every planned feature). Today TokenTidy finds hardcoded values in CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) and Angular, generates design tokens from the repeated ones (with light/dark themes and a JS module for canvas and charts), replaces hardcoded values with tokens (close values only with your authorization and the coherence guards), compares micro-frontends and validates DTCG token files. See the [roadmap](#️-roadmap).
+> ⚠️ Work in progress (version `0.x`: fixes raise the last number, new features and changes that break something raise the middle one; `1.0.0` will mark a stable interface). Today TokenTidy finds hardcoded values in CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) and Angular, generates design tokens from the repeated ones (with light/dark themes and a JS module for canvas and charts), replaces hardcoded values with tokens (close values only with your authorization and the coherence guards), compares micro-frontends and validates DTCG token files. See the [roadmap](#️-roadmap).
 
 ```bash
 npm install -D github:laiscoutinho/tokentidy

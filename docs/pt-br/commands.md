@@ -56,7 +56,7 @@ npx tokentidy validate --help
 
 ### Versão
 
-`tokentidy --version` (ou `-V`) mostra a versão instalada, como `0.0.28`.
+`tokentidy --version` (ou `-V`) mostra a versão instalada, como `0.1.0`.
 
 ## Todas as opções
 
@@ -80,4 +80,4 @@ npx tokentidy validate --help
 
 ## Versão
 
-O TokenTidy está na versão `0.0.x`: cada recurso novo é uma versão patch, e a `0.1.0` será a primeira com todos os recursos planejados. Os nomes ainda podem mudar.
+O TokenTidy está na versão `0.x`: uma correção sobe o último número (`0.1.1`), e um recurso novo ou uma mudança que quebra algo sobe o do meio (`0.2.0`). Os nomes ainda podem mudar até a `1.0.0`.

@@ -4,7 +4,7 @@
 
 Uma ferramenta de linha de comando para ajudar a manter o código front-end **fiel ao design system**. Ela encontra valores visuais fixos no código (como `#4f46e5`, `17px` ou `font-family: Arial`), aponta qual **design token** deveria ser usado no lugar, corrige o código com segurança e, quando o projeto ainda não tem tokens, ajuda a criá-los.
 
-> ⚠️ Em desenvolvimento (versão `0.0.x`: cada recurso é uma versão patch; a `0.1.0` será a primeira com todos os recursos planejados). Hoje o TokenTidy encontra valores fixos em CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) e Angular, gera design tokens a partir dos repetidos (com temas claro/escuro e um módulo JS para canvas e gráficos), troca valores fixos por tokens (valores próximos só com a sua autorização e as guardas de coerência), compara micro-frontends e valida arquivos de tokens DTCG. Veja o [roadmap](#️-roadmap).
+> ⚠️ Em desenvolvimento (versão `0.x`: correções sobem o último número; recursos novos e mudanças que quebram algo sobem o do meio; a `1.0.0` vai marcar uma interface estável). Hoje o TokenTidy encontra valores fixos em CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) e Angular, gera design tokens a partir dos repetidos (com temas claro/escuro e um módulo JS para canvas e gráficos), troca valores fixos por tokens (valores próximos só com a sua autorização e as guardas de coerência), compara micro-frontends e valida arquivos de tokens DTCG. Veja o [roadmap](#️-roadmap).
 
 ```bash
 npm install -D github:laiscoutinho/tokentidy

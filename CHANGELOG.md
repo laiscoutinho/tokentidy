@@ -2,6 +2,10 @@
 
 Each version is a git tag. Versions without a date of their own were released together with the next dated one.
 
+## 0.1.0 (first npm release)
+
+The first version on npm. It has everything in 0.0.10 to 0.0.28, listed below.
+
 ## 0.0.28
 
 - Fewer types: `size` values (`width`, `height`, `min-*`, `max-*`) are always a review item (`size/no-context`), since the code doesn't say if a size is a container, an icon or only layout. `container`, `opacity`, `z-index` and breakpoints are no longer reported, and their rules are gone (`breakpoint/plain-css`, `custom-property/unknown-use`, `value/unknown-destination`).
@@ -15,9 +19,9 @@ Each version is a git tag. Versions without a date of their own were released to
 - `fix`: when two tokens fit a value equally, the one whose name matches the property wins (`--spacing-4` in `padding`). Without that, the value is left as `ambiguous-token`, listing both.
 - `generate`: a px token keeps the plain name (`spacing-12`), and its rem twin gets the suffix (`spacing-12-rem`). The summary says how many values already have a token (`reused` in `--json`).
 
-## 0.0.27 (first npm release)
+## 0.0.27
 
-0.0.10 to 0.0.27 are published together as 0.0.27, the first version on npm.
+0.0.10 to 0.0.27 were released together as 0.0.27.
 
 - `check` prints one aligned table per file in the terminal (`--format table` forces it). The columns are the line, type, property, value and the token to use; the footer says what to do next in plain words. Pipes still get tab-separated lines, and `--json` is unchanged.
 - `check` shows up to 3 nearest tokens for a value close to the grid or a palette color (`nearest` in `--json`).
