@@ -6,7 +6,6 @@
  */
 
 import { createRequire } from 'node:module';
-import { tokenize, isTokenDimension, isTokenPercentage, isTokenWhitespace } from '@csstools/css-tokenizer';
 import postcss, { CssSyntaxError } from 'postcss';
 import type { AtRule, Container, Declaration as PostcssDeclaration, Root } from 'postcss';
 
@@ -15,7 +14,8 @@ import { FileCollector, offsetAt } from '../collector.ts';
 import type { ParseResult } from '../collector.ts';
 import type { Host } from '../../types.ts';
 import { atRuleNamesOf, atRulesOf, selectorOf, splitSelectors } from './declaration-context.ts';
-import { recordInclude, recordMixin } from './mixins.ts';
+import { recordInclude } from './mixins.ts';
+import { rootFontSizePx, siblingsOf, valueOf } from './declaration-value.ts';
 import type { MixinContext } from './mixins.ts';
 
 export type StyleSyntax = 'css' | 'scss' | 'sass' | 'less';
@@ -81,27 +81,15 @@ export function walkStylesheet(collector: FileCollector, css: string, baseOffset
         }
         if (node.type === 'atrule') {
             const name = node.name.toLowerCase();
-            if (BREAKPOINT_AT_RULES.has(name)) {
-                const params = paramsOf(node, css);
-                if (params) {
-                    collector.breakpoint(name, params.text, baseOffset + params.offset, host, selectorOf(node));
-                }
-            }
-            if ((name === 'include' || name === 'mixin') && (syntax === 'scss' || syntax === 'sass') && host !== 'css-in-js' && host !== 'css-string') {
+            if (name === 'include' && (syntax === 'scss' || syntax === 'sass') && host !== 'css-in-js' && host !== 'css-string') {
                 const params = paramsOf(node, css);
                 if (params) {
                     const selector = selectorOf(node);
                     const context: MixinContext = {
                         collector, host, baseOffset, atRules: atRulesOf(node),
                         ...(selector === undefined ? {} : { selector }),
-                        siblingsOf: (declaration) => siblingsOf(declaration.parent, css, syntax, siblingsCache),
-                        valueOf: (declaration) => valueOf(declaration, css, syntax)?.text,
                     };
-                    if (name === 'mixin') {
-                        recordMixin(node, params, context);
-                    } else {
-                        recordInclude(params, context);
-                    }
+                    recordInclude(params, context);
                 }
             }
             return;
@@ -154,9 +142,6 @@ export function walkStylesheet(collector: FileCollector, css: string, baseOffset
         });
     });
 }
-
-/** At-rules cuja condição tem breakpoints (`@media (min-width: 768px)`, `@container (width > 400px)`). */
-const BREAKPOINT_AT_RULES: ReadonlySet<string> = new Set(['media', 'container']);
 
 /** Texto original da condição de uma at-rule e sua posição. `undefined` se a posição não bater com o texto. */
 function paramsOf(node: AtRule, css: string): { text: string; offset: number } | undefined {
@@ -246,65 +231,6 @@ export function walkDeclarationList(collector: FileCollector, text: string, base
 interface LessAtRule extends AtRule {
     variable?: boolean;
     value?: string;
-}
-
-interface SassDeclaration extends PostcssDeclaration {
-    expression?: { source?: { start?: { offset: number }; end?: { offset: number } } };
-}
-
-/**
- * Texto original do valor e sua posição na folha de estilo.
- * - CSS, SCSS e Less: o PostCSS tira comentários de `decl.value`; o texto original fica em `raws.value.raw`.
- * - Sass: o `sass-parser` reescreve o valor (`#FFF` vira `#ffffff`), mas guarda a posição da expressão original.
- */
-function valueOf(decl: PostcssDeclaration, css: string, syntax: StyleSyntax): { text: string; offset: number } | undefined {
-    const start = decl.source?.start?.offset;
-    if (start === undefined) {
-        return undefined;
-    }
-    if (syntax === 'sass') {
-        const range = (decl as SassDeclaration).expression?.source;
-        const from = range?.start?.offset;
-        const to = range?.end?.offset;
-        return from === undefined || to === undefined ? undefined : { text: css.slice(from, to), offset: from };
-    }
-    const text = decl.raws.value?.raw ?? decl.value;
-    return { text, offset: start + decl.prop.length + (decl.raws.between?.length ?? 0) };
-}
-
-/** Declarações irmãs (mesma regra), para as regras que dependem de contexto (`max-width` + `margin: 0 auto`). */
-function siblingsOf(parent: Container | undefined, css: string, syntax: StyleSyntax, cache: Map<Container, Map<string, string>>): Map<string, string> {
-    if (!parent) {
-        return new Map();
-    }
-    let siblings = cache.get(parent);
-    if (!siblings) {
-        siblings = new Map();
-        for (const child of parent.nodes ?? []) {
-            if (child.type === 'decl') {
-                const value = valueOf(child, css, syntax);
-                if (value) {
-                    siblings.set(child.prop.toLowerCase(), value.text);
-                }
-            }
-        }
-        cache.set(parent, siblings);
-    }
-    return siblings;
-}
-
-/** `html { font-size: X }` em px: `62.5%` → 10, `10px` → 10. `rem`/`em` na raiz são relativos ao padrão do navegador (16px). */
-function rootFontSizePx(value: string): number | undefined {
-    const token = tokenize({ css: value }).find((t) => !isTokenWhitespace(t));
-    if (token && isTokenPercentage(token) && token[4].value > 0) {
-        return (token[4].value / 100) * 16;
-    }
-    if (!token || !isTokenDimension(token) || token[4].value <= 0) {
-        return undefined;
-    }
-    const factor: Record<string, number> = { px: 1, rem: 16, em: 16 };
-    const unit = factor[token[4].unit.toLowerCase()];
-    return unit === undefined ? undefined : token[4].value * unit;
 }
 
 /** Posição de um erro de sintaxe, nos formatos do PostCSS e do `sass-parser`. */

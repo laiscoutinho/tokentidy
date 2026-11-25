@@ -11,14 +11,11 @@ import type { PropertyRule, Siblings } from '../analysis/rules.ts';
 import type { AnalysisError, DefinitionSyntax, ElementFact, Finding, Host, ReviewItem, TokenDefinition, TokenReference, TokenType } from '../types.ts';
 import { findReferences, findValues } from './css/values.ts';
 import type { ValueMatch } from './css/values.ts';
-import type { MixinCall, MixinDefinition } from './css/mixins.ts';
+import type { StyleSink } from './js/style-sinks.ts';
 
 /** Explicação de cada regra de revisão, para quem lê a saída. */
 export const REVIEW_MESSAGES: Readonly<Record<NonNullable<PropertyRule['review']>, string>> = {
-    'size/no-context': 'size without context: a token only if it is a container width or a square element',
-    'breakpoint/plain-css': 'breakpoint in plain CSS: var() does not work in media queries',
-    'custom-property/unknown-use': 'local custom property with a literal; no use tells its token type',
-    'value/unknown-destination': 'measure passed to a mixin that could not be followed',
+    'size/no-context': 'width or height: a token only if this size is a design decision (a container, an icon)',
     'value/hack': 'CSS trick, not a design value',
 };
 
@@ -52,6 +49,8 @@ export interface CustomPropertyCandidate {
 export interface ParseOptions {
     /** Props de componente que recebem valor de CSS; sem a opção, a lista padrão. */
     componentProps?: ReadonlySet<string>;
+    /** Destinos de estilo de bibliotecas, além dos padrões (`styleSinks`). */
+    styleSinks?: readonly StyleSink[];
 }
 
 export interface ParseResult {
@@ -69,9 +68,6 @@ export interface ParseResult {
     customProperties?: CustomPropertyCandidate[];
     /** Elementos com classes, para as guardas de coerência. */
     elements?: ElementFact[];
-    /** Mixins definidas e chamadas neste arquivo: a definição pode estar em outro (`analysis/cross-file.ts`). */
-    mixins?: MixinDefinition[];
-    mixinCalls?: MixinCall[];
     /** Objetos de estilo importados e exportados por este arquivo. */
     styleLinks?: StyleLinks;
 }
@@ -132,9 +128,6 @@ function topLevelStarts(value: string): number[] {
     return starts;
 }
 
-const COLOR_LITERAL = /^(#[0-9a-f]{3,8}$|(rgb|hsl|hwb|oklch|oklab|lab|lch)a?\()/i;
-const MEASURE_LITERAL = /^-?(\d+\.?\d*|\.\d+)(px|rem|em)$/i;
-
 export class FileCollector {
     readonly file: string;
     readonly source: string;
@@ -150,7 +143,7 @@ export class FileCollector {
     /** Aplica as regras da propriedade ao valor e registra os achados e os usos de tokens. */
     declaration(decl: Declaration): void {
         const { property, value, offset } = decl;
-        this.result.declarations++;
+        const index = this.result.declarations++;
         for (const { name, start, fallback } of findReferences(value)) {
             this.result.references.push({
                 name, property, file: this.file, ...this.#positionOf(offset + start),
@@ -165,44 +158,10 @@ export class FileCollector {
          */
         const text = decl.impliedUnit ? `${value}${decl.impliedUnit}` : value;
 
-        for (const rule of rulesForProperty(property, decl.siblings, decl.selector)) {
+        for (const rule of rulesForProperty(property)) {
             this.#report(decl, rule, findValues(text, rule.match).map((match) => ({
                 ...match, end: Math.min(match.end, value.length),
-            })));
-        }
-    }
-
-    /**
-     * Medidas na condição de `@media`/`@container` (`(min-width: 768px)`): breakpoints.
-     * Em CSS puro vão para revisão: `var()` não funciona em media query, então não há token para usar ainda.
-     */
-    breakpoint(atRule: string, params: string, offset: number, host: Host, selector?: string): void {
-        // CSS-in-JS: também não há como escrever um `$x` ali; `var()` não funciona em media query
-        const rule: PropertyRule = host === 'css' || host === 'css-in-js' || host === 'css-string'
-            ? { type: 'breakpoint', match: 'length', review: 'breakpoint/plain-css' }
-            : { type: 'breakpoint', match: 'length' };
-        this.#report(
-            { property: `@${atRule}`, value: params, offset, host, siblings: new Map(), ...(selector === undefined ? {} : { selector }) },
-            rule,
-            findValues(params, 'length'),
-        );
-    }
-
-    /**
-     * Valor cujo destino não dá para seguir: uma cor é visual em qualquer lugar;
-     * uma medida fica para revisão, porque pode não ser visual.
-     */
-    unknownDestination(text: string, offset: number, host: Host, selector: string | undefined, enclosing: string): void {
-        const decl: Declaration = {
-            property: enclosing, value: text, offset, host, siblings: new Map(), enclosing,
-            ...(selector === undefined ? {} : { selector }),
-        };
-        if (COLOR_LITERAL.test(text)) {
-            for (const rule of rulesForProperty('color', new Map(), selector)) {
-                this.#report(decl, rule, findValues(text, rule.match));
-            }
-        } else if (MEASURE_LITERAL.test(text)) {
-            this.#report(decl, { type: 'size', match: 'length', review: 'value/unknown-destination' }, findValues(text, 'length'));
+            })), index);
         }
     }
 
@@ -216,7 +175,7 @@ export class FileCollector {
         }
     }
 
-    #report(decl: Declaration, rule: PropertyRule, matches: readonly ValueMatch[]): void {
+    #report(decl: Declaration, rule: PropertyRule, matches: readonly ValueMatch[], declaration: number): void {
         const starts = SIDE_SHORTHANDS.has(decl.property) ? topLevelStarts(decl.value) : [];
         for (const match of matches) {
             const index = starts.findLastIndex((start) => start <= match.start);
@@ -241,6 +200,7 @@ export class FileCollector {
                 ...(decl.numeric ? { numeric: true as const } : {}),
                 ...(decl.branch === undefined ? {} : { branch: decl.branch }),
                 ...(starts.length > 1 && index >= 0 ? { part: { index, count: starts.length } } : {}),
+                declaration,
             };
             // O motivo do truque é mais útil que o genérico de "tamanho sem contexto"
             const hack = rule.review === undefined || rule.review === 'size/no-context' ? hackOf(decl, type, item.value) : undefined;
@@ -290,6 +250,20 @@ export function elementSelector(tagName: string, attrs: readonly { name: string;
     const id = attrs.find((attr) => attr.name === 'id')?.value.trim();
     const classes = attrs.find((attr) => attr.name === 'class' || attr.name === 'className')?.value.split(/\s+/).filter(Boolean) ?? [];
     return `${tagName}${id ? `#${id}` : ''}${classes.map((name) => `.${name}`).join('')}`;
+}
+
+/**
+ * Elementos que desenham dentro de um SVG (`<path>`, `<circle>`, gradientes): a cor ou medida deles é parte da
+ * imagem, não decisão de design da interface. O `style` neles não é lido. A raiz `<svg>` continua sendo lida.
+ */
+const SVG_DRAWING_ELEMENTS: ReadonlySet<string> = new Set([
+    'path', 'circle', 'rect', 'polygon', 'polyline', 'line', 'ellipse', 'g', 'stop', 'lineargradient', 'radialgradient',
+    'use', 'symbol', 'defs', 'mask', 'clippath', 'pattern', 'text', 'tspan', 'marker', 'filter', 'image',
+]);
+
+/** O elemento desenha dentro de um SVG (ver `SVG_DRAWING_ELEMENTS`). */
+export function isSvgDrawingElement(tagName: string): boolean {
+    return SVG_DRAWING_ELEMENTS.has(tagName.toLowerCase());
 }
 
 /** `marginTop` → `margin-top`; `WebkitTransition` → `-webkit-transition`; `msFlex` → `-ms-flex`. Já em kebab-case, não muda. */

@@ -95,10 +95,10 @@ test('padding prefers a padding token over a more used gap token', () => withPro
     const result = await fix(dir);
     const replacements = result.files.flatMap((f) => f.replacements).filter((r) => r.finding.file === 'src/a.css');
     assert.deepEqual(replacements.map((r) => `${r.finding.property}=${r.token}:${r.reason}`), [
-        'padding=--dimension-padding-md:name-matches-property', 'gap=--dimension-gap-md:most-used',
-        // `margin`: os dois nomes são de outra propriedade de espaçamento; fica o mais usado
-        'margin=--dimension-gap-md:most-used',
+        'padding=--dimension-padding-md:name-matches-property', 'gap=--dimension-gap-md:name-matches-property',
     ]);
+    // `margin`: os dois nomes são de outra propriedade de espaçamento; ser mais usado não decide
+    assert.deepEqual(result.skipped.filter((s) => s.finding.property === 'margin').map((s) => s.reason), ['ambiguous-token']);
 }));
 
 test('a color is not given a token of another role', () => withProject({

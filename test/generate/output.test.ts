@@ -36,23 +36,22 @@ test('DTCG values follow the 2025.10 format', () => {
     assert.deepEqual(dtcgValueOf('duration', '200ms'), { $type: 'duration', $value: { value: 200, unit: 'ms' } });
     assert.deepEqual(dtcgValueOf('easing', 'cubic-bezier(0.4, 0, 0.2, 1)'), { $type: 'cubicBezier', $value: [0.4, 0, 0.2, 1] });
     assert.deepEqual(dtcgValueOf('font-family', 'inter, arial, sans-serif'), { $type: 'fontFamily', $value: ['inter', 'arial', 'sans-serif'] });
-    assert.deepEqual(dtcgValueOf('opacity', '0.5'), { $type: 'number', $value: 0.5 });
     // O DTCG só aceita px e rem em dimension: em e % viram número, com a unidade na extensão
     assert.deepEqual(dtcgValueOf('spacing', '1.5em'), { $type: 'number', $value: 1.5, unit: 'em' });
     assert.equal(dtcgValueOf('shadow', '0 1px 2px 0 #00000033').$type, 'shadow');
 });
 
-test('each token keeps its occurrences in the extension: the base for autofix', () => {
-    const red = (tree['color'] as Record<string, Record<string, Record<string, unknown>>>)['red']!['600']!;
-    const extension = (red['$extensions'] as Record<string, Record<string, unknown>>)[EXTENSION]!;
+test('a token keeps its count but not its positions; an alias keeps where it is used', () => {
+    const color = tree['color'] as Record<string, Record<string, Record<string, unknown>>>;
+    const extension = (token: Record<string, unknown>) => (token['$extensions'] as Record<string, Record<string, unknown>>)[EXTENSION]!;
+    const red = extension(color['red']!['600']!);
 
-    assert.equal(extension['type'], 'color');
-    assert.equal(extension['key'], '#dc2626');
-    assert.equal(extension['count'], 2);
-    assert.deepEqual((extension['occurrences'] as Finding[]).map((o) => [o.file, o.line, o.offset, o.endOffset, o.selector]), [
-        ['a.css', 1, 0, 7, '.erro'],
-        ['a.css', 2, 20, 27, '.erro'],
-    ]);
+    assert.equal(red['type'], 'color');
+    assert.equal(red['key'], '#dc2626');
+    assert.equal(red['count'], 2);
+    // Linha e offset mudavam a cada edição no projeto e enchiam o diff de um arquivo versionado
+    assert.equal(red['occurrences'], undefined);
+    assert.deepEqual(extension(color['text']!['danger']!)['occurrences'], [{ file: 'a.css', property: 'color', selector: '.erro' }]);
 });
 
 test('semantic aliases are DTCG references to the primitive', () => {
@@ -61,7 +60,7 @@ test('semantic aliases are DTCG references to the primitive', () => {
 });
 
 test('CSS, SCSS and Less are generated from the DTCG tree, sorted by category and size', () => {
-    const files = renderOutput(tree, { outDir: '/out', mode: 'new', styleLanguages: ['less', 'scss'], splitThreshold: 60 });
+    const files = renderOutput(tree, { outDir: '/out', mode: 'new', formats: { dtcg: true, less: true, scss: true }, splitThreshold: 60 });
     const content = (name: string) => files.find((f) => f.file === path.join('/out', name))?.content;
 
     assert.deepEqual(files.map((f) => path.basename(f.file)), ['tokens.tokens.json', 'tokens.css', '_tokens.scss', '_tokens.less']);
@@ -71,12 +70,12 @@ test('CSS, SCSS and Less are generated from the DTCG tree, sorted by category an
 });
 
 test('SCSS and Less files only exist when the project uses them', () => {
-    const files = renderOutput(tree, { outDir: '/out', mode: 'new', styleLanguages: [], splitThreshold: 60 });
+    const files = renderOutput(tree, { outDir: '/out', mode: 'new', formats: { dtcg: true }, splitThreshold: 60 });
     assert.deepEqual(files.map((f) => path.basename(f.file)), ['tokens.tokens.json', 'tokens.css']);
 });
 
 test('with many tokens, the CSS is split by category with an index and a README', () => {
-    const files = renderOutput(tree, { outDir: '/out', mode: 'new', styleLanguages: [], splitThreshold: 2 });
+    const files = renderOutput(tree, { outDir: '/out', mode: 'new', formats: { dtcg: true }, splitThreshold: 2 });
 
     assert.deepEqual(files.map((f) => path.relative('/out', f.file)), [
         'tokens.tokens.json', path.join('css', 'color.css'), path.join('css', 'spacing.css'), path.join('css', 'duration.css'), 'tokens.css', 'README.md',
@@ -101,14 +100,14 @@ test('extend keeps tokens of the existing file that no longer appear in the code
 test('writeOutput deletes stale files only when TokenTidy generated them', async () => {
     const dir = await tempDir();
     try {
-        const options = { outDir: dir, mode: 'new' as const, styleLanguages: ['less'], splitThreshold: 60 };
+        const options = { outDir: dir, mode: 'new' as const, formats: { dtcg: true, less: true }, splitThreshold: 60 };
         await writeOutput(renderOutput(tree, options), options);
         await writeFile(path.join(dir, 'notes.md'), 'mine');
         await mkdir(path.join(dir, 'css'));
         await writeFile(path.join(dir, 'css', 'theme.css'), ':root {}');
 
         // O projeto parou de usar Less: o `_tokens.less` gerado antes sobra e é apagado
-        const withoutLess = { ...options, styleLanguages: [] };
+        const withoutLess = { ...options, formats: { dtcg: true } };
         await writeOutput(renderOutput(tree, withoutLess), withoutLess);
 
         assert.equal(await readFile(path.join(dir, 'notes.md'), 'utf8'), 'mine');
@@ -124,7 +123,7 @@ test('writeOutput never overwrites a file it did not generate', async () => {
     const dir = await tempDir();
     try {
         await writeFile(path.join(dir, 'tokens.css'), ':root { --mine: red; }');
-        const options = { outDir: dir, mode: 'extend' as const, styleLanguages: [], splitThreshold: 60 };
+        const options = { outDir: dir, mode: 'extend' as const, formats: { dtcg: true }, splitThreshold: 60 };
 
         await assert.rejects(writeOutput(renderOutput(tree, options), options), /tokens\.css was not generated by TokenTidy/);
         assert.equal(await readFile(path.join(dir, 'tokens.css'), 'utf8'), ':root { --mine: red; }');
@@ -139,7 +138,7 @@ test('writeOutput in new mode keeps a DTCG file with hand-written tokens', async
     try {
         const manual = { color: { brand: { $type: 'color', $value: '#4f46e5' } } };
         await writeFile(path.join(dir, 'tokens.tokens.json'), JSON.stringify(manual));
-        const options = { outDir: dir, mode: 'new' as const, styleLanguages: [], splitThreshold: 60 };
+        const options = { outDir: dir, mode: 'new' as const, formats: { dtcg: true }, splitThreshold: 60 };
 
         await assert.rejects(writeOutput(renderOutput(tree, options), options), /tokens not generated by TokenTidy \(color\.brand\)/);
         assert.deepEqual(await readDtcgTree(dir), manual);

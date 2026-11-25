@@ -11,7 +11,28 @@ import { offsetAt } from './collector.ts';
 /** Índices de array no sentido do JS: o motor os põe primeiro, em ordem crescente. */
 const INTEGER_KEY = /^(0|[1-9]\d{0,8})$/;
 
-export function parseDtcg(source: string, file: string): { definitions: TokenDefinition[]; errors: AnalysisError[] } {
+type DtcgResult = { definitions: TokenDefinition[]; errors: AnalysisError[] };
+
+/**
+ * O `fix` lê o mesmo arquivo de tokens nas duas análises: com o mesmo texto, o resultado é o mesmo.
+ * Guarda o último resultado de cada arquivo e devolve cópias, para ninguém alterar o que fica guardado.
+ */
+const cache = new Map<string, { source: string; result: DtcgResult }>();
+const CACHE_LIMIT = 32;
+
+export function parseDtcg(source: string, file: string): DtcgResult {
+    let cached = cache.get(file);
+    if (cached?.source !== source) {
+        if (cache.size >= CACHE_LIMIT) {
+            cache.clear();
+        }
+        cached = { source, result: parseDtcgSource(source, file) };
+        cache.set(file, cached);
+    }
+    return { definitions: cached.result.definitions.map((d) => ({ ...d })), errors: cached.result.errors.map((e) => ({ ...e })) };
+}
+
+function parseDtcgSource(source: string, file: string): DtcgResult {
     const positionOf = createPositionLookup(source);
     let json: unknown;
     try {

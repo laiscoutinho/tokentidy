@@ -3,15 +3,14 @@
 /**
  * Tipo de token que um valor pode virar. É a decisão de design que o valor representa:
  * `16px` de `font-size` e `16px` de `line-height` são decisões diferentes e não se misturam.
- * - `size`: largura/altura de elemento quadrado (ícone, avatar, botão redondo);
- * - `container`: largura máxima de um bloco centralizado (conteúdo da página, card, modal);
- * - `breakpoint`: medida em condição de `@media`/`@container` (`(min-width: 768px)`).
+ * - `size`: largura e altura (sempre em revisão: o papel depende do layout).
+ *
+ * `z-index`, `opacity` e breakpoints ficam de fora: não há consenso de token para eles, e `var()` nem funciona em `@media`.
  */
 export type TokenType =
     | 'color'
     | 'spacing'
     | 'size'
-    | 'container'
     | 'radius'
     | 'border-width'
     | 'font-family'
@@ -20,11 +19,8 @@ export type TokenType =
     | 'line-height'
     | 'letter-spacing'
     | 'shadow'
-    | 'opacity'
     | 'duration'
-    | 'easing'
-    | 'z-index'
-    | 'breakpoint';
+    | 'easing';
 
 /**
  * Linguagem em que o valor está escrito. Diz como um token pode ser usado ali:
@@ -35,11 +31,11 @@ export type TokenType =
  */
 /**
  * Onde o valor está escrito, o que decide como o `fix` escreve o token.
- * `css-in-js`: CSS em template literal. `js-value`: valor lido por JavaScript (canvas, gráfico, destino desconhecido), onde `var()` pode não funcionar. `svg-attribute`: atributo de apresentação do SVG (`fill="#fff"`), onde o suporte a `var()` varia entre navegadores.
+ * `css-in-js`: CSS em template literal. `js-value`: valor lido por JavaScript (canvas, gráfico, destino desconhecido), onde `var()` pode não funcionar.
  * `css-string`: CSS num template sem tag (folha montada no JavaScript), que costuma ir para um iframe ou outra janela onde os tokens podem não estar.
  * `component-prop`: prop de componente que recebe valor de CSS (`<Flex gap="1rem">`); o tipo da prop é do componente, que pode não aceitar `var()`.
  */
-export type Host = 'css' | 'scss' | 'sass' | 'less' | 'html' | 'jsx' | 'angular-template' | 'css-in-js' | 'js-value' | 'svg-attribute' | 'css-string' | 'component-prop';
+export type Host = 'css' | 'scss' | 'sass' | 'less' | 'html' | 'jsx' | 'angular-template' | 'css-in-js' | 'js-value' | 'css-string' | 'component-prop';
 
 /**
  * Um valor visual solto encontrado no código.
@@ -88,6 +84,8 @@ export interface Finding {
     branch?: number;
     /** Lugar do valor num atalho de lados (`padding: 8px 16px` → 0 de 2). Sem isso, não dá para saber qual lado ele é. */
     part?: { index: number; count: number };
+    /** Declaração do arquivo de onde o valor veio (começa em 0): `padding: 4px 8px` dá dois valores com o mesmo índice. */
+    declaration?: number;
     /** Token que serve para este valor, calculado pelo `check` (nunca escreve nada). */
     suggestion?: TokenSuggestion;
 }
@@ -104,6 +102,8 @@ export interface TokenSuggestion {
     distance?: number;
     /** Tokens empatados com `token`. */
     alternatives?: string[];
+    /** `near`: até 3 tokens próximos, do mais perto ao mais longe (o primeiro é `token`), cada um com a distância. */
+    nearest?: { token: string; distance: number }[];
 }
 
 /**
@@ -115,6 +115,10 @@ export interface ReviewItem extends Omit<Finding, 'type'> {
     type?: TokenType;
     /** Por que é revisão e não violação. */
     message: string;
+    /** `token/theme-only`: o token que tem o valor em um tema só. */
+    token?: string;
+    /** `token/theme-only`: o valor do token em cada seletor. */
+    themes?: { selector: string; value: string }[];
 }
 
 /** Aviso sobre o próprio uso da ferramenta (comentário de ignorar sem efeito). Não muda o exit code. */

@@ -1,6 +1,7 @@
 /**
  * Arquivos de modo do DTCG: um por tema, ligados por um Resolver (2025.10).
  * O token semântico também fica no `tokens.tokens.json`, com o valor claro: quem não usa o resolver continua com um valor.
+ * Sem `--dtcg`, o tema existe só no bloco escuro do `tokens.css`, e é de lá que o modo extend o lê.
  */
 
 import { existsSync } from 'node:fs';
@@ -51,16 +52,22 @@ export async function buildThemeOutput(
     outDir: string,
     tokens: { light: readonly SemanticAlias[]; dark: readonly SemanticAlias[]; selectors: readonly string[]; media: boolean },
     extend: boolean,
+    /** O bloco escuro do `tokens.css` gerado: vale quando não há os JSON de tema. */
+    fromCss?: { tree: DtcgTree; light: DtcgTree; selectors: string[]; media: boolean },
 ): Promise<ThemeOutput | undefined> {
-    const [lightBefore, darkBefore] = extend ? await Promise.all([readTree(path.join(outDir, LIGHT_FILE)), readTree(path.join(outDir, DARK_FILE))]) : [undefined, undefined];
+    let [lightBefore, darkBefore] = extend ? await Promise.all([readTree(path.join(outDir, LIGHT_FILE)), readTree(path.join(outDir, DARK_FILE))]) : [undefined, undefined];
+    let meta = metaOf(darkBefore);
+    if (extend && !darkBefore && fromCss) {
+        [lightBefore, darkBefore] = [fromCss.light, fromCss.tree];
+        meta = { selectors: fromCss.selectors, media: fromCss.media };
+    }
     if (tokens.dark.length === 0 && !darkBefore) {
         return undefined;
     }
-    const meta = metaOf(darkBefore);
     const selectors = sorted([...(meta.selectors ?? []), ...tokens.selectors]);
     const media = meta.media === true || tokens.media;
     const stamp = (tree: DtcgTree, extension?: ThemeMeta): DtcgTree => ({
-        $description: `${JSON_MARKER}. Edit tokens.tokens.json or the code and run \`tokentidy generate\` again.`,
+        $description: `${JSON_MARKER}. Edit tokens.css or the code and run \`tokentidy generate\` again.`,
         ...tree,
         ...(extension ? { $extensions: { [EXTENSION]: extension } } : {}),
     });

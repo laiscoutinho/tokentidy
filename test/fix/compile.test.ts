@@ -35,7 +35,7 @@ async function fixProject(file: string, content: string): Promise<{ dir: string;
     const analysis = await analyzePaths([dir], { root: dir });
     const outDir = path.join(dir, 'design-tokens');
     const generation = generateTokens(analysis.findings, { minOccurrences: 2, gridBase: 4, semanticTokens: false, mode: 'new', definitions: analysis.definitions, references: analysis.references });
-    const options = { outDir, mode: 'new' as const, styleLanguages: analysis.styleLanguages, splitThreshold: 40 };
+    const options = { outDir, mode: 'new' as const, formats: { dtcg: true }, splitThreshold: 40 };
     await writeOutput(renderOutput(buildDtcgTree(generation, undefined), options), options);
     await fixScope(await collectFiles([dir], dir), { tokensDir: outDir });
     return { dir, fixed: await readFile(path.join(dir, 'src', file), 'utf8') };

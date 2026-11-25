@@ -34,11 +34,6 @@ const FONT_SIZE: Scale = [
     ['5xl', 48], ['6xl', 60], ['7xl', 72], ['8xl', 96], ['9xl', 128],
 ];
 const RADIUS: Scale = [['xs', 2], ['sm', 4], ['md', 6], ['lg', 8], ['xl', 12], ['2xl', 16], ['3xl', 24], ['4xl', 32]];
-const CONTAINER: Scale = [
-    ['3xs', 256], ['2xs', 288], ['xs', 320], ['sm', 384], ['md', 448], ['lg', 512], ['xl', 576],
-    ['2xl', 672], ['3xl', 768], ['4xl', 896], ['5xl', 1024], ['6xl', 1152], ['7xl', 1280],
-];
-const BREAKPOINT: Scale = [['sm', 640], ['md', 768], ['lg', 1024], ['xl', 1280], ['2xl', 1536]];
 /** Sombras pelo desfoque (blur) da primeira camada: é o que faz uma sombra parecer "maior". */
 const SHADOW_BLUR: Scale = [['2xs', 1], ['xs', 2], ['sm', 3], ['md', 6], ['lg', 15], ['xl', 25], ['2xl', 50]];
 const LINE_HEIGHT: Scale = [['none', 1], ['tight', 1.25], ['snug', 1.375], ['normal', 1.5], ['relaxed', 1.625], ['loose', 2]];
@@ -82,10 +77,6 @@ function nameType(type: TokenType, groups: readonly NamingInput[], context: Nami
             return nameEach(groups, (g) => [type, gridSlug(g)]);
         case 'border-width':
             return nameEach(groups, (g) => [type, slug(px(g) === undefined ? g.key : formatNumber(px(g)!))]);
-        case 'container':
-            return byScale(groups, type, CONTAINER, px, Infinity);
-        case 'breakpoint':
-            return byScale(groups, type, BREAKPOINT, px, 0);
         case 'radius': {
             const special = (g: NamingInput) => (g.key === '50%' ? 'circle' : (px(g) ?? 0) >= 999 ? 'full' : undefined);
             const named = nameEach(groups.filter((g) => special(g) !== undefined), (g) => [type, special(g)!]);
@@ -110,16 +101,12 @@ function nameType(type: TokenType, groups: readonly NamingInput[], context: Nami
             return nameEach(groups, (g) => [type, slug(g.key.split(',')[0]!.trim())]);
         case 'shadow':
             return nameShadows(groups);
-        case 'opacity':
-            return nameEach(groups, (g) => [type, slug(formatNumber(Number(g.key) * 100))]);
         case 'duration':
             return nameEach(groups, (g) => [type, slug(g.key.replace(/ms$/, ''))]);
         case 'easing': {
             let next = 1;
             return nameEach(groups, (g) => [type, EASING[g.key] ?? (cubicBezierOf(g.key) ? String(next++) : slug(g.key))]);
         }
-        case 'z-index':
-            return nameEach(groups, (g) => [type, slug(g.key)]);
     }
 }
 
@@ -270,7 +257,9 @@ function uniqueNames(names: Map<NamingInput, string[]>): Map<NamingInput, string
     const first = new Map<string, NamingInput>();
     const seen = new Map<string, number>();
     const used = new Set([...names.values()].map((path) => path.join('-')));
-    for (const [group, path] of names) {
+    // O nome sem sufixo fica com o `px` (ou sem unidade): `spacing-2` e `spacing-2-rem`, nunca `spacing-2-px`, venha quem vier primeiro
+    const relative = (group: NamingInput) => (['rem', 'em'].includes(parseLength(group.key)?.unit ?? '') ? 1 : 0);
+    for (const [group, path] of [...names].sort(([a], [b]) => relative(a) - relative(b))) {
         const id = path.join('-');
         const owner = first.get(id);
         if (!owner) {

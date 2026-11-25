@@ -57,7 +57,6 @@ test('JSX: style={{}} with camelCase, numbers in px, ternaries and unitless prop
         '5:60 jsx spacing margin-top 16px div.card',
         '5:81 jsx color color #111827 div.card',
         '5:120 jsx line-height line-height 1.5 div.card',
-        '5:134 jsx opacity opacity 0.5 div.card',
     ]);
 });
 

@@ -10,9 +10,8 @@ import { writeFileAtomic } from '../../safe-write.ts';
 import { DTCG_FILE, OutputError, handWritten, readDtcgTree } from './dtcg-tree.ts';
 import { SPLIT_DIR, isGenerated } from './render-files.ts';
 import { DARK_FILE, LIGHT_FILE, RESOLVER_FILE } from './theme-files.ts';
-import type { OutputFile, WriteOptions } from './render-files.ts';
+import type { OutputFile, OutputFormats, WriteOptions } from './render-files.ts';
 import type { ModuleLanguage } from './token-module.ts';
-import type { Finding } from '../../types.ts';
 
 /** Arquivos que o TokenTidy gera: só eles são apagados no modo "começar do zero". */
 const GENERATED_FILES = [DTCG_FILE, 'tokens.css', '_tokens.scss', '_tokens.less', 'tokens.ts', 'tokens.js', LIGHT_FILE, DARK_FILE, RESOLVER_FILE, 'README.md'];
@@ -26,19 +25,37 @@ async function readIfExists(file: string): Promise<string | undefined> {
     });
 }
 
+/** Formatos pedidos na linha de comando (`--dtcg`, `--scss`, `--less`, `--ts`, `--js`). */
+export interface FormatRequest {
+    dtcg?: boolean;
+    scss?: boolean;
+    less?: boolean;
+    ts?: boolean;
+    js?: boolean;
+}
+
 /**
- * Quais módulos JS/TS gerar. Depois do `fix` não há mais valor solto, mas o código importa o módulo:
- * por isso um módulo já gerado continua sendo gerado.
+ * Formatos a gerar além do CSS: os pedidos e os que já estão na pasta. Um formato gerado antes continua
+ * sendo atualizado (o código pode importar o `_tokens.scss` ou o `tokens.ts`); para parar, basta apagar o arquivo.
  */
-export async function moduleLanguages(findings: readonly Finding[], outDir: string): Promise<ModuleLanguage[]> {
-    const wanted = new Set<ModuleLanguage>(findings.filter((f) => f.host === 'js-value').map((f) => (/\.[cm]?tsx?$/.test(f.file) ? 'ts' : 'js')));
-    for (const language of ['ts', 'js'] as const) {
-        const current = await readIfExists(path.join(outDir, `tokens.${language}`));
-        if (current !== undefined && isGenerated(current)) {
-            wanted.add(language);
+export async function chosenFormats(outDir: string, request: FormatRequest): Promise<{ formats: OutputFormats; modules: ModuleLanguage[] }> {
+    const generated = async (name: string) => {
+        const current = await readIfExists(path.join(outDir, name));
+        return current !== undefined && isGenerated(current);
+    };
+    const exists = (name: string) => readIfExists(path.join(outDir, name)).then((content) => content !== undefined);
+    const formats: OutputFormats = {
+        dtcg: request.dtcg === true || await exists(DTCG_FILE) || await exists(LIGHT_FILE),
+        scss: request.scss === true || await generated('_tokens.scss'),
+        less: request.less === true || await generated('_tokens.less'),
+    };
+    const modules: ModuleLanguage[] = [];
+    for (const language of ['js', 'ts'] as const) {
+        if (request[language] === true || await generated(`tokens.${language}`)) {
+            modules.push(language);
         }
     }
-    return [...wanted].sort();
+    return { formats, modules };
 }
 
 /**

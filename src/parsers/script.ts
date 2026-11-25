@@ -40,7 +40,7 @@ export async function parseScript(source: string, file: string, options: ParseOp
     }
 
     const component: AngularComponent = { templates: [], templateUrls: [] };
-    const sinks = new ScriptSinks(collector, program, options.componentProps);
+    const sinks = new ScriptSinks(collector, program, options.componentProps, options.styleSinks);
     walkTree(program.program, (node) => {
         if (node.type === 'Decorator') {
             angularComponent(collector, node, component, (claimed) => sinks.claim(claimed));

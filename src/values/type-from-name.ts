@@ -27,7 +27,6 @@ const COMPOUNDS: ReadonlyArray<readonly [readonly string[], TokenType]> = [
     [['border', 'radius'], 'radius'],
     [['border', 'width'], 'border-width'],
     [['stroke', 'width'], 'border-width'],
-    [['z', 'index'], 'z-index'],
 ];
 
 const WORDS = new Map<string, TokenType>([
@@ -41,12 +40,8 @@ const WORDS = new Map<string, TokenType>([
     ['weight', 'font-weight'], ['fontweight', 'font-weight'],
     ['font', 'font-family'], ['family', 'font-family'], ['typeface', 'font-family'],
     ['shadow', 'shadow'], ['shadows', 'shadow'], ['elevation', 'shadow'],
-    ['z', 'z-index'], ['zindex', 'z-index'], ['layer', 'z-index'],
-    ['opacity', 'opacity'], ['alpha', 'opacity'],
     ['duration', 'duration'],
     ['ease', 'easing'], ['easing', 'easing'],
-    ['breakpoint', 'breakpoint'], ['breakpoints', 'breakpoint'], ['bp', 'breakpoint'], ['screen', 'breakpoint'],
-    ['container', 'container'],
     ['color', 'color'], ['colour', 'color'],
 ]);
 
@@ -119,8 +114,6 @@ function fits(type: TokenType, value: string): boolean {
         case 'font-size':
         case 'letter-spacing':
         case 'border-width':
-        case 'breakpoint':
-        case 'container':
         case 'size':
             return single(value, (t) => isTokenDimension(t) && LENGTH_UNITS.has(t[4].unit.toLowerCase()));
         case 'line-height':
@@ -128,10 +121,6 @@ function fits(type: TokenType, value: string): boolean {
         case 'font-weight':
             return single(value, (t) => (isTokenNumber(t) && t[4].value >= 1 && t[4].value <= 1000)
                 || (isTokenIdent(t) && WEIGHT_KEYWORDS.has(t[4].value.toLowerCase())));
-        case 'z-index':
-            return single(value, (t) => isTokenNumber(t) && Number.isInteger(t[4].value));
-        case 'opacity':
-            return single(value, (t) => isTokenNumber(t) && t[4].value >= 0 && t[4].value <= 1);
         case 'duration':
             return single(value, (t) => isTokenDimension(t) && ['ms', 's'].includes(t[4].unit.toLowerCase()));
         case 'easing':

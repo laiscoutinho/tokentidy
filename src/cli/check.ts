@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { analyzePaths } from '../analysis/analyze.ts';
 import type { AnalysisResult } from '../analysis/analyze.ts';
-import { CONFIG_FILE, loadConfig } from '../project/config.ts';
+import { CONFIG_FILE, analysisOptions, loadConfig } from '../project/config.ts';
 import type { Config } from '../project/config.ts';
 import { findProjectRoot } from '../project/scope.ts';
 import type { Finding } from '../types.ts';
@@ -20,6 +20,7 @@ interface CheckOptions {
     printBaseline?: boolean;
     summary?: boolean;
     format?: string;
+    review?: boolean;
 }
 
 /**
@@ -29,7 +30,7 @@ interface CheckOptions {
 export async function analyzeProject(paths: readonly string[], configFile?: string): Promise<{ result: AnalysisResult; config: Config }> {
     const root = await findProjectRoot(paths);
     const { config } = await loadConfig(root, configFile);
-    const result = await analyzePaths(paths, { root, ignore: config.ignore, includeMinified: config.includeMinified, ...(config.componentProps ? { componentProps: config.componentProps } : {}) });
+    const result = await analyzePaths(paths, { root, ...analysisOptions(config) });
     return { result, config };
 }
 
@@ -43,7 +44,8 @@ export function registerCheck(program: Command): void {
         .option('--baseline <file>', 'only report violations that are not in this baseline file')
         .option('--print-baseline', 'print a baseline of the current violations to stdout and exit 0')
         .option('--summary', 'print, per token type, how many values are hardcoded and how many uses go through a token')
-        .option('--format <format>', 'output format: text or github (annotations for GitHub Actions)', 'text')
+        .option('--review', 'also show, in the table, the values to review (sizes, hacks, semantic names); they never fail the check')
+        .option('--format <format>', 'output format: table (default in a terminal), text (one line per value, tab-separated; default in pipes and CI) or github (annotations for GitHub Actions)')
         .action(runCheck);
 }
 
@@ -51,8 +53,8 @@ async function runCheck(paths: string[], options: CheckOptions): Promise<void> {
     if (options.baseline !== undefined && options.printBaseline) {
         throw new UsageError('--baseline and --print-baseline cannot be used together');
     }
-    if (options.format !== 'text' && options.format !== 'github') {
-        throw new UsageError(`Unknown format: ${printable(String(options.format))} (use text or github)`);
+    if (options.format !== undefined && !['table', 'text', 'github'].includes(options.format)) {
+        throw new UsageError(`Unknown format: ${printable(String(options.format))} (use table, text or github)`);
     }
     if (options.format === 'github' && (options.json || options.summary || options.printBaseline)) {
         throw new UsageError('--format github cannot be used with --json, --summary or --print-baseline');
@@ -121,11 +123,25 @@ async function runCheck(paths: string[], options: CheckOptions): Promise<void> {
         return;
     }
 
+    const human = options.format === 'table' || (options.format === undefined && process.stdout.isTTY === true);
+    if (summary && human) {
+        const { table, typeLabel } = await import('./human.ts');
+        console.log(table(['Type', 'Hardcoded values', 'Uses through a token'], summary.map((s) => [typeLabel(s.type), String(s.hardcoded), String(s.tokenized)])).join('\n'));
+        printDiagnostics(result);
+        return;
+    }
     if (summary) {
         for (const { type, hardcoded, tokenized } of summary) {
             console.log(`${type}\t${hardcoded}\t${tokenized}`);
         }
         printDiagnostics(result);
+        return;
+    }
+
+    // Tabela para pessoas: no terminal, ou pedida. Em pipe e no CI, o formato de linhas abaixo
+    if (human) {
+        const { printCheckTable } = await import('./check-table.ts');
+        printCheckTable(result, microFrontends, baselined, options.review === true);
         return;
     }
 

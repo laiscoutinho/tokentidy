@@ -25,8 +25,28 @@ export function normalizeFinding(finding: Pick<Finding, 'type' | 'value' | 'impl
     return normalizeValue(finding.type, finding.impliedUnit ? `${finding.value}${finding.impliedUnit}` : finding.value);
 }
 
+/**
+ * Memo: num projeto grande os mesmos poucos valores se repetem milhares de vezes, e o `fix`
+ * normaliza cada um várias vezes (655 ms em 145 000 achados). Limpo ao passar do limite.
+ */
+const memo = new Map<string, string>();
+const MEMO_LIMIT = 50_000;
+
 /** Devolve a forma canônica de um valor, usada como chave para agrupar. */
 export function normalizeValue(type: TokenType, value: string): string {
+    const id = `${type}\0${value}`;
+    let key = memo.get(id);
+    if (key === undefined) {
+        if (memo.size >= MEMO_LIMIT) {
+            memo.clear();
+        }
+        key = canonical(type, value);
+        memo.set(id, key);
+    }
+    return key;
+}
+
+function canonical(type: TokenType, value: string): string {
     switch (type) {
         case 'color':
             return normalizeColor(value);
@@ -38,8 +58,6 @@ export function normalizeValue(type: TokenType, value: string): string {
             return normalizeShadow(value);
         case 'easing':
             return normalizeEasing(value);
-        case 'opacity':
-            return normalizeOpacity(value);
         case 'duration':
             return normalizeDuration(value);
         case 'spacing': {
@@ -108,15 +126,6 @@ function normalizeNumeric(value: string): string {
         return formatNumber(token[4].value);
     }
     return value.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-/** `50%` e `0.5` são a mesma opacidade. */
-function normalizeOpacity(value: string): string {
-    const token = firstToken(value);
-    if (token && isTokenPercentage(token)) {
-        return formatNumber(token[4].value / 100);
-    }
-    return normalizeNumeric(value);
 }
 
 /** `0.2s` e `200ms` são a mesma duração; a chave fica sempre em `ms`. */

@@ -124,7 +124,7 @@ class FilePlanner {
         }
         if (buildTime) {
             const variable = this.#language === 'less' ? '@variable' : '$variable';
-            return skippedValue(finding, 'needs-preprocessor-variable', `${describeContext(finding)} runs at build time, where var() does not work, and no ${variable} with this value is available here`);
+            return skippedValue(finding, 'needs-preprocessor-variable', `${describeContext(finding)} runs at build time, where var() does not work, and no ${variable} with this value is available here; run tokentidy generate --${this.#language === 'less' ? 'less' : 'scss'} to create one`);
         }
         return 'no-token';
     }
@@ -179,19 +179,23 @@ class FilePlanner {
         return true;
     }
 
-    /** Outro token do projeto serviria igualmente bem, com outro nome: escolher um seria palpite. */
+    /**
+     * Outro token do projeto serviria igualmente bem, com outro nome: escolher um seria palpite.
+     * Só o nome desempata (`background-default` num `background-color`, `--space-padding-md` num `padding`);
+     * ser mais usado não diz que é a decisão certa para este valor (`background.default` e `paper`, ambos `#0c1020`).
+     */
     #tied(finding: Finding, chosen: Candidate, candidates: readonly Candidate[], buildTime: boolean): SkippedValue | undefined {
         if (chosen.source !== 'project') {
             return undefined;
         }
-        const others = candidates.filter((c) => c.source === 'project' && c.form === chosen.form && c.uses === chosen.uses && c.name !== chosen.name
+        const others = candidates.filter((c) => c.source === 'project' && c.form === chosen.form && c.name !== chosen.name
             && fit(finding, c) === fit(finding, chosen)
             && (c.form === 'custom-property' || this.#variableUsable(finding, c, buildTime) === true));
         if (others.length === 0) {
             return undefined;
         }
         const names = [chosen.name, ...new Set(others.map((c) => c.name))];
-        return { ...skippedValue(finding, 'ambiguous-token', `${names.join(', ')} have this value and are used equally; pick one by hand`), alternatives: names };
+        return { ...skippedValue(finding, 'ambiguous-token', `${names.join(', ')} have this value and no name says which fits ${finding.property}; pick one by hand`), alternatives: names };
     }
 
     /** Onde o JavaScript lê o valor, entra o caminho no módulo gerado: `color.indigo[600]`, trocando também as aspas. */
@@ -202,7 +206,7 @@ class FilePlanner {
         const moduleFile = /\.[mc]?tsx?$/.test(this.#file) ? this.#context.generatedFiles.ts : this.#context.generatedFiles.js;
         const facts = this.#context.scripts?.get(this.#file);
         if (!access || !moduleFile || this.#file.endsWith('.cjs') || !facts) {
-            return unavailable('run tokentidy generate to create the token module, or edit it by hand');
+            return unavailable(`run tokentidy generate --${/\.[mc]?tsx?$/.test(this.#file) ? 'ts' : 'js'} to create the token module, or edit it by hand`);
         }
         if (!facts.isModule) {
             return unavailable('this file has no import or export, so the token module can\'t be imported; edit it by hand');
@@ -251,8 +255,8 @@ class FilePlanner {
         const projectOthers = candidates.filter((c) => c.source === 'project' && c.name !== candidate.name);
         const alternatives = [...new Set(projectOthers.map((c) => c.name))];
         const approximate = this.#context.approximate?.get(finding);
-        // Ganhou pelo nome (papel da cor, `padding` no `padding`) de um token mais usado: o motivo diz isso
-        const byName = candidate.source === 'project' && projectOthers.some((c) => c.uses > candidate.uses);
+        // Ganhou pelo nome (papel da cor, `padding` no `padding`) de outro token com o mesmo valor: o motivo diz isso
+        const byName = candidate.source === 'project' && projectOthers.some((c) => fit(finding, c) > fit(finding, candidate));
         this.#replacements.push({
             finding, token: candidate.name, source: candidate.source, text,
             reason: candidate.source === 'alias' ? 'alias' : candidate.source === 'generated' ? 'generated'

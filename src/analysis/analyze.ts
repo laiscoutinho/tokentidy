@@ -7,6 +7,7 @@ import { applyIgnores, parseIgnoreDirectives, unusedDirectives } from './ignore.
 import type { IgnoreDirective } from './ignore.ts';
 import { LOADS_STYLES } from './package-tokens.ts';
 import { resolveLocalProperties } from './local-properties.ts';
+import { isGeneratedFile, isMinified } from './file-checks.ts';
 import { collectFiles } from '../project/scope.ts';
 import type { Scope, ScopeOptions } from '../project/scope.ts';
 import type { SkippedFile } from '../project/scanner.ts';
@@ -63,13 +64,7 @@ const STYLE_SYNTAX = new Map<string, StyleSyntax>([
 ]);
 const SCRIPT_EXTENSIONS = new Set(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts']);
 
-/** Linha média acima disto: arquivo minificado (regra `minified_files?` do GitHub Linguist). */
-const MINIFIED_AVERAGE_LINE = 110;
-
-export function isMinified(source: string): boolean {
-    const lines = source.split('\n');
-    return source.length > 0 && source.length / lines.length > MINIFIED_AVERAGE_LINE;
-}
+export { isMinified } from './file-checks.ts';
 
 /**
  * Parser de cada tipo de arquivo, carregado só quando aparece um arquivo dele:
@@ -123,7 +118,6 @@ export interface ScopeAnalysisOptions extends ScopeOptions {
 /** Analisa os arquivos de um escopo já resolvido. */
 export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions = {}): Promise<AnalysisResult> {
     const { root } = scope;
-    const read = async (file: string) => options.sources?.get(file) ?? readFile(path.join(root, file), 'utf8');
     const skipped = [...scope.skipped];
     const loaded = new Map<string, Parser>();
     const results: ParseResult[] = [];
@@ -134,8 +128,14 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
     const isReported = (item: { file: string }) => reported.has(item.file);
     const allFiles = [...scope.files, ...(scope.context?.files ?? [])].sort();
     const allTokenFiles = [...scope.tokenFiles, ...(scope.context?.tokenFiles ?? [])].sort();
+    // Leitura em paralelo: um `await` por arquivo era 20–27% da análise em 5000 arquivos
+    const sources = await readAll([...allFiles, ...allTokenFiles].filter((f) => !options.sources?.has(f)), root);
+    const read = (file: string) => options.sources?.get(file) ?? sources.get(file)!;
     let filesAnalyzed = 0;
-    const parseOptions: ParseOptions = options.componentProps ? { componentProps: new Set(options.componentProps) } : {};
+    const parseOptions: ParseOptions = {
+        ...(options.componentProps ? { componentProps: new Set(options.componentProps) } : {}),
+        ...(options.styleSinks ? { styleSinks: options.styleSinks } : {}),
+    };
     // Folhas de estilo com `@import`/`@use`: podem trazer tokens de um pacote
     const styleSources = new Map<string, string>();
 
@@ -149,7 +149,7 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
     }
 
     async function run(file: string, kind: string): Promise<ParseResult | undefined> {
-        const source = await read(file);
+        const source = read(file);
         // Bundle gerado com outro nome (`vendor.css`): o conteúdo denuncia
         if (!options.includeMinified && isMinified(source)) {
             if (reported.has(file)) {
@@ -163,6 +163,12 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
         const parse = await parserFor(kind);
         const result = await parse(source, file, parseOptions);
         results.push(result);
+        // Gerado por outra ferramenta: os tokens que define contam, os valores não são reportados.
+        // Folha que só define variáveis (saída do Style Dictionary) continua sendo arquivo de tokens.
+        if (reported.has(file) && isGeneratedFile(source) && !(result.definitions.length > 0 && result.declarations === 0)) {
+            reported.delete(file);
+            skipped.push({ file, reason: 'generated' });
+        }
         if (reported.has(file)) {
             filesAnalyzed++;
             const ignore = parseIgnoreDirectives(source, file);
@@ -211,7 +217,7 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
     if (allTokenFiles.length > 0) {
         const { parseDtcg } = await import('../parsers/dtcg.ts');
         for (const file of allTokenFiles) {
-            const { definitions, errors } = parseDtcg(await read(file), file);
+            const { definitions, errors } = parseDtcg(read(file), file);
             results.push({ findings: [], review: [], errors, definitions, references: [], declarations: 0 });
             if (reported.has(file)) {
                 tokenFiles.push(file);
@@ -219,13 +225,13 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
         }
     }
 
-    if (results.some((r) => r.mixinCalls || r.styleLinks)) {
+    if (results.some((r) => r.styleLinks)) {
         const { linkAcrossFiles } = await import('./cross-file.ts');
         linkAcrossFiles(results);
     }
 
     const references = results.flatMap((r) => r.references);
-    const local = resolveLocalProperties(results.flatMap((r) => r.customProperties ?? []), references);
+    const local = resolveLocalProperties(results.flatMap((r) => r.customProperties ?? []));
     const definitionKey = (d: { file: string; name: string; selector?: string }) => `${d.file}\0${d.name}\0${d.selector ?? ''}`;
     const localDefinition = new Set([...local.local].map(definitionKey));
 
@@ -237,8 +243,8 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
             ignored += applied.ignored;
             return applied.kept;
         });
-    const findings = filtered([...results.flatMap((r) => r.findings), ...local.findings].filter(isReported));
-    const review = filtered([...results.flatMap((r) => r.review), ...local.review].filter(isReported));
+    const findings = filtered(results.flatMap((r) => r.findings).filter(isReported));
+    const review = filtered(results.flatMap((r) => r.review).filter(isReported));
     warnings.push(...unusedDirectives([...directives.values()].flat()));
     if (references.length > 0) {
         const { tokenWarnings } = await import('./token-health.ts');
@@ -271,4 +277,18 @@ export async function analyzeScope(scope: Scope, options: ScopeAnalysisOptions =
         styleLanguages: [...styleLanguages].sort(),
         tokenFiles: tokenFiles.sort(),
     };
+}
+
+/** Lê os arquivos com no máximo 64 leituras abertas ao mesmo tempo (evita `EMFILE`). */
+async function readAll(files: readonly string[], root: string): Promise<Map<string, string>> {
+    const sources = new Map<string, string>();
+    let next = 0;
+    const worker = async () => {
+        while (next < files.length) {
+            const file = files[next++]!;
+            sources.set(file, await readFile(path.join(root, file), 'utf8'));
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(64, files.length) }, worker));
+    return sources;
 }

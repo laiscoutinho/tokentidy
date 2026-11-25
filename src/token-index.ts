@@ -121,7 +121,7 @@ interface DefinitionTypes {
     declared?: TokenType;
 }
 
-const ELEMENT_SIZES: ReadonlySet<TokenType> = new Set(['size', 'container']);
+const ELEMENT_SIZES: ReadonlySet<TokenType> = new Set(['size']);
 
 /** Tipos de uma definição literal; vazio se ela aponta para outro token ou se nada diz o que ela é. */
 function typesOf(definition: TokenDefinition, usedAs: Usage): DefinitionTypes {
@@ -222,7 +222,7 @@ function dependable(definition: TokenDefinition, type: TokenType, key: string, s
 }
 
 /** Basta uma parte global (`:root, [data-theme=light]`): uma redefinição com outro valor já tira o token. */
-function isGlobal(selector: string | undefined): boolean {
+export function isGlobal(selector: string | undefined): boolean {
     return selector !== undefined && selector.split(',').some((part) => GLOBAL_SELECTORS.has(part.trim()));
 }
 

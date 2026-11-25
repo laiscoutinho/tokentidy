@@ -24,8 +24,8 @@ const themesOf = (dir: string) => JSON.parse(cli(dir, 'generate', '.', '--json',
 
 const DARK = '.card { background: #ffffff; color: #111111; }\n.dark .card { background: #1f2937; color: #e5e7eb; }\n';
 
-test('a dark theme produces semantic tokens per mode', () => withProject(DARK, async (dir) => {
-    assert.equal(cli(dir, 'generate', '.').status, 0);
+test('a dark theme produces semantic tokens per mode (and, with --dtcg, one JSON per mode)', () => withProject(DARK, async (dir) => {
+    assert.equal(cli(dir, 'generate', '.', '--dtcg').status, 0);
     const css = await output(dir, 'tokens.css');
     assert.match(css, /:root \{[^}]*--color-bg-card: var\(--color-white\);/);
     assert.match(css, /\.dark \{\n {2}--color-bg-card: var\(--color-gray-\d+\);/);
@@ -42,7 +42,7 @@ test('values used once still become tokens when they are a theme pair', () => wi
     assert.equal(themesOf(dir).length, 2);
 }));
 
-test('fix uses the same semantic token in both modes, and generating again keeps the theme', () => withProject(DARK, async (dir) => {
+test('with only tokens.css, fix uses the same semantic token in both modes, and generating again keeps the theme', () => withProject(DARK, async (dir) => {
     cli(dir, 'generate', '.');
     assert.equal(cli(dir, 'fix', '.').status, 0);
     assert.equal(await readFile(path.join(dir, 'a.css'), 'utf8'), '.card { background: var(--color-bg-card); color: var(--color-text-card); }\n.dark .card { background: var(--color-bg-card); color: var(--color-text-card); }\n');
@@ -79,7 +79,7 @@ test('a value only in one mode, a responsive rule or .darker are not themes', as
 });
 
 test('a theme file written by someone else is not overwritten', () => withProject(DARK, async (dir) => {
-    cli(dir, 'generate', '.');
+    cli(dir, 'generate', '.', '--dtcg');
     await writeFile(path.join(dir, 'design-tokens/tokens.resolver.json'), '{"version":"2025.10","resolutionOrder":[]}\n');
     const result = cli(dir, 'generate', '.', '--extend');
     assert.notEqual(result.status, 0);

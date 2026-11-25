@@ -6,14 +6,15 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Command } from 'commander';
 
-import { CONFIG_FILE, loadConfig } from '../project/config.ts';
+import { CONFIG_FILE, analysisOptions, loadConfig } from '../project/config.ts';
 import type { FixResult } from '../fix/apply.ts';
 import { collectFiles, findProjectRoot } from '../project/scope.ts';
 import { normalizeFinding } from '../values/normalize.ts';
 import type { Finding } from '../types.ts';
 import { createPrompt, groupLines } from './approximate.ts';
 import { EXIT, JSON_SCHEMA_VERSION, UsageError } from './errors.ts';
-import { display, displayPath, oneLine, printable, printDiagnostics } from './print.ts';
+import { count, paint, table, terminalWidth } from './human.ts';
+import { display, displayPath, oneLine, printable, printHumanDiagnostics } from './print.ts';
 
 interface FixCommandOptions {
     config?: string;
@@ -61,7 +62,7 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
     // A raiz contém também a pasta de tokens: num monorepo, `fix apps/checkout --tokens packages/tokens` sobe até a raiz comum
     const root = await findProjectRoot(options.tokens ? [...given, options.tokens] : given);
     const { config } = await loadConfig(root, options.config);
-    const scopeOptions = { ignore: config.ignore, includeMinified: config.includeMinified, ...(config.componentProps ? { componentProps: config.componentProps } : {}) };
+    const scopeOptions = analysisOptions(config);
     const scope = await collectFiles(given, root, scopeOptions);
     const tokensDir = options.tokens ? path.resolve(options.tokens) : path.resolve(root, config.output);
 
@@ -140,15 +141,40 @@ async function runFix(paths: string[], options: FixCommandOptions): Promise<void
     for (const file of result.files) {
         if (result.dryRun) {
             process.stdout.write(printableDiff(file.diff));
-        } else {
+        } else if (!process.stdout.isTTY) {
+            // Em pipe, os arquivos alterados são o dado; no terminal, o resumo basta
             console.log(display(result, file.file));
         }
     }
-    for (const { finding, reason, message } of result.skipped) {
-        console.error(`${display(result, finding.file)}:${finding.line}:${finding.column}\tskipped\t${reason}\t${printable(oneLine(finding.value))}\t${printable(message)}`);
+    printHumanDiagnostics(after);
+    printNotChanged(result);
+    printFixSummary(result, tokensDir);
+}
+
+/** O que ficou como estava e por quê: os valores com token que não foram trocados, depois os sem token. */
+function printNotChanged(result: FixResult): void {
+    const lines: string[] = [];
+    if (result.skipped.length > 0) {
+        lines.push(`Not changed (${result.skipped.length}):`);
+        lines.push(...table(['Where', 'Value', 'Why'], result.skipped.map(({ finding, message }) => [
+            `${display(result, finding.file)}:${finding.line}:${finding.column}`, printable(oneLine(finding.value)), printable(message),
+        ]), { max: [40, 24], stream: process.stderr, width: terminalWidth(process.stderr) }));
     }
-    printDiagnostics(after);
-    printFixSummary(result, tokensDir, config.minOccurrences);
+    const without = new Set(result.withoutToken.map((f) => `${f.type}\u0000${normalizeFinding(f)}`)).size;
+    if (without > 0) {
+        lines.push(`${lines.length > 0 ? '\n' : ''}${count(without, 'value has', 'values have')} no token with the same value, so ${without === 1 ? 'it stays' : 'they stay'} as written.`);
+        const repeated = new Set(result.repeatedWithoutToken.map((f) => `${f.type}\u0000${normalizeFinding(f)}`)).size;
+        if (result.tokens > 0 && repeated > 0) {
+            lines.push(`${repeated === without ? (without === 1 ? 'It repeats' : 'They repeat') : `${repeated} of them repeat`} in the code: run ${paint('cyan', 'tokentidy generate')} to create tokens for ${repeated === 1 ? 'it' : 'them'}.`);
+        }
+        if (result.tokens > 0 && !result.approximate) {
+            lines.push(`To also replace values close to a token, run ${paint('cyan', 'tokentidy fix --approximate')}.`);
+        }
+    }
+    if (lines.length > 0) {
+        // Linha em branco antes do resumo: o que não mudou fica separado do total
+        console.error(`${lines.join('\n')}\n`);
+    }
 }
 
 /**
@@ -163,39 +189,28 @@ function printableDiff(diff: string): string {
     }).join('\n');
 }
 
-function printFixSummary(result: FixResult, tokensDir: string, minOccurrences: number): void {
+function printFixSummary(result: FixResult, tokensDir: string): void {
     const replaced = result.files.reduce((sum, f) => sum + f.replacements.length, 0);
     const remaining = result.after.findings.length;
     if (result.tokens === 0 && result.withoutToken.length > 0) {
-        console.error('No tokens found in the project or in the tokens folder; run tokentidy generate first');
+        console.error(`No tokens found yet: run ${paint('cyan', 'tokentidy generate')} first.`);
+        return;
     }
-    const verb = result.dryRun ? 'would be replaced' : 'replaced';
-    const parts = [
-        `${replaced} ${replaced === 1 ? 'value' : 'values'} ${verb} in ${result.files.length} ${result.files.length === 1 ? 'file' : 'files'}`,
-        `${result.skipped.length} skipped`,
-        `${result.withoutToken.length} without a token${result.belowThreshold.length > 0 ? ` (${result.belowThreshold.length} used fewer than ${minOccurrences} times)` : ''}`,
-        `${remaining} ${remaining === 1 ? 'violation remains' : 'violations remain'}`,
-    ];
-    // Um a um: quem avalia a saída vê que o valor foi encontrado e por que ficou solto
-    for (const finding of result.belowThreshold) {
-        console.error(`${display(result, finding.file)}:${finding.line}:${finding.column}\tno-token\tused fewer than ${minOccurrences} times\t${printable(oneLine(finding.value))}`);
-    }
-    console.error(parts.join('; '));
-    if (result.tokens > 0 && result.repeatedWithoutToken.length > 0) {
-        const values = new Set(result.repeatedWithoutToken.map((f) => `${f.type}\u0000${normalizeFinding(f)}`)).size;
-        // Com `--approximate` já ligado, sugerir a mesma opção seria ruído
-        const approximate = result.approximate ? '' : ', or fix --approximate for values close to a token';
-        console.error(`${values} repeated ${values === 1 ? 'value has' : 'values have'} no token yet; run tokentidy generate --extend${approximate}`);
+    const where = `${count(replaced, 'value')} ${result.dryRun ? 'would be replaced' : 'replaced'} in ${count(result.files.length, 'file')}.`;
+    const lines = [replaced > 0 ? paint('green', result.dryRun ? where : `✔ ${where}`) : 'Nothing to replace.'];
+    if (remaining > 0) {
+        lines.push(`  ${count(remaining, 'hardcoded value')} ${remaining === 1 ? 'remains' : 'remain'}: run ${paint('cyan', 'tokentidy check')} to see ${remaining === 1 ? 'it' : 'them'}.`);
     }
     // `var(--x)` de um token gerado só resolve se o `tokens.css` estiver carregado na página
     const generatedVar = result.files.some((f) => f.replacements.some((r) => r.source !== 'project' && r.token.startsWith('--')));
     if (generatedVar) {
-        console.error(`Generated tokens are used as var(); make sure the app loads ${displayPath(path.join(tokensDir, 'tokens.css'))} (import it in the global stylesheet or add it to the build)`);
+        lines.push(`  Make sure your app loads ${displayPath(path.join(tokensDir, 'tokens.css'))} (import it in the global stylesheet or add it to the build).`);
     }
     // Um DTCG escrito à mão sem CSS: `var(--x)` só resolve depois de compilado e carregado
     const uncompiled = [...new Set(result.files.flatMap((f) => f.replacements.flatMap((r) => (r.uncompiledFrom ? [r.uncompiledFrom] : []))))].sort();
     if (uncompiled.length > 0) {
         const files = uncompiled.map((file) => displayPath(path.join(result.root, file))).join(', ');
-        console.error(`Tokens from ${files} are used as var() but no CSS defines them yet; compile ${uncompiled.length === 1 ? 'it' : 'them'} to CSS (tokentidy generate writes them with the same names, or use Style Dictionary) and load the result`);
+        lines.push(`  Tokens from ${files} are used as var() but no CSS defines them yet; compile ${uncompiled.length === 1 ? 'it' : 'them'} to CSS (tokentidy generate writes them with the same names, or use Style Dictionary) and load the result.`);
     }
+    console.error(lines.join('\n'));
 }

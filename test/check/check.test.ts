@@ -71,27 +71,61 @@ test('two tokens with the same value and the same use are a tie: check lists bot
 
 test('fix explains the choice: where the token is, why, and what lost', async (t) => {
     const dir = await project({
-        'tokens.css': ':root { --a-gap: 16px; --b-gap: 16px; }\n.x { padding: var(--a-gap); margin: var(--a-gap); gap: var(--b-gap); }\n',
-        'a.css': '.b { margin: 16px; }\n',
+        'tokens.css': ':root { --a-gap: 16px; --b-margin: 16px; --c-gap: 16px; }\n.x { padding: var(--a-gap); margin: var(--a-gap); gap: var(--c-gap); }\n',
+        'a.css': '.b { margin: 16px; }\n.c { padding: 16px; }\n',
     });
     t.after(() => rm(dir, { recursive: true }));
-    const [replacement] = JSON.parse(cli(dir, 'fix', '--dry-run', '--json').stdout).files[0].replacements;
-    assert.equal(replacement.token, '--a-gap');
-    assert.equal(replacement.reason, 'most-used');
+    const output = JSON.parse(cli(dir, 'fix', '--dry-run', '--json').stdout);
+    const [replacement] = output.files[0].replacements;
+    assert.equal(replacement.token, '--b-margin');
+    assert.equal(replacement.reason, 'name-matches-property');
     assert.deepEqual(replacement.definedAt, { file: 'tokens.css', line: 1 });
-    assert.deepEqual(replacement.alternatives, ['--b-gap']);
+    assert.deepEqual(replacement.alternatives, ['--a-gap', '--c-gap']);
+    // `padding`: nenhum nome é de padding e o mais usado não decide; fica para a pessoa
+    const [ambiguous] = output.skippedValues;
+    assert.equal(ambiguous.reason, 'ambiguous-token');
+    assert.deepEqual(ambiguous.alternatives, ['--a-gap', '--c-gap', '--b-margin']);
 });
 
 test('a near value names the token and the distance, and fix does not touch it', async (t) => {
     const dir = await project({ 'tokens.css': SPACING, 'a.css': '.b { margin: 15px; color: #4f46e6; }\n' });
     t.after(() => rm(dir, { recursive: true }));
     const [margin, color] = json(dir).findings;
-    assert.deepEqual(margin.suggestion, { token: '--spacing-4', match: 'near', distance: 1 });
+    assert.deepEqual(margin.suggestion, { token: '--spacing-4', match: 'near', distance: 1, nearest: [{ token: '--spacing-4', distance: 1 }] });
     assert.equal(color.suggestion.token, '--brand');
     assert.equal(color.suggestion.match, 'near');
     assert.ok(color.suggestion.distance > 0 && color.suggestion.distance <= 0.02);
     assert.match(cli(dir, 'check').stdout, /\t--spacing-4 \(\+1px\)\n/);
     assert.match(cli(dir, 'check').stdout, /\t--brand \(ΔE /);
+    assert.match(cli(dir, 'check', '--format', 'table').stdout, /close: --brand \(a very similar color, ΔE 0\.\d+\)/);
+    assert.equal(JSON.parse(cli(dir, 'fix', '--dry-run', '--json').stdout).files.length, 0);
+});
+
+test('check --json lists up to 3 near tokens, closest first, with their distances; the text keeps one', async (t) => {
+    const dir = await project({
+        'tokens.css': ':root { --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --gap: 16px; }\n.a { padding: var(--s3) var(--s4) var(--s5) var(--s6); gap: var(--gap); margin: var(--s4); }\n',
+        'a.css': '.b { margin: 15px; }\n',
+    });
+    t.after(() => rm(dir, { recursive: true }));
+    const [margin] = json(dir).findings;
+    assert.equal(margin.suggestion.token, '--s4');
+    assert.deepEqual(margin.suggestion.nearest, [{ token: '--s4', distance: 1 }, { token: '--gap', distance: 1 }, { token: '--s3', distance: -3 }]);
+    assert.match(cli(dir, 'check').stdout, /\t--s4 \(\+1px\)\n/);
+});
+
+test('a value equal to a token in one theme only is a review item with both values, and fix leaves it', async (t) => {
+    const dir = await project({
+        'tokens.css': ':root { --bg: #ffffff; }\n.dark { --bg: #111111; }\n.page { background: var(--bg); }\n',
+        'a.css': '.card { background: #ffffff; }\n.dark .card { color: #ffffff; }\n',
+    });
+    t.after(() => rm(dir, { recursive: true }));
+    const { review, findings } = json(dir);
+    const themed = review.filter((r: { rule: string }) => r.rule === 'token/theme-only');
+    assert.equal(themed.length, 1);
+    assert.equal(themed[0].line, 1);
+    assert.equal(themed[0].token, '--bg');
+    assert.deepEqual(themed[0].themes, [{ selector: ':root', value: '#ffffff' }, { selector: '.dark', value: '#111111' }]);
+    assert.equal(findings.length, 2);
     assert.equal(JSON.parse(cli(dir, 'fix', '--dry-run', '--json').stdout).files.length, 0);
 });
 
@@ -109,14 +143,14 @@ test('a generated tree older than the code is reported, and only then', async (t
     const dir = await project({
         'design-tokens/tokens.tokens.json': tree,
         'design-tokens/tokens.css': ':root { --spacing-4: 16px; }\n',
-        'a.css': '.b { margin: 16px; padding: 10px; gap: 10px; }\n',
+        'a.css': '.b { margin: 16px; padding: 10px; gap: 10px; row-gap: 10px; }\n',
     });
     t.after(() => rm(dir, { recursive: true }));
     const { stderr } = cli(dir, 'check');
     assert.match(stderr, /1 repeated value has no token yet; run tokentidy generate --extend/);
-    assert.equal(json(dir).repeatedWithoutToken.length, 2);
+    assert.equal(json(dir).repeatedWithoutToken.length, 3);
 
-    const fresh = await project({ 'a.css': '.b { padding: 10px; gap: 10px; }\n' });
+    const fresh = await project({ 'a.css': '.b { padding: 10px; gap: 10px; row-gap: 10px; }\n' });
     t.after(() => rm(fresh, { recursive: true }));
     assert.doesNotMatch(cli(fresh, 'check').stderr, /repeated/);
 });
@@ -152,7 +186,8 @@ test('token/unknown only speaks with a single close name', async (t) => {
     assert.equal(unknown.length, 1);
     assert.equal(unknown[0].message, '--color-primry is not defined; did you mean --color-primary?');
     assert.deepEqual([unknown[0].line, unknown[0].column], [1, 17]);
-    assert.equal(cli(dir, 'check', 'a.css').status, 1);
+    // Avisos e custom property local não falham o check
+    assert.equal(cli(dir, 'check', 'a.css').status, 0);
 });
 
 test('a deprecated DTCG token warns where it is used and fix never picks it', async (t) => {

@@ -1,9 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isHorizontallyCentered, rulesForProperty } from '../../src/analysis/rules.ts';
-
-const siblings = (entries: Record<string, string>) => new Map(Object.entries(entries));
+import { IGNORED_FUNCTIONS, rulesForProperty } from '../../src/analysis/rules.ts';
 
 test('classifies properties by token type', () => {
     assert.deepEqual(rulesForProperty('color'), [{ type: 'color', match: 'color' }]);
@@ -13,9 +11,8 @@ test('classifies properties by token type', () => {
     assert.deepEqual(rulesForProperty('border-top-left-radius'), [{ type: 'radius', match: 'radius' }]);
     assert.deepEqual(rulesForProperty('line-height'), [{ type: 'line-height', match: 'line-height' }]);
     assert.deepEqual(rulesForProperty('box-shadow'), [{ type: 'shadow', match: 'shadow' }]);
-    assert.deepEqual(rulesForProperty('stroke-opacity'), [{ type: 'opacity', match: 'opacity' }]);
+    assert.deepEqual(rulesForProperty('filter'), [{ type: 'shadow', match: 'drop-shadow' }]);
     assert.deepEqual(rulesForProperty('animation-delay'), [{ type: 'duration', match: 'duration' }]);
-    assert.deepEqual(rulesForProperty('z-index'), [{ type: 'z-index', match: 'z-index' }]);
 });
 
 test('shorthands that mix decisions return one rule per decision', () => {
@@ -33,12 +30,21 @@ test('ignores out-of-scope properties and token definitions', () => {
     assert.deepEqual(rulesForProperty('$red'), []);
 });
 
-test('width alone is ambiguous: it goes to review, not to violations', () => {
+test('width and height always go to review, never to violations', () => {
     const review = [{ type: 'size', match: 'length', review: 'size/no-context' }];
-    assert.deepEqual(rulesForProperty('width', siblings({ width: '300px' })), review);
-    assert.deepEqual(rulesForProperty('height', siblings({ width: '20px', height: '24px' })), review);
-    assert.deepEqual(rulesForProperty('max-height', siblings({ 'max-height': '80vh' })), review);
+    for (const prop of ['width', 'height', 'max-width', 'min-height', 'inline-size', 'max-block-size']) {
+        assert.deepEqual(rulesForProperty(prop), review, prop);
+    }
     assert.deepEqual(rulesForProperty('flex-basis'), []);
+});
+
+test('z-index, opacity and layout math are out of scope', () => {
+    for (const prop of ['z-index', 'opacity', 'fill-opacity', 'stroke-opacity']) {
+        assert.deepEqual(rulesForProperty(prop), [], prop);
+    }
+    for (const fn of ['calc', 'clamp', 'min', 'max']) {
+        assert.ok(IGNORED_FUNCTIONS.has(fn), fn);
+    }
 });
 
 test('vendor prefixes follow the unprefixed property', () => {
@@ -49,27 +55,6 @@ test('vendor prefixes follow the unprefixed property', () => {
 
 test('user keys never reach Object.prototype', () => {
     for (const key of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
-        assert.deepEqual(rulesForProperty(key, siblings({ [key]: '10px', width: '10px', height: '10px' })), [], key);
+        assert.deepEqual(rulesForProperty(key), [], key);
     }
-});
-
-test('width of a horizontally centered block is a container', () => {
-    const margins: Record<string, string>[] = [{ margin: '0 auto' }, { margin: '2rem auto 0' }, { 'margin-inline': 'auto' }, { 'margin-left': 'auto', 'margin-right': 'auto' }];
-    for (const margin of margins) {
-        assert.deepEqual(rulesForProperty('max-width', siblings({ 'max-width': '1200px', ...margin })), [{ type: 'container', match: 'length' }], JSON.stringify(margin));
-    }
-});
-
-test('equal width and height make a square element: size', () => {
-    const square = siblings({ width: '24px', height: '24PX' });
-    assert.deepEqual(rulesForProperty('width', square), [{ type: 'size', match: 'length' }]);
-    assert.deepEqual(rulesForProperty('height', square), [{ type: 'size', match: 'length' }]);
-});
-
-test('isHorizontallyCentered reads every form of the margin shorthand', () => {
-    assert.equal(isHorizontallyCentered(siblings({ margin: 'auto' })), true);
-    assert.equal(isHorizontallyCentered(siblings({ margin: '0 auto 0 auto' })), true);
-    assert.equal(isHorizontallyCentered(siblings({ margin: '0 auto 0 8px' })), false);
-    assert.equal(isHorizontallyCentered(siblings({ margin: 'auto 0' })), false);
-    assert.equal(isHorizontallyCentered(siblings({})), false);
 });

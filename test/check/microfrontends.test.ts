@@ -110,7 +110,7 @@ const SHARED = {
 };
 
 test('generate --shared splits by how many micro-frontends use a value', () => withProject(SHARED, async (dir) => {
-    const result = cli(dir, 'generate', '.', '--shared', 'packages/tokens', '--json');
+    const result = cli(dir, 'generate', '.', '--shared', 'packages/tokens', '--json', '--dtcg', '--min-occurrences', '2');
     assert.equal(result.status, 0, result.stderr);
     const targets = new Map(JSON.parse(result.stdout).targets.map((t: { name: string; tokens: { key: string }[] }) => [t.name, t.tokens.map((token) => token.key)]));
     assert.deepEqual(targets.get('shared'), ['#4f46e5']);
@@ -130,4 +130,18 @@ test('generate --shared needs two micro-frontends and stays inside the root', ()
     assert.equal(single.status, 2);
     assert.match(single.stderr, /two or more micro-frontends/);
     assert.notEqual(cli(dir, 'generate', '.', '--shared', '../outside').status, 0);
+}));
+
+test('the same value written another way is not a collision; the message lists each distinct value once', () => withProject({
+    'package.json': JSON.stringify({ name: 'root', workspaces: ['apps/*'] }),
+    'apps/a/package.json': MANIFEST('a'),
+    'apps/b/package.json': MANIFEST('b'),
+    'apps/c/package.json': MANIFEST('c'),
+    'apps/a/src/a.css': ':root { --gap: var(--spacing--l); --zero: 0px; --brand: #FFF; }\n',
+    'apps/b/src/a.css': ':root { --gap: var(--spacing--l); --zero: 0; --brand: #ffffff; }\n',
+    'apps/c/src/a.css': ':root { --brand: #000000; }\n',
+}, async (dir) => {
+    const issues = issuesOf(dir, '.').issues.filter((i: { rule: string }) => i.rule === 'mfe/root-collision');
+    assert.deepEqual([...new Set(issues.map((i: { property: string }) => i.property))], ['--brand']);
+    assert.equal(issues[0].detail, 'same global token, different values: #FFF (a, b), #000000 (c)');
 }));

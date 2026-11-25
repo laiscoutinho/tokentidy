@@ -52,6 +52,8 @@ export interface ObjectContext {
     follow: (node: t.Expression) => t.ObjectExpression[];
     /** Um objeto usado em dois lugares é reportado uma vez. */
     seen: WeakSet<t.ObjectExpression>;
+    /** Só estas chaves são estilo (destinos de bibliotecas: `TextStyle`); sem a lista, todas. */
+    keys?: ReadonlySet<string>;
 }
 
 interface StyleValue extends Literal {
@@ -93,17 +95,20 @@ function valuesOf(object: t.ObjectExpression, context: ObjectContext, nested: t.
             return [];
         }
         const written = prop.key.type === 'Identifier' ? prop.key.name : prop.key.type === 'StringLiteral' ? prop.key.value : undefined;
-        if (written === undefined || written.startsWith('--')) {
+        if (written === undefined || written.startsWith('--') || (context.keys && !context.keys.has(written))) {
             return [];
         }
         const key = kind === 'sx' ? SX_ALIASES.get(written) ?? written : written;
         const value = prop.value as t.Expression;
-        if (value.type === 'ObjectExpression') {
-            if (kind === 'sx' && [...value.properties].every((p) => p.type === 'ObjectProperty' && p.key.type === 'Identifier' && SX_BREAKPOINTS.has(p.key.name))) {
-                return value.properties.flatMap((p) => stylesFrom(collector.source, (p as t.ObjectProperty).value as t.Expression, key, kind));
-            }
+        if (value.type === 'ObjectExpression' && kind === 'sx' && value.properties.length > 0
+            && value.properties.every((p) => p.type === 'ObjectProperty' && p.key.type === 'Identifier' && SX_BREAKPOINTS.has(p.key.name))) {
+            return value.properties.flatMap((p) => stylesFrom(collector.source, (p as t.ObjectProperty).value as t.Expression, key, kind));
+        }
+        // Bloco aninhado (`'&:hover'`, `'& .MuiTab-root'`, `'@media …'`): escrito ali, numa variável ou devolvido por função
+        const blocks = value.type === 'ObjectExpression' ? [value] : kind === 'sx' || kind === 'css-object' ? context.follow(value) : [];
+        if (blocks.length > 0 || value.type === 'ObjectExpression') {
             if (kind === 'sx' || kind === 'css-object') {
-                nested.push(value);
+                nested.push(...blocks);
             }
             return [];
         }
@@ -111,11 +116,18 @@ function valuesOf(object: t.ObjectExpression, context: ObjectContext, nested: t.
     });
 }
 
+/**
+ * Chaves do `sx` em que um número é o próprio valor, não um passo do tema: `fontSize: 40` é `40px`,
+ * `lineHeight: 1.3` e `fontWeight: 900` (ou `'900'`) ficam como estão. `p: 2`, `gap: 1` e `borderRadius: 2` multiplicam o tema.
+ */
+const SX_LITERAL_NUMBERS = new Set(['fontSize', 'fontWeight', 'lineHeight', 'letterSpacing']);
+
 function stylesFrom(source: string, node: t.Expression, key: string, kind: ObjectKind): StyleValue[] {
     const impliedUnit = kind === 'dom' || UNITLESS_PROPERTIES.has(key) ? undefined : 'px';
+    const sxNumber = kind === 'sx' && SX_LITERAL_NUMBERS.has(key);
     return literals(source, node)
-        // `p: 2` e `fontWeight: '700'` no `sx` são passos do tema; só strings com unidade ou cor são valor solto
-        .filter((literal) => (kind !== 'sx' || (!literal.numeric && !/^[\d.]+$/.test(literal.text))) && (kind !== 'dom' || !literal.numeric || impliedUnit === undefined && UNITLESS_PROPERTIES.has(key)))
+        // No `sx`, número (ou string só de número) é passo do tema; só strings com unidade ou cor são valor solto
+        .filter((literal) => (kind !== 'sx' || sxNumber || (!literal.numeric && !/^[\d.]+$/.test(literal.text))) && (kind !== 'dom' || !literal.numeric || impliedUnit === undefined && UNITLESS_PROPERTIES.has(key)))
         .map((literal) => ({
             ...literal,
             property: toKebabCase(key),
@@ -132,7 +144,7 @@ export interface Literal {
 }
 
 /**
- * Literais de uma expressão: string, template sem `${}`, número (`8`, `-8`)
+ * Literais de uma expressão: string, trechos fixos de um template, número (`8`, `-8`)
  * e os dois lados de um ternário ou o lado direito de `||`/`??` (`cor || '#fff'`).
  * Expressões calculadas (variáveis, chamadas) já não são valor solto.
  */
@@ -140,10 +152,9 @@ export function literals(source: string, node: t.Expression): Literal[] {
     switch (node.type) {
         case 'StringLiteral':
             return stringContent(source, node.start!, node.end!, node.value);
-        case 'TemplateLiteral': {
-            const quasi = node.quasis[0];
-            return node.expressions.length === 0 && quasi ? stringContent(source, quasi.start!, quasi.end!, quasi.value.cooked ?? '', false) : [];
-        }
+        // Com `${}`, cada trecho fixo é lido sozinho: em `\`1px solid ${x}\``, o `1px` está escrito no arquivo
+        case 'TemplateLiteral':
+            return node.quasis.flatMap((quasi) => (quasi.value.raw.trim() === '' ? [] : stringContent(source, quasi.start!, quasi.end!, quasi.value.cooked ?? '', false)));
         case 'NumericLiteral':
             return [{ text: source.slice(node.start!, node.end!), offset: node.start!, numeric: true }];
         case 'UnaryExpression':
@@ -168,4 +179,18 @@ function stringContent(source: string, start: number, end: number, value: string
     const to = quoted ? end - 1 : end;
     const text = source.slice(from, to);
     return text === value ? [{ text, offset: from, numeric: false }] : [];
+}
+
+/** Valores de `sx` num objeto de props (`{ sx: … }`), descendo `depth` níveis (`{ paper: { sx: … } }`). */
+export function passedSx(props: t.ObjectExpression, depth: number): t.Expression[] {
+    return props.properties.flatMap((prop) => {
+        if (prop.type !== 'ObjectProperty' || prop.computed) {
+            return [];
+        }
+        const key = prop.key.type === 'Identifier' ? prop.key.name : prop.key.type === 'StringLiteral' ? prop.key.value : undefined;
+        if (key === 'sx') {
+            return [prop.value as t.Expression];
+        }
+        return depth > 0 && prop.value.type === 'ObjectExpression' ? passedSx(prop.value, depth - 1) : [];
+    });
 }

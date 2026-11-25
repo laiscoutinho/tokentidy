@@ -7,8 +7,9 @@ import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { classifyFile, isTestPath, listFiles } from './scanner.ts';
+import { classifyFile, isOutOfScopeByDefault, listFiles } from './scanner.ts';
 import type { SkippedFile } from './scanner.ts';
+import type { StyleSink } from '../parsers/js/style-sinks.ts';
 
 /** Arquivos que marcam a raiz de um projeto. */
 const ROOT_MARKERS = ['package.json', 'tokentidy.config.json', '.git'];
@@ -24,6 +25,8 @@ export interface ScopeOptions {
     includeMinified?: boolean;
     /** Props de componente que recebem valor de CSS (`<Flex gap="1rem">`); sem a opção, `DEFAULT_COMPONENT_PROPS`. */
     componentProps?: readonly string[];
+    /** Destinos de estilo de bibliotecas, além dos padrões. */
+    styleSinks?: readonly StyleSink[];
 }
 
 export interface Scope {
@@ -107,7 +110,7 @@ export function ignoreVerdict(ignore: readonly string[]): (file: string, testFil
 }
 
 /**
- * Arquivos do escopo, relativos à raiz. Pastas seguem as exclusões padrão (`node_modules`, testes, stories, fixtures, ocultas);
+ * Arquivos do escopo, relativos à raiz. Pastas seguem as exclusões padrão (`node_modules`, testes, stories, fixtures, ocultas, `NON_UI_DIRS`, `*.config.*`);
  * um arquivo passado explicitamente entra mesmo que o nome fosse excluído numa pasta (`Button.test.tsx`).
  */
 export async function collectFiles(paths: readonly string[], root: string, options: ScopeOptions = {}): Promise<Scope> {
@@ -133,8 +136,8 @@ export async function collectFiles(paths: readonly string[], root: string, optio
         for (const candidate of candidates) {
             const file = toPosix(candidate);
             const kind = classifyFile(candidate, !isDirectory);
-            // Teste dentro da pasta passada: o caminho conta a partir dela (passar `src/test` analisa a pasta)
-            const state = kind === 'other' ? 'excluded' : verdict(file, isDirectory && isTestPath(path.relative(absolute, candidate).split(path.sep).join('/')));
+            // Teste ou pasta fora da interface dentro da pasta passada: o caminho conta a partir dela (passar `src/test` analisa a pasta)
+            const state = kind === 'other' ? 'excluded' : verdict(file, isDirectory && isOutOfScopeByDefault(path.relative(absolute, candidate).split(path.sep).join('/')));
             if (state === 'excluded') {
                 continue;
             }
@@ -161,7 +164,7 @@ export async function collectFiles(paths: readonly string[], root: string, optio
             const absolute = path.join(root, relative);
             const file = toPosix(absolute);
             const kind = classifyFile(absolute, false);
-            if (files.has(file) || tokenFiles.has(file) || verdict(file, isTestPath(file)) !== 'in') {
+            if (files.has(file) || tokenFiles.has(file) || verdict(file, isOutOfScopeByDefault(file)) !== 'in') {
                 continue;
             }
             if (kind === 'supported' || (kind === 'minified' && options.includeMinified)) {

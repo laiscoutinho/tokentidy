@@ -30,7 +30,6 @@ test('CSS: shorthands, comments, !important and @media', () => {
         '5:21 border #ccc',
         '6:12 padding 16px',
         '7:15 margin-top 8px',
-        '18:10 width 320px',
         '19:18 border-radius 4px',
         '24:14 padding 24px',
     ]);
@@ -48,7 +47,6 @@ test('colors inside functions and color functions', () => {
         '5:47 background-image #fff',
         '5:53 background-image rebeccapurple',
         '6:47 background #fafafa',
-        '7:24 padding 16px',
         // `color-mix()` é analisado por dentro: cada cor misturada é uma decisão
         '8:36 border-color red',
         '8:45 border-color white',
@@ -90,7 +88,7 @@ test('token type of each finding', () => {
         'font-weight', 'font-size', 'line-height', 'font-family',
     ]);
     assert.deepEqual(parseFixture('basic.css').findings.map((f) => f.type), [
-        'color', 'color', 'spacing', 'spacing', 'border-width', 'color', 'spacing', 'spacing', 'container', 'radius', 'spacing',
+        'color', 'color', 'spacing', 'spacing', 'border-width', 'color', 'spacing', 'spacing', 'radius', 'spacing',
     ]);
 });
 

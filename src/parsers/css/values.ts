@@ -4,15 +4,15 @@
  * JSX (style={{ margin: '4px 8px' }}) e Angular reaproveitam a mesma análise.
  */
 
-import { tokenize, isTokenAtKeyword, isTokenComma, isTokenDimension, isTokenIdent, isTokenNumber, isTokenOpenCurly, isTokenPercentage } from '@csstools/css-tokenizer';
+import { tokenize, isTokenAtKeyword, isTokenComma, isTokenDimension, isTokenIdent, isTokenOpenCurly } from '@csstools/css-tokenizer';
 import type { CSSToken } from '@csstools/css-tokenizer';
 import { parseListOfComponentValues, isFunctionNode, isSimpleBlockNode, isTokenNode, isWhiteSpaceOrCommentNode } from '@csstools/css-parser-algorithms';
 import type { ComponentValue } from '@csstools/css-parser-algorithms';
 
-import { IGNORED_FUNCTIONS, MIN_LAYER_Z_INDEX, TIME_UNITS } from '../../analysis/rules.ts';
+import { IGNORED_FUNCTIONS, TIME_UNITS } from '../../analysis/rules.ts';
 import type { ValueMatcher } from '../../analysis/rules.ts';
 import type { TokenType } from '../../types.ts';
-import { findFontFamily, findFontShorthand, findShadow } from './font-and-shadow.ts';
+import { findDropShadows, findFontFamily, findFontShorthand, findShadow } from './font-and-shadow.ts';
 import { isLength, isLiteralColor, isLiteralCubicBezier, isNonZeroNumber, isScssVariableName, isWeightKeyword, sourceRangeOf } from './value-tokens.ts';
 import type { Report } from './value-tokens.ts';
 
@@ -42,6 +42,9 @@ export function findValues(value: string, match: ValueMatcher): ValueMatch[] {
             break;
         case 'shadow':
             findShadow(nodes, report);
+            break;
+        case 'drop-shadow':
+            findDropShadows(nodes, report);
             break;
         default:
             findInNodes(nodes, match, report, undefined);
@@ -112,22 +115,18 @@ function matchesToken(token: CSSToken, node: ComponentValue, match: ValueMatcher
         case 'length':
             return isLength(token);
         case 'radius':
-            return isLength(token) || (isTokenPercentage(token) && token[4].value > 0);
+            return isLength(token);
         case 'line-height':
             return isLength(token) || isNonZeroNumber(token);
         case 'font-weight':
             return isNonZeroNumber(token) || isWeightKeyword(token);
-        case 'opacity':
-            return (isTokenNumber(token) && token[4].value > 0 && token[4].value < 1)
-                || (isTokenPercentage(token) && token[4].value > 0 && token[4].value < 100);
         case 'duration':
             return isTokenDimension(token) && token[4].value > 0 && TIME_UNITS.has(token[4].unit.toLowerCase());
-        case 'z-index':
-            return isTokenNumber(token) && token[4].type === 'integer' && Math.abs(token[4].value) >= MIN_LAYER_Z_INDEX;
         case 'easing':
         case 'font':
         case 'font-family':
         case 'shadow':
+        case 'drop-shadow':
             return false;
     }
 }

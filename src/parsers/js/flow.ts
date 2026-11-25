@@ -76,6 +76,27 @@ export class ObjectFlow {
                 add(this.follow(node.consequent, path, depth + 1));
                 add(this.follow(node.alternate, path, depth + 1));
                 return found;
+            // `sx={[base, cond && extra]}`: cada item é um objeto de estilo
+            case 'ArrayExpression':
+                if (path.length === 0) {
+                    for (const element of node.elements) {
+                        if (element && element.type !== 'SpreadElement') {
+                            add(this.follow(element, path, depth + 1));
+                        }
+                    }
+                }
+                return found;
+            // `sx={(theme) => ({ … })}`: o objeto que a função devolve
+            case 'ArrowFunctionExpression':
+                if (path.length === 0) {
+                    const returned = node.body.type === 'BlockStatement'
+                        ? node.body.body.flatMap((statement) => (statement.type === 'ReturnStatement' && statement.argument ? [statement.argument] : []))
+                        : [node.body];
+                    for (const expression of returned) {
+                        add(this.follow(expression, path, depth + 1));
+                    }
+                }
+                return found;
             case 'LogicalExpression':
                 if (node.operator !== '&&') {
                     add(this.follow(node.left, path, depth + 1));

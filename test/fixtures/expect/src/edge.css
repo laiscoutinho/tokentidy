@@ -1,11 +1,11 @@
 @font-face { font-family: "Inter"; src: url(inter.woff2); font-weight: 400; } /* expect: none */
-@media (min-width: 768px) { .a { padding: 16px; } } /* expect: breakpoint/plain-css, spacing/hardcoded */
-@container card (min-width: 400px) { .b { gap: 12px; } } /* expect: breakpoint/plain-css, spacing/hardcoded */
+@media (min-width: 768px) { .a { padding: 16px; } } /* expect: spacing/hardcoded */
+@container card (min-width: 400px) { .b { gap: 12px; } } /* expect: spacing/hardcoded */
 @supports (display: grid) { .c { margin: 8px; } } /* expect: spacing/hardcoded */
 @layer base { .d { color: #333; } } /* expect: color/hardcoded */
 .e { color: #333 !important; } /* expect: color/hardcoded */
 .f { -webkit-box-shadow: 0 1px 2px #000; box-shadow: 0 1px 2px #000; } /* expect: shadow/hardcoded */
-.g { padding: calc(100% - 16px); width: clamp(1rem, 2vw, 2rem); } /* expect: spacing/hardcoded, size/no-context */
+.g { padding: calc(100% - 16px); width: clamp(1rem, 2vw, 2rem); } /* expect: none */
 .h { background: url("img#fff.png") #fafafa no-repeat; } /* expect: color/hardcoded */
 .i { background-image: linear-gradient(90deg, #ff0000 0%, #00ff00 100%); } /* expect: color/hardcoded */
 .j { border: 1px solid; outline: 2px solid currentColor; } /* expect: border-width/hardcoded */
@@ -18,7 +18,7 @@
 .q { content: "#fff"; } /* expect: none */
 .r { fill: none; stroke: #222; } /* expect: color/hardcoded */
 .s { box-shadow: inset 0 0 0 1px #ddd; } /* expect: shadow/hardcoded */
-.t { min-height: 44px; min-width: 44px; } /* expect: size/hardcoded */
+.t { min-height: 44px; min-width: 44px; } /* expect: size/no-context */
 .u { accent-color: #4f46e5; caret-color: #4f46e5; scrollbar-color: #ccc #fff; } /* expect: color/hardcoded */
 .v { column-rule: 1px solid #eee; } /* expect: border-width/hardcoded, color/hardcoded */
 .w { &:hover { color: #4f46e5; } & .x { margin-top: 24px; } } /* expect: color/hardcoded, spacing/hardcoded */
@@ -28,13 +28,13 @@
 .bb { background: var(--bg, #ffffff); color: var(--fg); } /* expect: none */
 .cc { margin: -8px; padding: 0 8px 0 8px; } /* expect: spacing/hardcoded */
 .dd { font-size: 0.875rem; font-size: 14px; } /* expect: font-size/hardcoded */
-.ee { width: 24px; height: 24px; } /* expect: size/hardcoded */
-.ff { max-width: 1200px; margin: 0 auto; } /* expect: container/hardcoded */
+.ee { width: 24px; height: 24px; } /* expect: size/no-context */
+.ff { max-width: 1200px; margin: 0 auto; } /* expect: size/no-context */
 .gg { width: 320px; } /* expect: size/no-context */
 .hh { border-top-left-radius: 4px; border-start-start-radius: 4px; } /* expect: radius/hardcoded */
-.ii { --local-gap: 12px; gap: var(--local-gap); } /* expect: spacing/hardcoded */
-.kk { --tint: #fde68a; display: block; } /* expect: color/hardcoded */
-.ll { --mystery: 10px; display: block; } /* expect: custom-property/unknown-use */
+.ii { --local-gap: 12px; gap: var(--local-gap); } /* expect: none */
+.kk { --tint: #fde68a; display: block; } /* expect: none */
+.ll { --mystery: 10px; display: block; } /* expect: none */
 :root { --brand: #4f46e5; --space: 8px; } /* expect: none */
 html[data-theme="dark"] { --brand: #818cf8; } /* expect: none */
 .theme-x { --brand: #a5b4fc; } /* expect: none */
@@ -43,3 +43,8 @@ html[data-theme="dark"] { --brand: #818cf8; } /* expect: none */
 .ignored { color: #123456; } /* tokentidy-ignore-line color/hardcoded -- partner brand */ /* expect: none */
 /* tokentidy-ignore-next-line spacing/hardcoded -- Safari fix */
 .next { padding: 3px; color: #654321; } /* expect: color/hardcoded */
+.mm { filter: blur(2px) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2)); } /* expect: shadow/hardcoded */
+.nn { filter: drop-shadow(0 1px var(--shadow-color, #000)) brightness(0.9); } /* expect: none */
+.oo { font-weight: bolder; } /* expect: font-weight/hardcoded */
+.pp { font-weight: lighter; } /* expect: font-weight/hardcoded */
+.qq { font-weight: normal; } /* expect: none */

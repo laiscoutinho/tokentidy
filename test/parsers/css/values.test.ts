@@ -21,7 +21,10 @@ const cases: Array<[string, ValueMatcher, string[]]> = [
     // Funções de cor viram um achado só; outras funções são analisadas por dentro
     ['0 1px rgba(0,0,0,.2)', 'color', ['rgba(0,0,0,.2)']],
     ['linear-gradient(red, #00f 50%)', 'color', ['red', '#00f']],
-    ['calc(100% - 16px)', 'length', ['16px']],
+    // `calc()`, `clamp()`, `min()` e `max()` são conta de layout: não são lidos
+    ['calc(100% - 16px)', 'length', []],
+    ['clamp(1rem, 2vw, 2rem)', 'length', []],
+    ['min(100%, 600px)', 'length', []],
     ['rgb(var(--r) 0 0)', 'color', []],
     // Canais literais com opacidade variável: a cor continua fixa no código
     ['rgb(10 88 202 / var(--opacity))', 'color', ['rgb(10 88 202 / var(--opacity))']],

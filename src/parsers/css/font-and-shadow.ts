@@ -140,3 +140,12 @@ export function findShadow(nodes: ComponentValue[], report: Report): void {
         report(...sourceRangeOf([...first.tokens(), ...last.tokens()]));
     }
 }
+
+/** `filter: blur(2px) drop-shadow(0 2px 4px #0003)`: cada `drop-shadow()` é lida como uma sombra de uma camada. */
+export function findDropShadows(nodes: ComponentValue[], report: Report): void {
+    for (const node of nodes) {
+        if (isFunctionNode(node) && node.getName().toLowerCase() === 'drop-shadow') {
+            findShadow(node.value, report);
+        }
+    }
+}

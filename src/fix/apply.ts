@@ -75,7 +75,15 @@ export async function fixScope(scope: Scope, options: FixOptions): Promise<FixRe
     const { tokensDir, dryRun = false, minOccurrences = 2, approximate: _approximate, ...analysisOptions } = options;
     await assertInsideRoot(tokensDir, root);
     // A pasta de tokens é a saída do `generate`: fonte de tokens, nunca alvo de troca
-    const insideTokens = (file: string) => isInside(path.join(root, file), tokensDir);
+    const inside = new Map<string, boolean>();
+    const insideTokens = (file: string) => {
+        let answer = inside.get(file);
+        if (answer === undefined) {
+            answer = isInside(path.join(root, file), tokensDir);
+            inside.set(file, answer);
+        }
+        return answer;
+    };
     // A primeira análise fica só dentro do planejamento: a segunda não precisa conviver com ela na memória
     const { index, sources, plan, resolution, errorsBefore, ...planned } = await prepare(scope, options, insideTokens);
     const skipped = [...planned.skipped];

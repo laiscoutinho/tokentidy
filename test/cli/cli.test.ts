@@ -47,7 +47,7 @@ test('check --json prints only valid JSON to stdout', () => {
     assert.equal(data.filesAnalyzed, 4);
     assert.deepEqual(data.findings[1], {
         file: 'src/App.scss', line: 2, column: 10, offset: 16, endOffset: 23,
-        type: 'color', rule: 'color/hardcoded', property: 'color', value: '#ff0000', host: 'scss', selector: '.app',
+        type: 'color', rule: 'color/hardcoded', property: 'color', value: '#ff0000', host: 'scss', selector: '.app', declaration: 0,
     });
     assert.deepEqual(data.errors, []);
 });
@@ -117,19 +117,23 @@ test('check does not show the banner', () => {
     assert.doesNotMatch(stdout, /_____/);
 });
 
-test('generate writes DTCG + CSS + SCSS into design-tokens/ and lists the files on stdout', async () => {
+test('generate writes only tokens.css by default; --dtcg and --scss add the other formats', async () => {
     const dir = await copyFixture('generate-project');
     try {
-        const { stdout, stderr, status } = runIn(dir, 'generate', '.');
+        const plain = runIn(dir, 'generate', '.');
+        assert.equal(plain.status, 0);
+        assert.deepEqual(plain.stdout.trim().split('\n'), ['design-tokens/tokens.css']);
+        assert.match(plain.stderr, /✔ 2 tokens saved in design-tokens\//);
+        assert.doesNotMatch(plain.stderr, /fewer than|below/);
 
+        const { stdout, stderr, status } = runIn(dir, 'generate', '.', '--new', '--min-occurrences', '2', '--dtcg', '--scss');
         assert.equal(status, 0);
         assert.deepEqual(stdout.trim().split('\n'), [
             'design-tokens/tokens.tokens.json',
             'design-tokens/tokens.css',
             'design-tokens/_tokens.scss',
         ]);
-        assert.match(stderr, /^6 new tokens, 0 kept, 0 semantic aliases$/m);
-        assert.match(stderr, /values used fewer than 2 times were not turned into tokens/);
+        assert.match(stderr, /✔ 6 tokens saved in design-tokens\//);
         assert.match(await readFile(path.join(dir, 'design-tokens', 'tokens.css'), 'utf8'), /--color-white: #ffffff;/);
     } finally {
         await rm(dir, { recursive: true });
@@ -139,20 +143,20 @@ test('generate writes DTCG + CSS + SCSS into design-tokens/ and lists the files 
 test('with existing token files and no terminal, generate asks for --extend or --new and exits with 2', async () => {
     const dir = await copyFixture('generate-project');
     try {
-        runIn(dir, 'generate', '.');
+        runIn(dir, 'generate', '.', '--min-occurrences', '2');
         const second = runIn(dir, 'generate', '.');
         assert.equal(second.status, 2);
         assert.equal(second.stdout, '');
-        assert.match(second.stderr, /Existing token files found/);
-        assert.match(second.stderr, /Use --extend to reuse them or --new to start over/);
+        assert.match(second.stderr, /Tokens generated before were found/);
+        assert.match(second.stderr, /Use --extend to keep their names and add the new ones, or --new to start over/);
 
         const extend = runIn(dir, 'generate', '.', '--extend');
         assert.equal(extend.status, 0);
-        assert.match(extend.stderr, /^0 new tokens, 6 kept/m);
+        assert.match(extend.stderr, /✔ 6 tokens \(0 new\)/);
 
-        const fresh = runIn(dir, 'generate', '.', '--new', '--min-occurrences', '3');
+        const fresh = runIn(dir, 'generate', '.', '--new');
         assert.equal(fresh.status, 0);
-        assert.match(fresh.stderr, /^2 new tokens, 0 kept/m);
+        assert.match(fresh.stderr, /✔ 2 tokens saved/);
     } finally {
         await rm(dir, { recursive: true });
     }
@@ -161,7 +165,7 @@ test('with existing token files and no terminal, generate asks for --extend or -
 test('generate --dry-run prints the files and writes nothing', async () => {
     const dir = await copyFixture('generate-project');
     try {
-        const { stdout, status } = runIn(dir, 'generate', '.', '--dry-run');
+        const { stdout, status } = runIn(dir, 'generate', '.', '--dry-run', '--dtcg');
 
         assert.equal(status, 0);
         assert.match(stdout, /^==> design-tokens\/tokens\.tokens\.json <==\n\{/);
@@ -172,28 +176,30 @@ test('generate --dry-run prints the files and writes nothing', async () => {
     }
 });
 
-test('generate --json prints only valid JSON, with tokens and their occurrences', () => {
+test('generate --json prints only valid JSON, with tokens, their occurrences and how many files use them', () => {
     const { stdout, status } = run('generate', 'generate-project', '--json', '--dry-run');
 
     assert.equal(status, 0);
     const data = JSON.parse(stdout);
     assert.equal(data.mode, 'extend');
-    assert.equal(data.config.minOccurrences, 2);
-    assert.equal(data.tokens.length, 6);
+    assert.equal(data.config.minOccurrences, 3);
+    assert.equal(data.tokens.length, 2);
     assert.ok(data.tokens.every((t: { occurrences: unknown[]; count: number }) => t.occurrences.length === t.count));
-    assert.equal(data.belowThreshold.length, 6);
+    // `files`: em quantos arquivos o valor aparece
+    assert.ok(data.tokens.every((t: { occurrences: { file: string }[]; files: number }) => t.files === new Set(t.occurrences.map((o) => o.file)).size && t.files >= 1));
+    assert.equal(data.belowThreshold.length, 10);
 });
 
 test('the config file is read from the project; options on the command line win', async () => {
     const dir = await copyFixture('generate-project');
     try {
-        await writeFile(path.join(dir, 'tokentidy.config.json'), JSON.stringify({ minOccurrences: 3, output: 'tokens' }));
+        await writeFile(path.join(dir, 'tokentidy.config.json'), JSON.stringify({ minOccurrences: 2, output: 'tokens' }));
         const fromConfig = runIn(dir, 'generate', '.', '--dry-run');
-        assert.match(fromConfig.stdout, /^==> tokens\/tokens\.tokens\.json <==/);
-        assert.match(fromConfig.stderr, /^2 new tokens/m);
+        assert.match(fromConfig.stdout, /^==> tokens\/tokens\.css <==/);
+        assert.match(fromConfig.stderr, /Would write 6 tokens/);
 
-        const fromFlag = runIn(dir, 'generate', '.', '--dry-run', '--min-occurrences', '2');
-        assert.match(fromFlag.stderr, /^6 new tokens/m);
+        const fromFlag = runIn(dir, 'generate', '.', '--dry-run', '--min-occurrences', '3');
+        assert.match(fromFlag.stderr, /Would write 2 tokens/);
 
         await writeFile(path.join(dir, 'tokentidy.config.json'), JSON.stringify({ minOccurences: 3 }));
         const invalid = runIn(dir, 'generate', '.');
@@ -266,4 +272,13 @@ test('generate refuses an output folder outside the project and a corrupted toke
     } finally {
         await rm(dir, { recursive: true });
     }
+});
+
+test('tokentidy without a command shows the banner, a thank-you and the first steps', () => {
+    const { stdout, status } = run();
+
+    assert.equal(status, 0);
+    assert.match(stdout, /_____/);
+    assert.match(stdout, /Thanks for installing TokenTidy!/);
+    assert.match(stdout, /1\. tokentidy check .*\n.*2\. tokentidy generate .*\n.*3\. tokentidy fix /);
 });

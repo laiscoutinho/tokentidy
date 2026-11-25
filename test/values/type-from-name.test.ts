@@ -33,12 +33,8 @@ test('each family of names declares its type', () => {
         ['--border-width-thin', '1px', 'border-width'],
         ['--border-strong', '2px', 'border-width'],
         ['--shadow-md', '0 4px 6px rgba(0, 0, 0, 0.1)', 'shadow'],
-        ['--z-modal', '100', 'z-index'],
-        ['--opacity-disabled', '0.5', 'opacity'],
         ['--duration-fast', '150ms', 'duration'],
         ['--ease-out', 'cubic-bezier(0, 0, 0.2, 1)', 'easing'],
-        ['--breakpoint-md', '768px', 'breakpoint'],
-        ['--container-lg', '1200px', 'container'],
         ['$spacer', '1rem', 'spacing'],
         ['@radius-base', '4px', 'radius'],
     ];
@@ -66,12 +62,16 @@ test('nothing when the value does not fit the type', () => {
     assert.equal(typeFromName('--text-primary', '#333'), undefined);
     assert.equal(typeFromName('--space-4', '16px 8px'), undefined);
     assert.equal(typeFromName('--space-half', '50%'), undefined);
-    assert.equal(typeFromName('--z-top', '1.5'), undefined);
-    assert.equal(typeFromName('--opacity-high', '2'), undefined);
     assert.equal(typeFromName('--duration-x', '16px'), undefined);
     assert.equal(typeFromName('--font-md', '16px'), undefined);
     assert.equal(typeFromName('--font-ink', 'black'), undefined);
     assert.equal(typeFromName('--ease-x', 'calc(1px)'), undefined);
+});
+
+test('out-of-scope families (z-index, opacity, breakpoints) declare no type', () => {
+    assert.equal(typeFromName('--z-modal', '100'), undefined);
+    assert.equal(typeFromName('--opacity-disabled', '0.5'), undefined);
+    assert.equal(typeFromName('--breakpoint-md', '768px'), undefined);
 });
 
 test('a color name with a color value is a color', () => {

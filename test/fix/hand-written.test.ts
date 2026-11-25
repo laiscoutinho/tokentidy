@@ -188,14 +188,14 @@ test('generate reuses an unused hand-written size token instead of creating a du
     }
 });
 
-test('values used once are listed as below the threshold, in text and JSON', async () => {
+test('values used once are below the threshold: only the JSON lists them, the terminal stays quiet', async () => {
     const dir = await project({ 'tokens/tokens.css': ':root { --space-4: 16px; }\n', 'src/app.css': '.a { padding: 16px; color: #ffffff; }\n' });
     try {
         const result = await fix(dir);
         assert.deepEqual(result.belowThreshold.map((f) => f.value), ['#ffffff']);
         const cli = run(dir, '--dry-run');
-        assert.match(cli.stderr, /^src\/app\.css:1:28\tno-token\tused fewer than 2 times\t#ffffff$/m);
-        assert.match(cli.stderr, /1 without a token \(1 used fewer than 2 times\)/);
+        assert.match(cli.stderr, /^1 value has no token with the same value, so it stays as written\.$/m);
+        assert.doesNotMatch(cli.stderr, /fewer than|threshold|#ffffff/);
         const json = JSON.parse(run(dir, '--dry-run', '--json').stdout);
         assert.equal(json.belowThreshold[0].value, '#ffffff');
         assert.equal(await readFile(path.join(dir, 'src/app.css'), 'utf8'), '.a { padding: 16px; color: #ffffff; }\n');
@@ -204,17 +204,20 @@ test('values used once are listed as below the threshold, in text and JSON', asy
     }
 });
 
-test('generate lists each value used once and each semantic alias', async () => {
+test('generate --json lists each value below the minimum and each semantic alias; the terminal only says where the tokens are', async () => {
     const dir = await project({
         'src/app.css': '.btn-excluir { color: #dc2626; }\n.btn-excluir .icon { color: #dc2626; }\n.alert { color: #dc2626; padding: 16px; border-radius: 3px; }\n.b { padding: 16px; }\n',
     });
     try {
-        const { stderr, status } = spawnSync(process.execPath, [CLI_ENTRY, 'generate', '--dry-run'], { encoding: 'utf8', cwd: dir });
-        assert.equal(status, 0);
-        assert.match(stderr, /^1 value used fewer than 2 times was not turned into tokens:$/m);
-        assert.match(stderr, /^ {2}radius\t3px\tsrc\/app\.css:3:56 \(1 use\)$/m);
-        assert.match(stderr, /^1 semantic alias names the role of a value:$/m);
-        assert.match(stderr, /^ {2}color\.text\.danger -> color\.red\.600\t\(2 uses\)$/m);
+        const generate = (...args: string[]) => spawnSync(process.execPath, [CLI_ENTRY, 'generate', '--dry-run', '--min-occurrences', '2', ...args], { encoding: 'utf8', cwd: dir });
+        const text = generate();
+        assert.equal(text.status, 0);
+        assert.match(text.stderr, /^Would write \d+ tokens to design-tokens\/ \(tokens\.css\)\.$/m);
+        assert.doesNotMatch(text.stderr, /fewer than|semantic alias|3px/);
+
+        const data = JSON.parse(generate('--json').stdout);
+        assert.deepEqual(data.belowThreshold.map((b: { type: string; key: string; count: number }) => `${b.type} ${b.key} ${b.count}`), ['radius 3px 1']);
+        assert.deepEqual(data.aliases.map((a: { name: string; count: number }) => `${a.name} ${a.count}`), ['color-text-danger 2']);
     } finally {
         await rm(dir, { recursive: true });
     }

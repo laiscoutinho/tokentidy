@@ -7,7 +7,7 @@
 import { parse } from 'parse5';
 import type { DefaultTreeAdapterTypes } from 'parse5';
 
-import { FileCollector, elementSelector } from './collector.ts';
+import { FileCollector, elementSelector, isSvgDrawingElement } from './collector.ts';
 import type { ParseResult } from './collector.ts';
 import { walkDeclarationList, walkStylesheet } from './css/stylesheet.ts';
 
@@ -32,7 +32,7 @@ export function parseHtml(source: string, file: string): ParseResult {
             }
             return;
         }
-        const style = attributeValueRange(source, element, 'style');
+        const style = isSvgDrawingElement(element.tagName) ? undefined : attributeValueRange(source, element, 'style');
         if (style) {
             walkDeclarationList(collector, source.slice(style.start, style.end), style.start, 'html', elementSelector(element.tagName, element.attrs));
         }

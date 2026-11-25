@@ -7,7 +7,8 @@
 import path from 'node:path';
 
 import type { AnalysisResult } from '../analysis/analyze.ts';
-import { readDtcgTree, treeTokensOf } from '../generate/output/dtcg-tree.ts';
+import { treeTokensOf } from '../generate/output/dtcg-tree.ts';
+import { readTokenState } from '../generate/output/css-state.ts';
 import { semanticPath } from '../generate/semantic.ts';
 import { isInside } from '../project/scope.ts';
 import { bareName } from '../token-lookup.ts';
@@ -28,7 +29,7 @@ const ALIAS_VALUE = /^(?:var\((--[\w-]+)\)|\{([^{}]+)\}|\$([\w-]+)|@([\w-]+))$/;
 /** Alias (sem prefixo) → primitivo (sem prefixo), dos tokens gerados e dos escritos à mão. */
 async function aliasTargets(analysis: AnalysisResult, tokensDir: string): Promise<Map<string, string>> {
     const targets = new Map<string, string>();
-    const tree = await readDtcgTree(tokensDir).catch(() => undefined);
+    const tree = (await readTokenState(tokensDir).catch(() => undefined))?.tree;
     for (const token of tree ? treeTokensOf(tree) : []) {
         if (token.target) {
             targets.set(token.path.join('-'), token.target.join('-'));

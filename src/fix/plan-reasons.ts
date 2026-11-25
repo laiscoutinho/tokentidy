@@ -7,6 +7,9 @@ import type { Finding } from '../types.ts';
 import type { Candidate, TokenIndex } from '../token-lookup.ts';
 import { resolvesUnder } from '../token-index.ts';
 import { propertyAffinity, roleFit } from './token-fit.ts';
+import { semanticPath } from '../generate/semantic.ts';
+import { themeRoleOf } from '../generate/themes.ts';
+import { bareName } from '../token-lookup.ts';
 import type { SkipReason, SkippedValue } from './plan-types.ts';
 
 const SOURCE_RANK: Record<Candidate['source'], number> = { alias: 0, project: 1, generated: 2 };
@@ -19,13 +22,22 @@ const SOURCE_RANK: Record<Candidate['source'], number> = { alias: 0, project: 1,
 export function candidatesFor(finding: Finding, key: string, index: TokenIndex): { found: Candidate[]; candidates: Candidate[] } {
     const found = index.lookup(finding.type, key)
         .filter((c) => c.form !== 'js-theme'
-            && (c.source !== 'alias' || c.occurrences?.some((o) => sameOccurrence(o, finding)))
+            && (c.source !== 'alias' || c.occurrences?.some((o) => sameOccurrence(o, finding)) || isRoleOf(finding, c.name))
             && (!c.scope || resolvesUnder(finding.selector, c.scope.selector, c.scope.rivals)));
     const candidates = found.filter((c) => finding.type !== 'color' || roleFit(finding.property, c.name) < 2)
         .map((candidate, order) => ({ candidate, order, fit: fit(finding, candidate) }))
         .sort((a, b) => SOURCE_RANK[a.candidate.source] - SOURCE_RANK[b.candidate.source] || a.fit - b.fit || a.order - b.order)
         .map(({ candidate }) => candidate);
     return { found, candidates };
+}
+
+/**
+ * O alias é o desta ocorrência pelo papel (`color` em `.btn-danger` → `--color-text-danger`): vale também para código
+ * novo, que o `generate` não viu, e para a pasta só com CSS, que não guarda as ocorrências.
+ */
+function isRoleOf(finding: Finding, name: string): boolean {
+    const bare = bareName(name);
+    return semanticPath(finding.property, finding.selector)?.join('-') === bare || themeRoleOf(finding)?.join('-') === bare;
 }
 
 /** Destinos em que a troca não é feita, mesmo com token: o motivo de cada um. */
@@ -39,8 +51,6 @@ export function hostSkip(finding: Finding): SkippedValue | undefined {
             return skippedValue(finding, 'component-prop', `the ${finding.property} prop belongs to the component, which may not accept var(); check what it takes and edit it by hand`);
         case 'css-string':
             return skippedValue(finding, 'css-string', 'this CSS is built as a string, often for an iframe or another window where the tokens may not be loaded; edit it by hand');
-        case 'svg-attribute':
-            return skippedValue(finding, 'svg-attribute', 'var() in an SVG attribute does not work the same in every browser; move it to style or edit it by hand');
         default:
             return undefined;
     }

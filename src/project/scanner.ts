@@ -38,6 +38,26 @@ export function isTestPath(file: string): boolean {
     return TEST_FILE.test(file) || file.split('/').slice(0, -1).some((dir) => TEST_DIRS.has(dir));
 }
 
+/**
+ * Pastas de código que não é interface do produto: benchmarks, scripts de build, arquivos estáticos copiados
+ * sem processar (`public`), código de terceiros e fontes de ícones geradas (IcoMoon, Fontello).
+ * `.storybook` já fica de fora por ser oculta.
+ */
+export const NON_UI_DIRS: ReadonlySet<string> = new Set([
+    'benchmark', 'benchmarks', 'script', 'scripts', 'public', 'vendor', 'third_party', 'icomoon', 'fontello',
+]);
+
+/** Configuração de ferramenta (`vite.config.ts`, `jest.config.js`, `postcss.config.cjs`): não é estilo do produto. */
+const CONFIG_FILE = /\.config\.[^./]+$/;
+
+/**
+ * Fora do escopo por padrão: teste (`isTestPath`), pasta que não é interface (`NON_UI_DIRS`) ou arquivo de
+ * configuração. Como os testes, o `ignore` com `!` traz de volta e passar a pasta ou o arquivo analisa.
+ */
+export function isOutOfScopeByDefault(file: string): boolean {
+    return isTestPath(file) || CONFIG_FILE.test(file) || file.split('/').slice(0, -1).some((dir) => NON_UI_DIRS.has(dir.toLowerCase()));
+}
+
 /** Minificado pelo nome (`app.min.css`). O conteúdo também é conferido na análise (ver `isMinified`). */
 const MINIFIED_NAME = /\.min\.[^.]+$/;
 
@@ -50,8 +70,11 @@ const RESOLVER_FILE = /\.resolver\.json$/;
 export const isTokenFileName = (name: string): boolean => TOKEN_FILE.test(name);
 export const isResolverFileName = (name: string): boolean => RESOLVER_FILE.test(name);
 
-/** Por que um arquivo do escopo não foi analisado. `ignored`: casou com `ignore` da configuração. */
-export type SkipReason = 'minified' | 'unsupported' | 'ignored';
+/**
+ * Por que um arquivo do escopo não foi analisado. `ignored`: casou com `ignore` da configuração;
+ * `generated`: o cabeçalho diz que outra ferramenta gerou o arquivo (os tokens dele ainda contam).
+ */
+export type SkipReason = 'minified' | 'unsupported' | 'ignored' | 'generated';
 
 export interface SkippedFile {
     file: string;
@@ -140,7 +163,7 @@ export async function scanDirectory(dir: string): Promise<ScanResult> {
     const tokenFiles: string[] = [];
     const skipped: SkippedFile[] = [];
     for await (const relative of listFiles(root)) {
-        if (isTestPath(relative.split(path.sep).join('/'))) {
+        if (isOutOfScopeByDefault(relative.split(path.sep).join('/'))) {
             continue;
         }
         const kind = classifyFile(relative);

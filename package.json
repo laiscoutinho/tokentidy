@@ -1,6 +1,6 @@
 {
   "name": "tokentidy",
-  "version": "0.0.9",
+  "version": "0.0.28",
   "description": "Finds hardcoded visual values in front-end code and helps migrate them to design tokens.",
   "keywords": [
     "design-tokens",
@@ -49,7 +49,8 @@
   "files": [
     "dist",
     "schemas",
-    "NOTICE"
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "dev": "node src/cli.ts",
@@ -58,10 +59,11 @@
     "typecheck": "tsc",
     "test": "node --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=90 --test-coverage-branches=85 \"test/**/*.test.ts\"",
     "check": "npm run typecheck && npm test",
+    "test:corpus": "node test/corpus/corpus.ts",
     "prepare": "npm run build"
   },
   "dependencies": {
-    "@angular/compiler": "22.2.1",
+    "@angular/compiler": "21.2.26",
     "@babel/parser": "8.0.6",
     "@babel/traverse": "8.0.6",
     "@csstools/css-color-parser": "^4.2.6",

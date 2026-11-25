@@ -5,10 +5,11 @@ import { assertInsideRoot } from '../safe-write.ts';
 import type { Finding } from '../types.ts';
 import type { AnalysisResult } from '../analysis/analyze.ts';
 import type { Config } from '../project/config.ts';
+import type { FormatRequest } from '../generate/output/write-files.ts';
 import { EXIT, JSON_SCHEMA_VERSION, UsageError } from './errors.ts';
-import { displayPath, printDiagnostics } from './print.ts';
+import { displayPath, printHumanDiagnostics } from './print.ts';
 
-interface SharedOptions {
+interface SharedOptions extends FormatRequest {
     shared: string;
     new?: boolean;
     dryRun?: boolean;
@@ -29,7 +30,8 @@ export async function runGenerateShared(root: string, given: readonly string[], 
     const { splitByUse } = await import('../generate/shared.ts');
     const dtcgTree = await import('../generate/output/dtcg-tree.ts');
     const { renderOutput } = await import('../generate/output/render-files.ts');
-    const { moduleLanguages, writeOutput } = await import('../generate/output/write-files.ts');
+    const { chosenFormats, writeOutput } = await import('../generate/output/write-files.ts');
+    const { readTokenState } = await import('../generate/output/css-state.ts');
     const { consolidations } = await automaticConsolidations(root, result, config);
     const split = splitByUse(result.findings, projects, consolidations);
 
@@ -43,7 +45,7 @@ export async function runGenerateShared(root: string, given: readonly string[], 
     const insideOut = (file: string) => targets.some((t) => (`${path.join(root, file)}`).startsWith(`${t.outDir}${path.sep}`));
     const report = [];
     for (const target of targets) {
-        const existing = mode === 'extend' ? await dtcgTree.readDtcgTree(target.outDir) : undefined;
+        const existing = mode === 'extend' ? (await readTokenState(target.outDir))?.tree : undefined;
         const generation = generateTokens(target.findings, {
             consolidations, minOccurrences: target.minOccurrences, gridBase: config.gridBase, semanticTokens: config.semanticTokens, mode,
             ...(rootFontSize ? { rootFontSize } : {}),
@@ -51,7 +53,7 @@ export async function runGenerateShared(root: string, given: readonly string[], 
             references: result.references,
             ownTokens: existing ? dtcgTree.ownTokensOf(existing) : [],
         });
-        const writeOptions = { outDir: target.outDir, mode, styleLanguages: result.styleLanguages, splitThreshold: config.splitThreshold, modules: await moduleLanguages(target.findings, target.outDir) };
+        const writeOptions = { outDir: target.outDir, mode, splitThreshold: config.splitThreshold, ...await chosenFormats(target.outDir, options) };
         const files = generation.tokens.length > 0 || existing ? renderOutput(dtcgTree.buildDtcgTree(generation, existing), writeOptions) : [];
         if (!options.dryRun && files.length > 0) {
             await assertInsideRoot(target.outDir, root);
@@ -65,8 +67,15 @@ export async function runGenerateShared(root: string, given: readonly string[], 
         console.log(JSON.stringify({ schemaVersion: JSON_SCHEMA_VERSION, root, mode, dryRun: options.dryRun === true, targets: report, errors, warnings, skipped }, null, 2));
         return;
     }
+    if (process.stdout.isTTY) {
+        const { count, table } = await import('./human.ts');
+        console.log(table(['Tokens for', 'Folder', 'Tokens'], report.map((t) => [t.name, `${displayPath(t.dir)}/`, String(t.tokens.length)])).join('\n'));
+        printHumanDiagnostics(result);
+        console.error(`${options.dryRun ? 'Would write' : '✔ Wrote'} ${count(report.reduce((sum, t) => sum + t.tokens.length, 0), 'token')} in ${count(report.length, 'folder')}.`);
+        return;
+    }
     for (const target of report) {
         console.log(`${target.name}\t${displayPath(target.dir)}\t${target.tokens.length}`);
     }
-    printDiagnostics(result);
+    printHumanDiagnostics(result);
 }

@@ -1,0 +1,228 @@
+{
+  "TOSIOS": {
+    "filesAnalyzed": 111,
+    "findings": {
+      "border-width/hardcoded": 9,
+      "color/hardcoded": 37,
+      "font-family/hardcoded": 3,
+      "font-size/hardcoded": 23,
+      "font-weight/hardcoded": 1,
+      "line-height/hardcoded": 1,
+      "opacity/hardcoded": 2,
+      "radius/hardcoded": 9,
+      "shadow/hardcoded": 2,
+      "size/hardcoded": 9,
+      "spacing/hardcoded": 22,
+      "z-index/hardcoded": 1
+    },
+    "review": {
+      "size/no-context": 9
+    },
+    "hosts": {
+      "css": 3,
+      "jsx": 116
+    },
+    "types": {
+      "border-width": 9,
+      "color": 37,
+      "font-family": 3,
+      "font-size": 23,
+      "font-weight": 1,
+      "line-height": 1,
+      "opacity": 2,
+      "radius": 9,
+      "shadow": 2,
+      "size": 9,
+      "spacing": 22,
+      "z-index": 1
+    },
+    "reviewShare": 0.07,
+    "skipped": {},
+    "errors": 0,
+    "budgetMs": 3000
+  },
+  "mydraft-ui": {
+    "filesAnalyzed": 230,
+    "findings": {
+      "border-width/hardcoded": 18,
+      "breakpoint/hardcoded": 1,
+      "color/hardcoded": 26,
+      "duration/hardcoded": 3,
+      "font-family/hardcoded": 4,
+      "font-size/hardcoded": 15,
+      "font-weight/hardcoded": 3,
+      "line-height/hardcoded": 10,
+      "opacity/hardcoded": 3,
+      "radius/hardcoded": 11,
+      "shadow/hardcoded": 11,
+      "size/hardcoded": 7,
+      "spacing/hardcoded": 75,
+      "z-index/hardcoded": 4
+    },
+    "review": {
+      "size/no-context": 16,
+      "value/unknown-destination": 2
+    },
+    "hosts": {
+      "css": 49,
+      "html": 1,
+      "js-value": 1,
+      "jsx": 9,
+      "scss": 130,
+      "svg-attribute": 1
+    },
+    "types": {
+      "border-width": 18,
+      "breakpoint": 1,
+      "color": 26,
+      "duration": 3,
+      "font-family": 4,
+      "font-size": 15,
+      "font-weight": 3,
+      "line-height": 10,
+      "opacity": 3,
+      "radius": 11,
+      "shadow": 11,
+      "size": 7,
+      "spacing": 75,
+      "z-index": 4
+    },
+    "reviewShare": 0.086,
+    "skipped": {},
+    "errors": 0,
+    "budgetMs": 3261
+  },
+  "scrabble-solver": {
+    "filesAnalyzed": 534,
+    "findings": {
+      "border-width/hardcoded": 1,
+      "color/hardcoded": 20,
+      "duration/hardcoded": 1,
+      "font-family/hardcoded": 1,
+      "font-size/hardcoded": 10,
+      "font-weight/hardcoded": 10,
+      "letter-spacing/hardcoded": 1,
+      "line-height/hardcoded": 2,
+      "opacity/hardcoded": 1,
+      "radius/hardcoded": 4,
+      "shadow/hardcoded": 3,
+      "spacing/hardcoded": 1,
+      "z-index/hardcoded": 4
+    },
+    "review": {
+      "custom-property/unknown-use": 1,
+      "size/no-context": 7
+    },
+    "hosts": {
+      "css-string": 26,
+      "jsx": 1,
+      "scss": 32
+    },
+    "types": {
+      "border-width": 1,
+      "color": 20,
+      "duration": 1,
+      "font-family": 1,
+      "font-size": 10,
+      "font-weight": 10,
+      "letter-spacing": 1,
+      "line-height": 2,
+      "opacity": 1,
+      "radius": 4,
+      "shadow": 3,
+      "spacing": 1,
+      "z-index": 4
+    },
+    "reviewShare": 0.119,
+    "skipped": {},
+    "errors": 0,
+    "budgetMs": 3120
+  },
+  "philippines-travel-level-map": {
+    "filesAnalyzed": 19,
+    "findings": {
+      "color/hardcoded": 81,
+      "duration/hardcoded": 2,
+      "font-family/hardcoded": 2,
+      "font-size/hardcoded": 3,
+      "font-weight/hardcoded": 2,
+      "radius/hardcoded": 6,
+      "size/hardcoded": 4,
+      "spacing/hardcoded": 16,
+      "z-index/hardcoded": 1
+    },
+    "review": {
+      "size/no-context": 2
+    },
+    "hosts": {
+      "css": 62,
+      "svg-attribute": 55
+    },
+    "types": {
+      "color": 81,
+      "duration": 2,
+      "font-family": 2,
+      "font-size": 3,
+      "font-weight": 2,
+      "radius": 6,
+      "size": 4,
+      "spacing": 16,
+      "z-index": 1
+    },
+    "reviewShare": 0.017,
+    "skipped": {},
+    "errors": 0,
+    "budgetMs": 3000
+  },
+  "genshin-optimizer": {
+    "filesAnalyzed": 5623,
+    "findings": {
+      "border-width/hardcoded": 17,
+      "color/hardcoded": 142,
+      "duration/hardcoded": 11,
+      "easing/hardcoded": 1,
+      "font-family/hardcoded": 5,
+      "font-size/hardcoded": 27,
+      "font-weight/hardcoded": 35,
+      "line-height/hardcoded": 2,
+      "opacity/hardcoded": 4,
+      "radius/hardcoded": 59,
+      "shadow/hardcoded": 22,
+      "size/hardcoded": 30,
+      "spacing/hardcoded": 64,
+      "z-index/hardcoded": 1
+    },
+    "review": {
+      "size/no-context": 92
+    },
+    "hosts": {
+      "component-prop": 7,
+      "css": 6,
+      "jsx": 352,
+      "scss": 37,
+      "svg-attribute": 18
+    },
+    "types": {
+      "border-width": 17,
+      "color": 142,
+      "duration": 11,
+      "easing": 1,
+      "font-family": 5,
+      "font-size": 27,
+      "font-weight": 35,
+      "line-height": 2,
+      "opacity": 4,
+      "radius": 59,
+      "shadow": 22,
+      "size": 30,
+      "spacing": 64,
+      "z-index": 1
+    },
+    "reviewShare": 0.18,
+    "skipped": {
+      "minified": 78
+    },
+    "errors": 0,
+    "budgetMs": 13458
+  }
+}

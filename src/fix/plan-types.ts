@@ -40,7 +40,6 @@ export type ReplacementReason = 'alias' | 'most-used' | 'only-match' | 'generate
  * - `variable-not-loaded`: a variável existe, mas o arquivo não a carrega (ou carrega com namespace);
  * - `unit-in-binding`: `[style.width.px]="a ? 16 : 24"`: a unidade no nome vale para os dois valores;
  * - `needs-token-module`: valor lido por JavaScript (canvas, gráfico), onde `var()` não funciona;
- * - `svg-attribute`: atributo de apresentação do SVG, onde o suporte a `var()` varia entre navegadores;
  * - `css-string`: CSS num template sem tag, que pode ir para um iframe ou outra janela sem os tokens;
  * - `component-prop`: prop de componente (`<Flex gap="1rem">`), cujo tipo é do componente e pode não aceitar `var()`;
  * - `ambiguous-token`: dois tokens do projeto com o mesmo valor e o mesmo uso: quem escolhe é a pessoa;
@@ -59,7 +58,6 @@ export type SkipReason =
     | 'variable-not-loaded'
     | 'unit-in-binding'
     | 'needs-token-module'
-    | 'svg-attribute'
     | 'css-string'
     | 'component-prop'
     | 'ambiguous-token'

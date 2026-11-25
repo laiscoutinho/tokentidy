@@ -1,0 +1,27 @@
+[
+  {
+    "id": "TOSIOS",
+    "url": "https://github.com/halftheopposite/TOSIOS.git",
+    "commit": "67d41ac4c86e7cd2ae1cd5ede8772fefb8b08b70"
+  },
+  {
+    "id": "mydraft-ui",
+    "url": "https://github.com/mydraft-cc/ui.git",
+    "commit": "0d57cbff2fb2106307fe28273eb7577907ef8ffa"
+  },
+  {
+    "id": "scrabble-solver",
+    "url": "https://github.com/kamilmielnik/scrabble-solver.git",
+    "commit": "a38b8e11b8b0d2318e409ec859de331cb73f23a4"
+  },
+  {
+    "id": "philippines-travel-level-map",
+    "url": "https://github.com/OSSPhilippines/philippines-travel-level-map.git",
+    "commit": "919be28951781d59d3186c04467e664013a21b5a"
+  },
+  {
+    "id": "genshin-optimizer",
+    "url": "https://github.com/frzyc/genshin-optimizer.git",
+    "commit": "39eccbe92791c5ca4f43d52dbfc91c93378f6bd0"
+  }
+]

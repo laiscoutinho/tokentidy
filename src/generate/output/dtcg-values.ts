@@ -16,9 +16,6 @@ export function dtcgValueOf(type: TokenType, key: string): { $type?: string; $va
         }
         case 'font-weight':
             return { $type: 'fontWeight', $value: Number.isFinite(Number(key)) ? Number(key) : key };
-        case 'opacity':
-        case 'z-index':
-            return { $type: 'number', $value: Number(key) };
         case 'duration':
             return { $type: 'duration', $value: { value: Number(key.replace(/ms$/, '')), unit: 'ms' } };
         case 'easing': {

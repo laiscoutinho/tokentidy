@@ -115,15 +115,22 @@ export function projectOf(file: string, projects: readonly MfeProject[]): MfePro
     return projects.filter((p) => file === p.dir || file.startsWith(`${p.dir}/`)).sort((a, b) => b.dir.length - a.dir.length)[0];
 }
 
-/** `16px` e `1rem`, `#FFF` e `#ffffff`: o mesmo valor escrito de outro jeito não é colisão. */
+/** `16px` e `1rem`, `#FFF` e `#ffffff`, `0` e `0px`: o mesmo valor escrito de outro jeito não é colisão. */
 function canonical(value: string): string {
     const text = value.trim().toLowerCase().replace(/\s+/g, ' ');
     const color = colorInfo(text);
     if (color) {
         return `color:${color.hex ?? text}:${color.alpha}`;
     }
-    const px = lengthInPx(text);
-    return px === undefined ? text : `${px}px`;
+    const px = /^[-+]?0*\.?0+$/.test(text) ? 0 : lengthInPx(text);
+    return px === undefined ? text : `${Object.is(px, -0) ? 0 : px}px`;
+}
+
+/** Cada valor distinto uma vez, com os projetos que o usam: `#4f46e5 (shell, cart), #000000 (admin)`. */
+function distinctValues(items: readonly { project: MfeProject; value: string; canonical: string }[]): string {
+    return [...Map.groupBy(items, (item) => item.canonical).values()]
+        .map((same) => `${same[0]!.value} (${[...new Set(same.map((item) => item.project.name))].join(', ')})`)
+        .join(', ');
 }
 
 const isRoot = (selector: string | undefined) => selector === undefined || selector.split(',').some((s) => [':root', 'html'].includes(s.trim()));
@@ -134,12 +141,12 @@ function rootCollisions(definitions: readonly TokenDefinition[], projects: reado
     for (const [name, ofName] of Map.groupBy(global, (d) => d.name)) {
         const located = ofName.flatMap((definition) => {
             const project = projectOf(definition.file, projects);
-            return project ? [{ definition, project }] : [];
+            return project ? [{ definition, project, value: definition.value, canonical: canonical(definition.value) }] : [];
         });
-        if (new Set(located.map(({ definition }) => canonical(definition.value))).size < 2) {
+        if (new Set(located.map((item) => item.canonical)).size < 2) {
             continue;
         }
-        const values = [...new Map(located.map(({ definition, project }) => [project.name, `${project.name} ${definition.value}`])).values()].join(', ');
+        const values = distinctValues(located);
         for (const { definition } of located) {
             issues.push({
                 rule: 'mfe/root-collision', severity: 'violation', file: definition.file, line: definition.line, column: definition.column,
@@ -192,7 +199,7 @@ function drift(uses: readonly Use[]): MfeIssue[] {
         if (usual.length < 2 || new Set(usual.map((u) => u.canonical)).size < 2) {
             continue;
         }
-        const detail = `same role, different values: ${usual.map((u) => `${u.project.name} ${u.value}`).join(', ')}`;
+        const detail = `same role, different values: ${distinctValues(usual)}`;
         issues.push(...usual.map((u) => ({ rule: 'mfe/drift' as const, severity: 'review' as const, file: u.file, line: u.line, column: u.column, property: u.label, value: u.value, detail })));
     }
     return issues;

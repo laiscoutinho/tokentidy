@@ -1,4 +1,4 @@
-// Custom properties locais com valor literal: estado de componente e `--_privada` são valores soltos; tema e arquivo de tokens não.
+// Custom properties locais com valor literal não são reportadas nem viram token do projeto; tema e arquivo de tokens são tokens.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -21,7 +21,7 @@ async function analyze(files: Record<string, string>) {
     }
 }
 
-test('a custom property set in a component state block is a hardcoded value, with the one in the rule', async () => {
+test('a local custom property is not reported and is not a project token', async () => {
     const result = await analyze({
         'src/select.module.scss': `.input {
 	--_select-padding: 12px;
@@ -37,10 +37,9 @@ test('a custom property set in a component state block is a hardcoded value, wit
 }
 `,
     });
-    assert.deepEqual(result.findings.map((f) => `${f.line} ${f.property} ${f.value} ${f.type}`), [
-        '2 --_select-padding 12px spacing', '5 --_select-padding 8px spacing', '8 --select-gap 4px spacing',
-    ]);
-    assert.ok(!result.definitions.some((d) => d.name === '--_select-padding'));
+    assert.deepEqual(result.findings, []);
+    assert.deepEqual(result.review, []);
+    assert.ok(!result.definitions.some((d) => d.name === '--_select-padding' || d.name === '--select-gap'));
 });
 
 test('theme blocks and token files stay token sources', async () => {

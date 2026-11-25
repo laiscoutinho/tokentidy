@@ -17,6 +17,7 @@ import { findReferences } from '../parsers/css/values.ts';
 import { aliasHints } from './alias-hints.ts';
 import type { AliasHint } from './alias-hints.ts';
 import { nearSuggestion } from './near.ts';
+import { themeOnlyMatches } from './theme-match.ts';
 
 export interface UnusedToken {
     name: string;
@@ -73,6 +74,7 @@ export async function enrichCheck(result: AnalysisResult, options: EnrichOptions
             suggestions.set(finding, { token: alternatives[0]!, match: 'exact', alternatives: alternatives.slice(1) });
         }
     }
+    const withoutSuggestion: Finding[] = [];
     for (const finding of plan.withoutToken) {
         const theme = JS_HOSTS.has(finding.host) ? index.lookup(finding.type, normalizeFinding(finding)).find((c) => c.form === 'js-theme') : undefined;
         if (theme) {
@@ -82,8 +84,11 @@ export async function enrichCheck(result: AnalysisResult, options: EnrichOptions
         const near = nearSuggestion(finding, index, { gridBase, ...(result.rootFontSize ? { rootFontSize: result.rootFontSize.px } : {}) });
         if (near) {
             suggestions.set(finding, near);
+        } else {
+            withoutSuggestion.push(finding);
         }
     }
+    const themeOnly = themeOnlyMatches(withoutSuggestion, result.definitions);
 
     return {
         ...result,
@@ -91,6 +96,7 @@ export async function enrichCheck(result: AnalysisResult, options: EnrichOptions
             const suggestion = suggestions.get(f);
             return suggestion ? { ...f, suggestion } : f;
         }),
+        review: themeOnly.length > 0 ? [...result.review, ...themeOnly].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || a.line - b.line || a.column - b.column) : result.review,
         repeatedWithoutToken: repeatedValues(plan.withoutToken, index, minOccurrences),
         unusedTokens,
         aliasHints: hints,

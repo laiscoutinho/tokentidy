@@ -88,7 +88,7 @@ el.style.cssText = 'margin-top: 13px';
 el.setAttribute('style', 'margin-right: 14px');
 el.setAttribute('fill', '#333333');
 Object.assign(el.style, { marginBottom: '15px', opacity: 0.5 });
-`, 'a.ts'), ['background-color #222222', 'color #111111', 'fill #333333', 'margin-bottom 15px', 'margin-left 11px', 'margin-right 14px', 'margin-top 13px', 'opacity 0.5']);
+`, 'a.ts'), ['background-color #222222', 'color #111111', 'margin-bottom 15px', 'margin-left 11px', 'margin-right 14px', 'margin-top 13px']);
 });
 
 test('values read by JavaScript: canvas, charts, and only colors for unknown functions', async () => {
@@ -100,12 +100,31 @@ configure({ color: '#444444', title: 'red', width: 320 });
 `, 'a.ts'), ['color #111111', 'color #222222', 'color #333333', 'color #444444']);
 });
 
-test('matchMedia is a breakpoint for review', async () => {
-    assert.deepEqual(await found({ 'a.ts': `window.matchMedia('(min-width: 600px)');\n` }), ['a.ts breakpoint/plain-css @media 600px']);
+test('matchMedia is out of scope', async () => {
+    assert.deepEqual(await found({ 'a.ts': `window.matchMedia('(min-width: 600px)');\n` }), []);
 });
 
-test('SVG presentation attributes in JSX', async () => {
-    assert.deepEqual(await values(`export const A = (p) => <path fill="#111111" stroke={p.a ? '#222222' : 'none'} stopColor="#333333" />;`), ['fill #111111', 'stop-color #333333', 'stroke #222222']);
+test('SVG drawing is part of the image: presentation attributes and style on drawing elements are not read', async () => {
+    assert.deepEqual(await values(`export const A = (p) => <svg style={{ color: '#444444' }}>
+  <path fill="#111111" stroke={p.a ? '#222222' : 'none'} style={{ fill: '#333333' }} />
+</svg>;
+`), ['color #444444']);
+});
+
+test('SVG drawing in HTML and Angular templates: style on the drawing is not read, the <svg> root is', async () => {
+    const markup = `<svg style="color: #444444">
+  <path style="fill: #111111" />
+  <linearGradient><stop style="stop-color: #222222" /></linearGradient>
+</svg>
+`;
+    assert.deepEqual(await values(markup, 'a.html'), ['color #444444']);
+    assert.deepEqual(await values(`import { Component } from '@angular/core';
+@Component({ selector: 'x-icon', template: \`
+  <svg style="color: #444444">
+    <path style="fill: #111111" [style.stroke]="'#222222'" />
+  </svg>\` })
+export class Icon {}
+`, 'icon.component.ts'), ['color #444444']);
 });
 
 test('CSS-in-JS: values around interpolations, and a value with an interpolation inside is left out', async () => {
@@ -123,7 +142,7 @@ const k = keyframes\`from { color: #222222; }\`;
 const G = createGlobalStyle\`body { color: #333333; }\`;
 const W = styled(Box).attrs({})\`color: #444444;\`;
 const N = notCss\`color: #555555;\`;
-`), ['@media 768px', 'color #111111', 'color #222222', 'color #333333', 'color #444444', 'font-size 14px', 'gap 10px', 'margin 8px']);
+`), ['color #111111', 'color #222222', 'color #333333', 'color #444444', 'font-size 14px', 'gap 10px', 'margin 8px']);
 });
 
 test('CSS-in-JS: object styles, nested blocks and the css prop', async () => {
@@ -136,10 +155,34 @@ export const A = () => <><i css={{ color: '#333333' }} /><b css={\`color: #44444
 
 test('MUI sx: aliases and breakpoint keys; theme steps (numbers) are not hardcoded values', async () => {
     assert.deepEqual(await values(`export const A = () => <Box sx={{
-  p: 2, mt: '17px', bgcolor: '#111111', fontWeight: '700',
+  p: 2, gap: 1, mt: '17px', bgcolor: '#111111',
   margin: { xs: '18px', md: 3 }, '&:hover': { color: '#222222' },
 }} />;`),
         ['background-color #111111', 'color #222222', 'margin 18px', 'margin-top 17px']);
+});
+
+test('MUI sx: font numbers are values (fontSize in px), nested selector blocks are read', async () => {
+    assert.deepEqual(await values(`const hover = { color: '#333333' };
+export const A = () => <Box sx={{
+  fontSize: 40, fontWeight: '900', lineHeight: 1.3,
+  '& .MuiTab-root:hover': hover, '@media (min-width: 600px)': { '&:focus': { color: '#444444' } },
+}} />;`),
+        ['color #333333', 'color #444444', 'font-size 40', 'font-weight 900', 'line-height 1.3']);
+});
+
+test('MUI sx: arrays, arrow functions and fixed parts of template literals', async () => {
+    assert.deepEqual(await values(`export const A = ({ on, c }) => <>
+  <Box sx={[{ color: '#555555' }, on && { color: '#666666' }]} />
+  <Box sx={(theme) => ({ borderColor: '#777777' })} />
+  <Box sx={{ border: \`1px solid \${c}\` }} />
+</>;`),
+        ['border 1px', 'border-color #777777', 'color #555555', 'color #666666']);
+});
+
+test('MUI sx: sx passed through *Props, directly or one level down', async () => {
+    assert.deepEqual(await values(`export const A = () => <DatePicker
+  textFieldProps={{ sx: { color: '#121212' } }} slotProps={{ paper: { sx: { bgcolor: '#131313' } } }} PaperProps={{ elevation: 2 }} />;`),
+        ['background-color #131313', 'color #121212']);
 });
 
 test('MUI sx: the axis shorthands are spacing', async () => {
@@ -159,39 +202,19 @@ export class H {
 `, 'a.component.ts'), ['color #111111', 'color #222222', 'color #333333', 'margin 8', 'margin 9', 'margin-top 22px']);
 });
 
-const MIXIN = '@mixin btn($bg: #111111, $pad: 10px, $idle: 3px) { background: $bg; .x { padding: $pad; } }\n';
-
-test('SCSS: mixin arguments take the type of the property that uses the parameter', async () => {
-    assert.deepEqual(await values(`${MIXIN}.a { @include btn(#222222, 23px); }\n.b { @include btn($pad: 24px); }\n.c { @include btn(var(--x), $spacing); }\n`, 'a.scss'),
-        ['@mixin 3px', 'background #111111', 'background #222222', 'padding 10px', 'padding 23px', 'padding 24px']);
+test('SCSS: mixin arguments and parameter defaults are not reported, known or not', async () => {
+    const mixin = '@mixin btn($bg: #111111, $pad: 10px) { background: $bg; .x { padding: $pad; } }\n';
+    assert.deepEqual(await values(`${mixin}.a { @include btn(#222222, 23px); }\n.b { @include other(#333333, 25px); }\n`, 'a.scss'), []);
+    assert.deepEqual(await found({ 'a.scss': `.a { @include lib.btn(#222222); }\n`, '_lib.scss': '@mixin btn($bg) { background: $bg; }\n' }), []);
 });
 
-test('SCSS: the mixin can be defined in another file', async () => {
-    assert.deepEqual(await found({ 'a.scss': `.a { @include lib.btn(#222222); }\n`, '_lib.scss': '@mixin btn($bg) { background: $bg; }\n' }), ['a.scss color/hardcoded background #222222']);
-});
-
-test('SCSS: unknown mixins report colors as violations and measures for review', async () => {
-    assert.deepEqual(await found({ 'a.scss': `.a { @include other(#222222, 25px, 'x', 1 + 2); }\n` }), [
-        'a.scss color/hardcoded @include #222222',
-        'a.scss value/unknown-destination @include 25px',
-    ]);
-});
-
-test('SCSS: two mixins with the same name and different uses tell nothing', async () => {
-    assert.deepEqual(await found({
-        'a.scss': `.a { @include m(25px); }\n`,
-        'b.scss': '@mixin m($v) { padding: $v; }\n',
-        'c.scss': '@mixin m($v) { width: $v; }\n',
-    }), ['a.scss value/unknown-destination @include 25px']);
-});
-
-test('SCSS: mat.*-overrides maps give the type by key', async () => {
+test('SCSS: mat.*-overrides maps give the type by key; a key without a known role is left out', async () => {
     assert.deepEqual(await values(`.d { @include mat.button-overrides((\n  filled-container-color: #111111, filled-container-shape: 26px,\n  label-size: 27px, label-weight: 700, label-line-height: 1.5,\n  label-tracking: 1px, label-font: Arial, odd: 28px)); }\n`, 'a.scss'), [
-        '@include 28px', 'border-radius 26px', 'color #111111', 'font-family Arial', 'font-size 27px', 'font-weight 700', 'letter-spacing 1px', 'line-height 1.5',
+        'border-radius 26px', 'color #111111', 'font-family Arial', 'font-size 27px', 'font-weight 700', 'letter-spacing 1px', 'line-height 1.5',
     ]);
 });
 
-test('fix writes valid code in every new place, and leaves JavaScript-read values and SVG attributes alone', async () => {
+test('fix writes valid code in every new place, and leaves JavaScript-read values alone', async () => {
     const dir = await project({
         'tokens.css': ':root { --brand: #111111; --space: 8px; }\n.use { color: var(--brand); padding: var(--space); }\n',
         '_tokens.scss': '$brand: #111111;\n$space: 8px;\n.use { color: $brand; padding: $space; }\n',
@@ -208,10 +231,10 @@ export class H {
   @HostBinding('style.padding.px') p = 8;
 }
 `,
-        'src/m.scss': `@use '../tokens' as *;\n@mixin b($c: #111111) { color: $c; }\n.a { @include b(#111111); @include z(#111111); }\n`,
+        'src/m.scss': `@use '../tokens' as *;\n.a { @include mat.button-overrides((container-color: #111111)); }\n`,
     });
     const { skipped } = await fixScope(await collectFiles([dir], dir), { tokensDir: path.join(dir, 'design-tokens') }) as unknown as { skipped: { reason: string }[] };
-    assert.deepEqual(skipped.map((s) => s.reason).sort(), ['needs-token-module', 'svg-attribute', 'svg-attribute', 'unit-in-binding']);
+    assert.deepEqual(skipped.map((s) => s.reason).sort(), ['needs-token-module', 'unit-in-binding']);
     assert.equal(await readFile(path.join(dir, 'src/a.tsx'), 'utf8'), `const s = { padding: 'var(--space)', color: 'var(--brand)' };
 const B = styled.div\`color: var(--brand); margin: \${x}px var(--space);\`;
 ctx.fillStyle = '#111111';
@@ -225,5 +248,5 @@ export class H {
   @HostBinding('style.padding') p = 'var(--space)';
 }
 `);
-    assert.equal(await readFile(path.join(dir, 'src/m.scss'), 'utf8'), `@use '../tokens' as *;\n@mixin b($c: $brand) { color: $c; }\n.a { @include b($brand); @include z($brand); }\n`);
+    assert.equal(await readFile(path.join(dir, 'src/m.scss'), 'utf8'), `@use '../tokens' as *;\n.a { @include mat.button-overrides((container-color: $brand)); }\n`);
 });

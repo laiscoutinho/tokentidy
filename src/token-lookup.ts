@@ -10,6 +10,7 @@ import path from 'node:path';
 import { classifyDefinitions, scopedOverrides } from './token-index.ts';
 import type { RejectionReason } from './token-index.ts';
 import { ownTokensOf, readDtcgTree, treeTokensOf } from './generate/output/dtcg-tree.ts';
+import { readTokenState } from './generate/output/css-state.ts';
 import { parseDtcg } from './parsers/dtcg.ts';
 import { isResolverFileName, isTokenFileName, listFiles } from './project/scanner.ts';
 import { DARK_FILE } from './generate/output/theme-files.ts';
@@ -230,7 +231,8 @@ export async function projectTokenIndex(
     analysis: { root: string; definitions: readonly TokenDefinition[]; references: readonly TokenReference[] },
     tokensDir: string,
 ): Promise<TokenIndex> {
-    const tree = await readDtcgTree(tokensDir);
+    const state = await readTokenState(tokensDir);
+    const tree = state?.tree;
     if (!tree || ownTokensOf(tree).length === 0) {
         const definitions = [...analysis.definitions, ...await looseDtcgFiles(analysis, tokensDir)];
         return buildTokenIndex({
@@ -242,7 +244,7 @@ export async function projectTokenIndex(
         });
     }
     // O escuro entra depois: `.dark .card` usa o mesmo token semântico, que ali vale o valor escuro
-    const dark = await readDtcgTree(tokensDir, DARK_FILE);
+    const dark = state?.dark?.tree ?? await readDtcgTree(tokensDir, DARK_FILE);
     return buildTokenIndex({
         definitions: analysis.definitions.filter((d) => !isInside(path.join(analysis.root, d.file), tokensDir)),
         references: analysis.references,

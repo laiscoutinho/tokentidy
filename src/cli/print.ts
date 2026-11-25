@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import type { AnalysisResult } from '../analysis/analyze.ts';
+import { skipReasonText } from './human.ts';
 
 // Controles C0/C1 (ESC inicia sequências ANSI e OSC) e marcas bidi (mudam a ordem do texto na tela, "Trojan Source")
 const UNSAFE = /[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g;
@@ -34,8 +35,8 @@ export function display(result: Pick<AnalysisResult, 'root'>, file: string): str
 }
 
 /** Caminho clicável: em terminal, link OSC 8 (abre o arquivo com Ctrl+clique). */
-export function link(file: string): string {
-    const shown = displayPath(file);
+export function link(file: string, label?: string): string {
+    const shown = label ?? displayPath(file);
     if (!process.stderr.isTTY) {
         return shown;
     }
@@ -80,4 +81,24 @@ export function printCheckSummary(result: AnalysisResult, baselined = 0): void {
         parts.push(`${skipped.length} ${skipped.length === 1 ? 'file' : 'files'} skipped`);
     }
     console.error(parts.join('; '));
+}
+
+/** Os mesmos diagnósticos em frases, para o terminal: o que a pessoa precisa saber e onde. */
+export function printHumanDiagnostics(result: AnalysisResult): void {
+    const lines: string[] = [];
+    for (const e of result.errors) {
+        lines.push(`${display(result, e.file)}:${e.line}:${e.column}  could not be read (syntax error): ${printable(oneLine(e.message))}`);
+    }
+    for (const w of result.warnings) {
+        lines.push(`${display(result, w.file)}:${w.line}:${w.column}  ${printable(w.message)}`);
+    }
+    for (const s of result.skipped.filter((item) => item.reason !== 'ignored')) {
+        lines.push(`${display(result, s.file)}  skipped: ${skipReasonText(s.reason)}`);
+    }
+    for (const given of result.unmatched) {
+        lines.push(`No supported files in ${printable(given)}`);
+    }
+    if (lines.length > 0) {
+        console.error(`${lines.join('\n')}\n`);
+    }
 }

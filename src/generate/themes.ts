@@ -65,6 +65,12 @@ function themePath(property: string, base: string): string[] | undefined {
     return ['color', role, name, ...(variant ? [variant.name] : []), ...(state ? [state.split(' ')[0]!] : [])];
 }
 
+/** Nome do token de tema que serve a este valor, no modo claro ou escuro (`.dark .card` no fundo → `color.bg.card`). */
+export function themeRoleOf(finding: Finding): string[] | undefined {
+    const context = finding.type === 'color' ? modeOf(finding) : undefined;
+    return context ? themePath(finding.property, context.base) : undefined;
+}
+
 interface ModeValue {
     key: string;
     findings: Finding[];

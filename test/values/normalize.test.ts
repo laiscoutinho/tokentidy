@@ -13,7 +13,6 @@ const same: Array<[TokenType, string[]]> = [
     ['spacing', ['.5rem', '0.5rem']],
     ['spacing', ['-8px', '8px']],
     ['duration', ['.2s', '200ms', '0.2S']],
-    ['opacity', ['50%', '.5', '0.50']],
     ['font-weight', ['bold', '700']],
     ['font-weight', ['normal', '400']],
     ['font-family', ['"Inter", Arial, sans-serif', "'inter',arial,  SANS-SERIF"]],

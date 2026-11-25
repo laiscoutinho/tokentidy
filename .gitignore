@@ -4,3 +4,4 @@ dist/
 !test/fixtures/**/dist/
 *.tgz
 test/.tmp/
+.corpus/

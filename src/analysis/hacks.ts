@@ -17,7 +17,7 @@ interface HackContext {
 
 const NUMBER = /^(-?(?:\d+\.?\d*|\.\d+))(px|rem|em|ms|s)?$/i;
 /** Tipos de medida em que esses truques aparecem. Borda, fonte e raio têm outros sentidos. */
-const LAYOUT_TYPES = new Set<TokenType>(['spacing', 'size', 'container']);
+const LAYOUT_TYPES = new Set<TokenType>(['spacing', 'size']);
 const BOX_PROPERTIES = new Set(['width', 'height', 'inline-size', 'block-size', 'min-width', 'min-height']);
 const PSEUDO_ELEMENT = /::?(after|before)\b/i;
 /** Até aqui uma duração só serve para a animação acabar de uma vez. */

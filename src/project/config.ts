@@ -7,6 +7,9 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import type { StyleSink } from '../parsers/js/style-sinks.ts';
+import type { ScopeOptions } from './scope.ts';
+
 export const CONFIG_FILE = 'tokentidy.config.json';
 
 export interface Config {
@@ -33,10 +36,12 @@ export interface Config {
     colorTolerance: number;
     /** Props de componente JSX que recebem valor de CSS (`<Flex gap="1rem">`). Sem a opção, a lista padrão. */
     componentProps?: string[];
+    /** Funções e construtores de bibliotecas que recebem um objeto de estilo, além dos padrões (`TextStyle`, `add.text`). */
+    styleSinks?: StyleSink[];
 }
 
 export const DEFAULT_CONFIG: Readonly<Config> = {
-    minOccurrences: 2,
+    minOccurrences: 3,
     gridBase: 4,
     output: 'design-tokens',
     splitThreshold: 60,
@@ -131,6 +136,9 @@ export function validateConfig(raw: unknown, source: string): Config {
                 }
                 config.componentProps = [...value];
                 break;
+            case 'styleSinks':
+                config.styleSinks = styleSinks(value, source);
+                break;
             default:
                 throw new ConfigError(`${source}: unknown option "${key}"`);
         }
@@ -148,4 +156,26 @@ export function integerAtLeast(value: unknown, min: number, label: string): numb
         throw new ConfigError(`${label} must be an integer >= ${min}`);
     }
     return number;
+}
+
+/** `[{ "call": "TextStyle", "keys": ["fill"] }]`: `call` é um nome (`TextStyle`, `add.text`), `keys` são nomes de chave. */
+function styleSinks(value: unknown, source: string): StyleSink[] {
+    const name = /^[A-Za-z_$][\w$]*$/;
+    const valid = Array.isArray(value) && value.every((sink) => typeof sink === 'object' && sink !== null
+        && Object.keys(sink).every((key) => key === 'call' || key === 'keys')
+        && typeof sink.call === 'string' && sink.call.split('.').every((part: string) => name.test(part))
+        && (sink.keys === undefined || (Array.isArray(sink.keys) && sink.keys.every((key: unknown) => typeof key === 'string' && name.test(key)))));
+    if (!valid) {
+        throw new ConfigError(`${source}: styleSinks must be a list of { "call": "TextStyle", "keys": ["fill", "fontSize"] }`);
+    }
+    return (value as StyleSink[]).map((sink) => ({ call: sink.call, ...(sink.keys ? { keys: [...sink.keys] } : {}) }));
+}
+
+/** O que da configuração muda a análise: o mesmo para `check`, `generate` e `fix`. */
+export function analysisOptions(config: Config): Pick<ScopeOptions, 'ignore' | 'includeMinified' | 'componentProps' | 'styleSinks'> {
+    return {
+        ignore: config.ignore, includeMinified: config.includeMinified,
+        ...(config.componentProps ? { componentProps: config.componentProps } : {}),
+        ...(config.styleSinks ? { styleSinks: config.styleSinks } : {}),
+    };
 }

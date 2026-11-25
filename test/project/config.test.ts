@@ -10,7 +10,7 @@ test('without a config file, the defaults are used', async () => {
     const dir = await tempDir();
     try {
         assert.deepEqual(await loadConfig(dir), { config: DEFAULT_CONFIG });
-        assert.equal(DEFAULT_CONFIG.minOccurrences, 2);
+        assert.equal(DEFAULT_CONFIG.minOccurrences, 3);
     } finally {
         await rm(dir, { recursive: true });
     }

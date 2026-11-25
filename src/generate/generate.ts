@@ -39,6 +39,8 @@ export interface GeneratedToken {
     value: string;
     /** Quantas vezes o valor aparece no código. */
     count: number;
+    /** Em quantos arquivos: valor repetido em um arquivo só tende a ser decisão local, não do projeto. */
+    files: number;
     /** Todas as grafias encontradas, da mais usada para a menos usada. */
     spellings: string[];
     /** Onde o valor aparece: o que o autofix vai trocar. */
@@ -168,6 +170,7 @@ export function generateTokens(findings: readonly Finding[], options: Generation
             key: group.key,
             value: tokenValue(group.type, group.key, spellings),
             count: group.findings.length,
+            files: new Set(group.findings.map((f) => f.file)).size,
             spellings,
             occurrences: group.findings,
             ...(kept ? { kept: true } : {}),

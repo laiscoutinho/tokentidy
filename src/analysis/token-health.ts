@@ -156,7 +156,7 @@ function fallbackWarnings(references: readonly TokenReference[], definitions: re
         if (fallback === undefined || !owned || /var\(|[$@]/.test(fallback) || owned.some((d) => /var\(|[$@]/.test(d.value))) {
             continue;
         }
-        const rule = rulesForProperty(ref.property, new Map(), ref.selector)
+        const rule = rulesForProperty(ref.property)
             .find((r) => wholeValue(fallback, r.match) && owned.every((d) => wholeValue(d.value.trim(), r.match)));
         if (rule && !owned.some((d) => sameValue(rule.type, fallback, d.value.trim()))) {
             warnings.push({

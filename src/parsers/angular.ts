@@ -15,7 +15,7 @@ import {
 } from '@angular/compiler';
 import type { AST, TmplAstBoundAttribute, TmplAstElement } from '@angular/compiler';
 
-import { FileCollector, elementSelector, toKebabCase } from './collector.ts';
+import { FileCollector, elementSelector, isSvgDrawingElement, toKebabCase } from './collector.ts';
 import type { ParseResult } from './collector.ts';
 import { walkDeclarationList } from './css/stylesheet.ts';
 
@@ -53,15 +53,17 @@ class StyleVisitor extends TmplAstRecursiveVisitor {
 
     override visitElement(element: TmplAstElement): void {
         const selector = elementSelector(element.name, element.attributes);
+        // O compilador chama `<path>` de `:svg:path`: o desenho de um SVG não é lido
+        const drawing = isSvgDrawingElement(element.name.replace(/^:svg:/, ''));
 
-        const style = element.attributes.find((attr) => attr.name === 'style');
+        const style = drawing ? undefined : element.attributes.find((attr) => attr.name === 'style');
         if (style?.valueSpan) {
             const start = style.valueSpan.start.offset;
             const end = style.valueSpan.end.offset;
             walkDeclarationList(this.#collector, this.#template.slice(start, end), this.#base + start, 'angular-template', selector);
         }
 
-        const bindings = element.inputs.flatMap((input) => this.#styleBindings(input));
+        const bindings = drawing ? [] : element.inputs.flatMap((input) => this.#styleBindings(input));
         // Vizinhos: o que está nos bindings literais do mesmo elemento (`[style.width.px]` + `[style.height.px]`)
         const siblings = new Map(bindings.map((b) => [b.property, b.impliedUnit ? `${b.text}${b.impliedUnit}` : b.text]));
         for (const binding of bindings) {

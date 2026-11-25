@@ -17,6 +17,13 @@ test('a size written in px and in rem gets the unit in the name of the second', 
     ]), ['48px size-12', '3rem size-12-rem', '2px radius-xs', '0.125rem radius-xs-rem']);
 });
 
+test('the px value keeps the plain name even when the rem one comes first', () => {
+    assert.deepEqual(names([
+        { type: 'spacing', key: '0.5rem', property: 'padding' },
+        { type: 'spacing', key: '8px', property: 'padding' },
+    ]), ['0.5rem spacing-2-rem', '8px spacing-2']);
+});
+
 test('other collisions keep the number suffix', () => {
     const result = names([
         { type: 'easing', key: 'cubic-bezier(0.1, 0.2, 0.3, 1)', property: 'transition' },

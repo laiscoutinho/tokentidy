@@ -30,16 +30,17 @@ export interface DtcgToken {
     $extensions?: Record<string, unknown>;
 }
 
-/** Ocorrência como vai para o JSON: o que o autofix precisa para trocar o trecho certo do arquivo certo. */
-function occurrenceOf(finding: Finding): Record<string, unknown> {
-    const { file, line, column, offset, endOffset, property, value, host, selector, atRules, function: fn, impliedUnit } = finding;
-    return {
-        file, line, column, offset, endOffset, property, value, host,
-        ...(selector === undefined ? {} : { selector }),
-        ...(atRules === undefined ? {} : { atRules }),
-        ...(fn === undefined ? {} : { function: fn }),
-        ...(impliedUnit === undefined ? {} : { impliedUnit }),
-    };
+/**
+ * Onde um alias deve ser usado, como vai para o JSON: só o que o `fix` confere (arquivo, propriedade, seletor).
+ * Linha e offset ficam de fora: mudavam a cada linha editada e faziam o arquivo, que é versionado, mudar
+ * centenas de linhas por nada. Repetições do mesmo lugar viram uma só.
+ */
+function placesOf(findings: readonly Finding[]): TreeOccurrence[] {
+    const places = new Map<string, TreeOccurrence>();
+    for (const { file, property, selector } of findings) {
+        places.set(`${file}\0${property}\0${selector ?? ''}`, { file, property, ...(selector === undefined ? {} : { selector }) });
+    }
+    return [...places.values()];
 }
 
 function tokenEntry(token: GeneratedToken): DtcgToken {
@@ -55,7 +56,6 @@ function tokenEntry(token: GeneratedToken): DtcgToken {
                 count: token.count,
                 spellings: token.spellings,
                 ...(token.equivalents ? { equivalents: token.equivalents.map(({ name, file, line }) => ({ name, file, line })) } : {}),
-                occurrences: token.occurrences.map(occurrenceOf),
             },
         },
     };
@@ -65,7 +65,7 @@ function aliasEntry(alias: SemanticAlias): DtcgToken {
     return {
         $type: 'color',
         $value: `{${alias.target.join('.')}}`,
-        $extensions: { [EXTENSION]: { count: alias.count, occurrences: alias.occurrences.map(occurrenceOf) } },
+        $extensions: { [EXTENSION]: { count: alias.count, occurrences: placesOf(alias.occurrences) } },
     };
 }
 

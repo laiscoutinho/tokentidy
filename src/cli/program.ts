@@ -3,7 +3,7 @@ import { styleText } from 'node:util';
 import { Command, CommanderError } from 'commander';
 
 import { pkg } from './package-info.ts';
-import { bannerText } from './banner.ts';
+import { bannerText, welcomeText } from './banner.ts';
 import { registerCheck } from './check.ts';
 import { EXIT } from './errors.ts';
 import { registerFix } from './fix.ts';
@@ -25,7 +25,7 @@ Examples:
   $ tokentidy check
   $ tokentidy check src/components src/Card.css --json
   $ tokentidy generate --dry-run
-  $ tokentidy generate --min-occurrences 3 --extend
+  $ tokentidy generate --extend --scss
   $ tokentidy fix --dry-run
   $ tokentidy fix src/components
   $ tokentidy fix --approximate --no-input
@@ -47,9 +47,9 @@ async function main(): Promise<void> {
             throw error;
         }
     });
-    // Sem nenhum comando, mostra o banner e a ajuda
+    // Sem nenhum comando: boas-vindas e os primeiros passos (a ajuda completa fica no --help)
     if (process.argv.length <= 2) {
-        program.outputHelp();
+        process.stdout.write(welcomeText());
         return;
     }
     try {

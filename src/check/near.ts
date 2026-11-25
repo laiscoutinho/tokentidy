@@ -13,7 +13,7 @@ import { lengthInPx, normalizeFinding } from '../values/normalize.ts';
 const COLOR_NEAR = 0.02;
 /** Diferença de opacidade que deixa de ser "a mesma cor". */
 const ALPHA_NEAR = 0.01;
-const MEASURE_TYPES = new Set<TokenType>(['spacing', 'size', 'radius', 'container', 'font-size']);
+const MEASURE_TYPES = new Set<TokenType>(['spacing', 'size', 'radius', 'font-size']);
 
 export interface NearOptions {
     gridBase: number;
@@ -31,7 +31,7 @@ export function nearSuggestion(finding: Finding, index: TokenIndex, options: Nea
 }
 
 function fitsHost(candidate: Candidate, finding: Finding): boolean {
-    if (finding.host === 'js-value' || finding.host === 'svg-attribute' || finding.host === 'css-string' || finding.host === 'component-prop' || candidate.scope || candidate.form === 'js-theme') {
+    if (finding.host === 'js-value' || finding.host === 'css-string' || finding.host === 'component-prop' || candidate.scope || candidate.form === 'js-theme') {
         return false;
     }
     if (candidate.form === 'custom-property') {
@@ -45,19 +45,36 @@ function nearColor(finding: Finding, candidates: readonly Candidate[]): TokenSug
     if (!color) {
         return undefined;
     }
-    let best: { candidate: Candidate; distance: number } | undefined;
+    const near: Near[] = [];
     for (const candidate of candidates) {
         const other = colorInfo(candidate.key);
         if (!other || Math.abs(other.alpha - color.alpha) > ALPHA_NEAR) {
             continue;
         }
         const distance = deltaEOK(color.oklch, other.oklch);
-        // Os candidatos vêm do mais usado para o menos: em empate fica o primeiro
-        if (distance > 0 && distance <= COLOR_NEAR && sameHue(color.oklch, other.oklch) && (!best || distance < best.distance)) {
-            best = { candidate, distance };
+        if (distance > 0 && distance <= COLOR_NEAR && sameHue(color.oklch, other.oklch)) {
+            near.push({ token: candidate.name, distance: Number(distance.toFixed(4)), order: Math.abs(distance) });
         }
     }
-    return best && { token: best.candidate.name, match: 'near', distance: Number(best.distance.toFixed(4)) };
+    return suggestionOf(near);
+}
+
+interface Near {
+    token: string;
+    distance: number;
+    /** Quanto mais perto, menor. */
+    order: number;
+}
+
+/** O mais perto vira a sugestão; os seguintes (até 3 no total) vão em `nearest`, para a pessoa escolher. */
+function suggestionOf(near: Near[]): TokenSuggestion | undefined {
+    // Ordenação estável: os candidatos vêm do mais usado para o menos, então em empate fica o primeiro
+    const sorted = near.sort((a, b) => a.order - b.order).filter((n, i, all) => all.findIndex((m) => m.token === n.token) === i);
+    const best = sorted[0];
+    if (!best) {
+        return undefined;
+    }
+    return { token: best.token, match: 'near', distance: best.distance, nearest: sorted.slice(0, 3).map(({ token, distance }) => ({ token, distance })) };
 }
 
 /** Distância em OKLab: `L` igual e `a`/`b` a partir do croma e do matiz. Cinza não tem matiz (`NaN` vira 0). */
@@ -96,25 +113,20 @@ function nearMeasure(finding: Finding, candidates: readonly Candidate[], options
     if (px === undefined || px % gridBase === 0) {
         return undefined;
     }
-    let bestDistance = gridBase / 2;
-    let found: Candidate[] = [];
+    const near: Near[] = [];
     for (const candidate of candidates) {
         const value = lengthInPx(candidate.key, options.rootFontSize);
-        if (value === undefined || value % gridBase !== 0) {
+        // Só valores do grid, até um passo dele: além disso já é outra decisão de tamanho
+        if (value === undefined || value % gridBase !== 0 || Math.abs(value - px) > gridBase) {
             continue;
         }
-        const distance = Math.abs(value - px);
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            found = [candidate];
-        } else if (distance === bestDistance && found.length > 0) {
-            found.push(candidate);
-        }
+        near.push({ token: candidate.name, distance: value - px, order: Math.abs(value - px) });
     }
+    const sorted = [...near].sort((a, b) => a.order - b.order);
+    const closest = sorted[0];
     // Dois valores de grid à mesma distância: não há "o mais próximo"; o mesmo valor em dois nomes fica com o mais usado
-    const nearest = found[0];
-    if (!nearest || found.some((c) => c.key !== nearest.key)) {
+    if (!closest || closest.order >= gridBase / 2 || sorted.some((n) => n.order === closest.order && n.distance !== closest.distance)) {
         return undefined;
     }
-    return { token: nearest.name, match: 'near', distance: lengthInPx(nearest.key, options.rootFontSize)! - px };
+    return suggestionOf(near);
 }

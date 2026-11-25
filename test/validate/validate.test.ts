@@ -188,7 +188,7 @@ test('the CLI: exit 1 with path on stdout, pure --json, exit 0 on what generate 
     const dir = await copyFixture('generate-project');
     const cli = (...args: string[]) => spawnSync(process.execPath, [CLI_ENTRY, ...args], { encoding: 'utf8', cwd: dir });
     try {
-        assert.equal(cli('generate', '.', '--new').status, 0);
+        assert.equal(cli('generate', '.', '--new', '--dtcg').status, 0);
         const clean = cli('validate', 'design-tokens');
         assert.equal(clean.status, 0, clean.stdout + clean.stderr);
         assert.match(clean.stderr, /^1 file checked; 0 problems\n$/);
