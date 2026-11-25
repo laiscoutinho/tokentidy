@@ -16,10 +16,10 @@ If it prints `v22.20.0` or a higher number (`v24.x`, for example), you are ready
 
 ## 2. Install TokenTidy in your project
 
-TokenTidy is not on the npm registry yet, so it is installed straight from GitHub. Inside your project folder (the one with `package.json`), run:
+Inside your project folder (the one with `package.json`), run:
 
 ```bash
-npm install -D github:laiscoutinho/tokentidy
+npm install -D tokentidy
 ```
 
 `-D` installs it as a **development dependency**: it helps you while coding and doesn't go into the app your users download.
@@ -40,7 +40,8 @@ npx tokentidy --help
 
 | What | Command |
 |---|---|
-| Update to the latest version on GitHub | `npm install -D github:laiscoutinho/tokentidy` (the same command again) |
+| Update to the latest version | `npm install -D tokentidy@latest` |
+| Try the code not released yet, from GitHub | `npm install -D github:laiscoutinho/tokentidy` |
 | Remove TokenTidy from the project | `npm uninstall tokentidy` |
 
 ## Next step

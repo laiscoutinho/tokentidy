@@ -7,7 +7,7 @@ Uma ferramenta de linha de comando para ajudar a manter o código front-end **fi
 > ⚠️ Em desenvolvimento (versão `0.x`: correções sobem o último número; recursos novos e mudanças que quebram algo sobem o do meio; a `1.0.0` vai marcar uma interface estável). Hoje o TokenTidy encontra valores fixos em CSS, SCSS, Sass, Less, HTML, React (JSX/TSX) e Angular, gera design tokens a partir dos repetidos (com temas claro/escuro e um módulo JS para canvas e gráficos), troca valores fixos por tokens (valores próximos só com a sua autorização e as guardas de coerência), compara micro-frontends e valida arquivos de tokens DTCG. Veja o [roadmap](#️-roadmap).
 
 ```bash
-npm install -D github:laiscoutinho/tokentidy
+npm install -D tokentidy
 npx tokentidy check
 ```
 
@@ -112,7 +112,7 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | Token exato e mais próximo no `check`, cores quase duplicadas | 🟢 |
 | Avisos sobre tokens: nomes desconhecidos, `$deprecated`, valores reserva do `var()` que discordam, tokens sem uso | 🟢 |
 | Baseline para projetos que já têm violações | 🟢 |
-| Uso no CI e publicação no npm | 🟡 CI em Linux/Windows/macOS |
+| Uso no CI (Linux/Windows/macOS) e publicação no npm | 🟢 |
 | Argumentos e padrões de mixin do SCSS, mapas `mat.*-overrides` | 🟢 |
 | Objetos de estilo fora do `style={{}}`, estilos no DOM, canvas e gráficos | 🟢 |
 | CSS-in-JS (styled-components, Emotion, `sx`) | 🟢 |

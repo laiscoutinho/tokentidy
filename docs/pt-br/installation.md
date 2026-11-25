@@ -16,10 +16,10 @@ Se aparecer `v22.20.0` ou um número maior (`v24.x`, por exemplo), está tudo pr
 
 ## 2. Instale o TokenTidy no seu projeto
 
-O TokenTidy ainda não está no registro do npm, então é instalado direto do GitHub. Dentro da pasta do projeto (a que tem o `package.json`), rode:
+Dentro da pasta do projeto (a que tem o `package.json`), rode:
 
 ```bash
-npm install -D github:laiscoutinho/tokentidy
+npm install -D tokentidy
 ```
 
 O `-D` instala como **dependência de desenvolvimento**: ele ajuda enquanto você programa e não vai junto no app que os seus usuários baixam.
@@ -40,7 +40,8 @@ npx tokentidy --help
 
 | O quê | Comando |
 |---|---|
-| Atualizar para a versão mais recente do GitHub | `npm install -D github:laiscoutinho/tokentidy` (o mesmo comando de novo) |
+| Atualizar para a versão mais recente | `npm install -D tokentidy@latest` |
+| Testar o código ainda não lançado, do GitHub | `npm install -D github:laiscoutinho/tokentidy` |
 | Remover o TokenTidy do projeto | `npm uninstall tokentidy` |
 
 ## Próximo passo
