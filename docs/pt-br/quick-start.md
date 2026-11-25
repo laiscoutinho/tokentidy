@@ -12,22 +12,22 @@ Não sabe bem o que é um design token? Leia [Design tokens](design-tokens.md) a
 npx tokentidy check
 ```
 
-Cada linha é um valor visual escrito direto no código:
+Aparece uma tabela por arquivo, com cada valor visual escrito direto no código:
 
 ```
-src/App.jsx:29:28	violation	color/hardcoded	color	#4f46e5
-src/App.scss:8:8	violation	spacing/hardcoded	gap	10px
-src/App.jsx:31:12	review	size/no-context	width	120
+src/Card.css
+  Line   Type      Property   Value     Use instead
+  2:10   color     color      #4f46e5   --color-primary
+  3:8    spacing   gap        10px      —
+
+✖ 2 hardcoded values in 1 file.
+  1 of them already has a token: run tokentidy fix to replace it.
+  1 item for review: tokentidy check --review
 ```
 
-Leia assim: *arquivo:linha:coluna*, tipo de item, regra, propriedade CSS e valor. No VS Code, <kbd>Ctrl</kbd> + clique (<kbd>Cmd</kbd> + clique no macOS) na posição abre o arquivo naquele ponto. No fim aparece um resumo:
+Cada linha tem a linha e a coluna, o tipo de valor, a propriedade CSS, o valor e, quando o projeto já tem um, o token a usar. As últimas linhas dizem o que rodar em seguida. Valores que o código sozinho não consegue julgar, como um `width`, são itens de revisão: o `check --review` mostra, e eles nunca fazem o comando falhar.
 
-```
-57 violations, 9 review in 3 files; 3 ignored by comment; 1 file skipped
-```
-
-- **violation** (violação): um valor que deveria ser um token;
-- **review** (revisão): um valor que o código sozinho não consegue julgar (nunca faz o comando falhar).
+Num pipe ou no CI, os mesmos valores saem como linhas separadas por tabulação (`arquivo:linha:coluna`, tipo, regra, propriedade, valor), que o VS Code transforma em links.
 
 Mais em [O comando check](check.md) e [Regras](rules.md).
 
@@ -45,7 +45,7 @@ Depois grave os arquivos:
 npx tokentidy generate
 ```
 
-Ele cria a pasta `design-tokens/` com `tokens.tokens.json` e `tokens.css` (e `_tokens.scss` ou `_tokens.less` se o projeto usar). Só valores usados pelo menos duas vezes viram tokens. Mais em [O comando generate](generate.md).
+Ele cria a pasta `design-tokens/` com o `tokens.css`. Só valores usados pelo menos 3 vezes viram tokens. Você pode editar nomes e valores no `tokens.css`: o próximo `generate` mantém. Para outros formatos, adicione `--dtcg`, `--scss`, `--less`, `--ts` ou `--js`. Mais em [O comando generate](generate.md).
 
 > Carregue `design-tokens/tokens.css` no seu app (por exemplo, importando no seu arquivo de estilos principal), para os tokens `var(--...)` funcionarem.
 

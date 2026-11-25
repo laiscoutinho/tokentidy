@@ -44,7 +44,7 @@ Any of them ends with `2` for a usage error, such as an unknown option or a path
 
 ### Help
 
-`tokentidy` with no arguments, or `tokentidy --help`, shows the TokenTidy banner, the list of commands, the options and usage examples. It also works for one command:
+`tokentidy` with no arguments shows a welcome screen: the banner, the version and the three steps (`check`, `generate`, `fix`). `tokentidy --help` shows the list of commands, the options and usage examples. It also works for one command:
 
 ```bash
 npx tokentidy --help
@@ -56,7 +56,7 @@ npx tokentidy validate --help
 
 ### Version
 
-`tokentidy --version` (or `-V`) prints the installed version, such as `0.0.9`.
+`tokentidy --version` (or `-V`) prints the installed version, such as `0.0.28`.
 
 ## Every option
 
@@ -65,15 +65,18 @@ npx tokentidy validate --help
 | `--json` | all | Prints the result as JSON, for scripts ([JSON output](json-output.md)) |
 | `--config <file>` | all | Uses another config file ([Configuration](configuration.md)) |
 | `--dry-run` | `generate`, `fix` | Shows what would be written, and writes nothing |
-| `--min-occurrences <n>` | `generate` | Uses needed for a value to become a token (minimum 2) |
+| `--min-occurrences <n>` | `generate` | Uses needed for a value to become a token (default 3, minimum 2) |
 | `--out <dir>` | `generate` | Output folder, inside the project (default: `design-tokens`) |
 | `--extend` | `generate` | Keeps the names generated before and adds the new ones |
 | `--new` | `generate` | Forgets the previous output and names everything again |
+| `--dtcg`, `--scss`, `--less` | `generate` | Also writes `tokens.tokens.json`, `_tokens.scss` or `_tokens.less` (`tokens.css` is always written) |
+| `--ts`, `--js` | `generate` | Also writes the `tokens.ts` or `tokens.js` module, for JS that needs the values |
 | `--shared <dir>` | `generate` | Micro-frontends: a shared token folder plus one per app ([Micro-frontends](micro-frontends.md)) |
 | `--tokens <dir>` | `fix` | Folder with the generated tokens (default: `output` in the config, `design-tokens`) |
 | `--approximate` | `fix` | Also replaces values close to a token, when the coherence guards allow it |
 | `--yes` / `--no-input` | `fix` | With `--approximate`: apply without asking / only list |
-| `--baseline <file>`, `--print-baseline`, `--summary`, `--format <format>` | `check` | See [check](check.md#options) |
+| `--format <format>` | `check` | `table` (one table per file, the default in a terminal), `text` (tab-separated, the default in pipes) or `github` |
+| `--baseline <file>`, `--print-baseline`, `--summary`, `--review` | `check` | See [check](check.md#options) |
 
 ## Version
 

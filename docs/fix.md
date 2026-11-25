@@ -6,7 +6,7 @@
 
 ```bash
 npx tokentidy fix --dry-run                     # show a diff, write nothing
-npx tokentidy fix                               # write the files, print the changed paths
+npx tokentidy fix                               # write the files and print a summary
 npx tokentidy fix src/components --tokens tokens/
 ```
 
@@ -19,7 +19,7 @@ If the project has no tokens at all, `fix` says to run [`generate`](generate.md)
 In this order:
 
 1. a generated **semantic alias** (`--color-text-danger`), only where it was created for;
-2. a **hand-written token** of the project: a global custom property (`:root`/`html`/`body`, never redefined with another value by a theme or media query), or a top-level `$x`/`@x` visible in the file (same file, or a file it loads with `@import`/`@use … as *`). Between two, the most used wins, and a tie is skipped as `ambiguous-token`;
+2. a **hand-written token** of the project: a global custom property (`:root`/`html`/`body`, never redefined with another value by a theme or media query), or a top-level `$x`/`@x` visible in the file (same file, or a file it loads with `@import`/`@use … as *`). Between two of the same kind, the one whose name fits the property wins (`--b-margin` in a `margin`, a text color in `color`); when no name decides, the value is skipped as `ambiguous-token`, even if one is used more: how often a token is used doesn't say which role this value has;
 3. a **generated token** from the tokens folder (`design-tokens/`, or `output` in the config), when its file exists: `tokens.css` for `var()`, `_tokens.scss` for `$x`, `_tokens.less` for `@x`.
 
 **The same value is not enough: the token must fit the property.** Among the tokens with the value:
@@ -27,9 +27,9 @@ In this order:
 - a token whose name is of another type is refused: `$border-width-thin: 1px` never goes into a `margin`, `--font-size-sm: 12px` never into a `gap`. Names that say nothing about the type (`--space-3`, `$base`) are accepted;
 - a color token whose name gives it a role (text/`fg`, background/`bg`/`surface`, `border`/`outline`/`divider`) only goes where that role is: `--color-bg-surface: #fff` never goes into `color`. A color with no role in the name (`$gray-900`, `$white`) fits anywhere;
 - a token defined in a test, story or fixture file never replaces a product value;
-- a token whose name is of this property (`--padding-md` in a `padding`, `--color-text` in a `color`) wins over a more used one with another name.
+- a token whose name is of this property (`--padding-md` in a `padding`, `--color-text` in a `color`) wins over one with another name, however more used it is. With two names that fit the same (or none that fits), the value is skipped as `ambiguous-token`.
 
-When the only token with the value is refused, the value is skipped with the reason, and still counts as having no token (for [`--approximate`](#values-close-to-a-token---approximate) and `generate`). Each replacement tells why that token was chosen, in `--json` (`reason`, with `alternatives` and `definedAt`): `alias` (created for this use), `only-match`, `most-used`, `name-matches-property` or `generated`.
+When the only token with the value is refused, the value is skipped with the reason, and still counts as having no token (for [`--approximate`](#values-close-to-a-token---approximate) and `generate`). Each replacement tells why that token was chosen, in `--json` (`reason`, with `alternatives` and `definedAt`): `alias` (created for this use), `only-match`, `most-used` (a token of another kind has the value too, such as `$gap` next to `--gap`), `name-matches-property` or `generated`.
 
 ### Hand-written tokens
 
@@ -47,12 +47,12 @@ You don't need `generate` or a DTCG file. A `tokens.css` like this is enough:
 
 1. **How the project uses it:** `font-size: var(--space-4)` makes `--space-4` a font size.
 2. **The `$type`** of a DTCG token (`dimension` is also read from the path: `space.4` is spacing).
-3. **The name.** The team chose it, so it counts as a declaration. The table below lists the words. The name must point to one type only, and the value must have the right form for it (a length for spacing, an integer for `z-index`, a time for a duration).
+3. **The name.** The team chose it, so it counts as a declaration. The table below lists the words. The name must point to one type only, and the value must have the right form for it (a length for spacing, a time for a duration).
 4. **The value:** a color is a color.
 
 | Words in the name | Type |
 |---|---|
-| `space`, `spacing`, `spacer`, `gap`, `gutter`, `inset`, `stack` | spacing |
+| `space`, `spacing`, `spacer`, `gap`, `gutter`, `inset`, `stack`, `padding`, `margin` | spacing |
 | `radius`, `radii`, `rounded`, `corner`, `border-radius` | radius |
 | `font-size`, `text`, `fs` | font size |
 | `line-height`, `leading` | line height |
@@ -61,10 +61,7 @@ You don't need `generate` or a DTCG file. A `tokens.css` like this is enough:
 | `font`, `font-family`, `typeface` | font family |
 | `border`, `border-width`, `stroke` | border width |
 | `shadow`, `elevation` | shadow |
-| `z`, `z-index`, `layer` | z-index |
-| `opacity`, `alpha` | opacity |
 | `duration` / `ease`, `easing` | duration / easing |
-| `breakpoint`, `bp`, `screen` / `container` | breakpoint / container |
 
 The name is split on `-`, `_`, `.` and camelCase. A token is not used when nothing tells its type. Examples: `--card-16` (no type in the name), `--space-radius` (two types), `--size-4` (`size` can mean spacing or the size of an element) and `--space-x: #fff` (the value doesn't fit). Such a value is counted as without a token.
 
@@ -94,7 +91,7 @@ If the compiled CSS is already in the project, it is the same token: it is used 
 
 ### Canvas and charts: the `tokens.ts` module
 
-`var()` doesn't work where JavaScript reads the value (a canvas, a chart library). For those, [`generate`](generate.md#the-tokensts-module) writes `tokens.ts` (or `tokens.js`) next to `tokens.css`, and `fix` uses it:
+`var()` doesn't work where JavaScript reads the value (a canvas, a chart library). For those, [`generate --ts`](generate.md#the-tokensts-module) writes `tokens.ts` (`--js` writes `tokens.js`) next to `tokens.css`, and `fix` uses it:
 
 ```ts
 import { color } from '../design-tokens/tokens';
@@ -110,11 +107,7 @@ With [theme tokens](themes.md), the value in `.card` and the one in `.dark .card
 
 ## Values it skips
 
-Skipped values are listed on the error output, with the reason:
-
-```
-src/App.scss:12:10	skipped	needs-preprocessor-variable	16px	…
-```
+Values that have a token but were not replaced are listed under **Not changed**, with the reason in words (see [Summary](#summary)). In [`--json`](json-output.md), `skippedValues` has the reason id from this table:
 
 | Reason | When |
 |---|---|
@@ -123,10 +116,9 @@ src/App.scss:12:10	skipped	needs-preprocessor-variable	16px	…
 | `variable-not-loaded` | The tokens file is loaded with a namespace (`@use … as t`), or a variable with the value exists but isn't imported |
 | `unit-in-binding` | `[style.width.px]="a ? 16 : 24"`: the unit in the name belongs to both values. Also a number in `host: { '[style.width.px]': '16' }` |
 | `needs-token-module` | The value is read by JavaScript (canvas, chart or unknown function), where `var()` doesn't work, and the `tokens.ts` module can't be used: it wasn't generated, or the file can't import it |
-| `svg-attribute` | The value is in an SVG presentation attribute (`fill="#fff"`). Browsers don't agree on `var()` there, and the specification is still under discussion: move it to `style` or edit it by hand |
 | `css-string` | The value is in CSS inside an untagged template string, which often goes to an iframe or another window where the tokens may not be loaded |
 | `component-prop` | The value is a component prop (`<Stack gap="12px">`): the prop's type belongs to the component, which may expect a step of its own scale instead of `var()` |
-| `ambiguous-token` | Two tokens of the project have this value and are used equally: picking one would be a guess |
+| `ambiguous-token` | Two or more tokens of the project have this value and no name says which fits the property (`--a-gap, --c-gap have this value and no name says which fits padding; pick one by hand`): picking one would be a guess |
 | `token-family-mismatch` | The only token with the value is named for another type (`$border-width-thin` in a `margin`). `alternatives` lists it |
 | `token-role-mismatch` | The only color token with the value is of another role (`--color-bg-surface` in a `color`). `alternatives` lists it |
 | `test-token` | The only token with the value is defined in a test, story or fixture file |
@@ -185,14 +177,27 @@ Apply? [y]es [n]o [a]ll in this group [q]uit
 
 ## Summary
 
-On the error output:
+On the error output: first what was **not changed** and why, then a blank line, then the total.
 
 ```
-src/app.css:1:28	no-token	used fewer than 2 times	#ffffff
-12 values replaced in 4 files; 1 skipped; 9 without a token (1 used fewer than 2 times); 10 violations remain
+Not changed (1):
+  Where         Value   Why
+  a.scss:2:20   768px   the @media condition runs at build time, where var() does not work, and no
+                        $variable with this value is available here; run tokentidy generate --scss
+                        to create one
+
+1 value has no token with the same value, so it stays as written.
+To also replace values close to a token, run tokentidy fix --approximate.
+
+✔ 2 values replaced in 1 file.
+  2 hardcoded values remain: run tokentidy check to see them.
 ```
 
-A value used fewer times than `minOccurrences` doesn't get a token from `generate`, and `fix` leaves it as it is. Each one is listed on its own line, so you can see it was left out on purpose. To give one a token, write it by hand or lower `minOccurrences`.
+- **Not changed:** values that have a token but can't use it there, one row each, with the reason.
+- **No token with the same value:** counted, not listed. If some of them repeat, it says to run `generate`; if some are close to a token, it points to `--approximate`. `tokentidy check` lists them all.
+- The changed files are not listed in a terminal (the diff of `--dry-run` shows every change). In a pipe or in CI, each changed file is printed on the standard output, one per line.
+
+A value used fewer times than `minOccurrences` doesn't get a token from `generate`, and `fix` leaves it as it is (in `--json`, `belowThreshold`). To give one a token, write it by hand or lower `minOccurrences`.
 
 When generated tokens were written as `var()`, it also reminds you that the app must load `design-tokens/tokens.css`.
 

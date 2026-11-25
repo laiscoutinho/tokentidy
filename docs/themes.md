@@ -32,17 +32,17 @@ body { background: #ffffff; color: #111827; }
 
 ```css
 :root {
-  --color-gray-900: #1f2937;
-  --color-gray-950: #111827;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
   --color-white: #ffffff;
   --color-bg-card: var(--color-white);
   --color-bg-default: var(--color-white);
-  --color-text-default: var(--color-gray-950);
+  --color-text-default: var(--color-gray-900);
 }
 
 .dark {
-  --color-bg-card: var(--color-gray-900);
-  --color-bg-default: var(--color-gray-950);
+  --color-bg-card: var(--color-gray-800);
+  --color-bg-default: var(--color-gray-900);
   --color-text-default: var(--color-white);
 }
 ```
@@ -53,7 +53,7 @@ The dark block repeats the selector the project already uses (`.dark`, `[data-th
 
 ## Files
 
-Besides the usual files, `generate` writes:
+With `--dtcg`, `generate` also writes:
 
 | File | What it has |
 |---|---|
@@ -67,5 +67,5 @@ Tools that read the Resolver Module produce each theme from these files, and [`v
 
 - Colors only, and only a dark theme over a light default. A project whose default is dark with a `.light` override isn't detected.
 - Custom properties that the project already redefines per theme (`--bg` in `:root` and in `.dark`) are left as they are: they already are a theme.
-- `_tokens.scss`, `_tokens.less` and the `tokens.ts` module keep only the light value.
+- `_tokens.scss`, `_tokens.less` and the `tokens.ts` module (written with `--scss`, `--less` and `--ts`) keep only the light value.
 - Turned off together with semantic aliases (`"semanticTokens": false`).

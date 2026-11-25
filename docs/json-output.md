@@ -30,7 +30,7 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
       "suggestion": { "token": "--color-primary", "match": "exact" }
     }
   ],
-  "review": [{ "file": "src/App.jsx", "line": 31, "column": 12, "type": "size", "rule": "size/no-context", "property": "width", "value": "120", "message": "size without context: …" }],
+  "review": [{ "file": "src/App.jsx", "line": 31, "column": 12, "type": "size", "rule": "size/no-context", "property": "width", "value": "120", "message": "width or height: a token only if this size is a design decision (a container, an icon)" }],
   "ignored": 0,
   "errors": [],
   "warnings": [],
@@ -50,12 +50,13 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
 | `root` | The project root |
 | `partial` | `true` when only part of the project was requested: definitions and uses still cover the whole project |
 | `findings` | The violations. `file` is relative to `root` and always uses `/`, also on Windows |
-| `suggestion` | Optional, on a finding: `token`, `match` (`exact` or `near`), `distance` on `near` (px difference, or ΔEOK for colors), `alternatives` on a tie ([check](check.md#which-token-fits)) |
+| `suggestion` | Optional, on a finding: `token`, `match` (`exact` or `near`), `distance` on `near` (px difference, or ΔEOK for colors), `alternatives` on a tie, `nearest` on `near` (up to 3 close tokens, each with `token` and `distance`, closest first; the first is `token`) ([check](check.md#which-token-fits)) |
 | `offset`, `endOffset` | The exact slice of the value in the file (starting at 0, end not included) |
-| `host` | Where the value was written: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `css-string`, `component-prop`, `js-value`, `svg-attribute` |
+| `host` | Where the value was written: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `css-string`, `component-prop`, `js-value` |
 | `selector` | The CSS selector, or `tag.class` for inline styles |
+| `declaration` | The index of the declaration in the file (from 0): the values of `padding: 4px 8px` share it, so a tool can show one row per declaration |
 | `atRules`, `function`, `impliedUnit` | Optional: the at-rules around the rule (`@media (...)`), the function around the value (`darken`), the unit implied by the code (`px` for `padding: 8` in JSX, `rem` for `[style.gap.rem]`) |
-| `review` | Review items: the same fields as a finding, plus `message` |
+| `review` | Review items: the same fields as a finding, plus `message`. Their rules are `size/no-context`, `value/hack` and `token/theme-only` ([Rules](rules.md#review-items)). A `token/theme-only` item also has `token` and `themes` (`selector`, `value` of each definition) |
 | `ignored` | How many values ignore comments removed |
 | `errors` | Files with syntax errors (`file`, `line`, `column`, `message`) |
 | `warnings` | Ignore comment problems and [token warnings](check.md#warnings-about-tokens) (`file`, `line`, `column`, `rule`, `message`) |
@@ -79,7 +80,7 @@ Every `--json` output starts with `schemaVersion` (currently `1`). It goes up wh
 | `config` | The settings in effect |
 | `dryRun` | Whether files were written |
 | `files` | Paths written, or that would be written |
-| `tokens` | Each with `path`, `name`, `type`, `key`, `value`, `count`, `spellings`, `occurrences`, and `equivalents`/`kept` when they apply |
+| `tokens` | Each with `path`, `name`, `type`, `key`, `value`, `count`, `files` (how many files use it), `spellings`, `occurrences`, and `equivalents`/`kept` when they apply |
 | `aliases` | Semantic aliases |
 | `reused` | Values that already had a token in the project |
 | `belowThreshold` | Values used fewer times than the threshold, with their occurrences |

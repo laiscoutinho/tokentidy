@@ -13,14 +13,41 @@ npx tokentidy check ~/projects/app            # absolute path
 
 ## Reading the result
 
-Each line is one value, with five fields separated by tabs, and a sixth when a token fits the value:
+In a terminal, `check` prints one table per file. Each row is one value, with the token to use when there is one:
 
 ```
-src/App.jsx:29:28	violation	color/hardcoded	color	#4f46e5
-src/App.jsx:29:72	violation	font-weight/hardcoded	font-weight	bold
-src/App.jsx:31:12	review	size/no-context	width	120
-src/App.scss:8:8	violation	spacing/hardcoded	gap	10px
-src/Card.css:4:12	violation	color/hardcoded	color	#4f46e5	--color-primary
+src/Card.css
+  Line   Type      Property     Value     Use instead
+  2:10   color     color        #4f46e5   --color-primary
+  3:8    spacing   gap          10px      —
+  4:12   spacing   padding      15px      close: --spacing-4 (+1px away)
+  5:15   color     background   #ffffff   —
+
+✖ 4 hardcoded values in 1 file.
+  1 of them already has a token: run tokentidy fix to replace it.
+  2 items for review: tokentidy check --review
+```
+
+`--review` adds the values a person has to decide on. Their type starts with `check`, and the last column says why:
+
+```
+  5:15   check color   background   #ffffff   same as --bg in :root, but .dark sets #111111: use the
+                                              token only if this value should follow the theme
+  6:10   check size    width        120px     width or height: a token only if this size is a design
+                                              decision (a container, an icon)
+```
+
+They are never errors. The last lines say how many values were found and what to run next. `--format table` prints the same table outside a terminal.
+
+In a pipe or in CI (or with `--format text`), each line is one value, with five fields separated by tabs, and a sixth when a token fits the value. The same project gives:
+
+```
+src/Card.css:2:10	violation	color/hardcoded	color	#4f46e5	--color-primary
+src/Card.css:3:8	violation	spacing/hardcoded	gap	10px
+src/Card.css:4:12	violation	spacing/hardcoded	padding	15px	--spacing-4 (+1px)
+src/Card.css:5:15	violation	color/hardcoded	background	#ffffff
+src/Card.css:5:15	review	token/theme-only	background	#ffffff
+src/Card.css:6:10	review	size/no-context	width	120px
 ```
 
 | Field | Example | Meaning |
@@ -35,7 +62,7 @@ src/Card.css:4:12	violation	color/hardcoded	color	#4f46e5	--color-primary
 The path is relative to the folder where you ran the command. The summary goes to the error output, so the data stays clean for scripts:
 
 ```
-57 violations, 9 review in 3 files; 3 ignored by comment; 1 file skipped
+4 violations, 2 review in 1 file
 ```
 
 Violations make `check` end with exit code `1`; review items never do ([Exit codes](exit-codes.md)).
@@ -49,9 +76,9 @@ With several apps in one repository, `check` also compares them: see [Micro-fron
 | Sixth field | Meaning | `fix` replaces it? |
 |---|---|---|
 | `--color-primary` | Same value, and this token works in this file | Yes |
-| `--a-gap (or --b-gap)` | Two tokens with the same value, used equally: you pick | No, it is skipped as `ambiguous-token` |
+| `--a-gap (or --b-gap)` | Two tokens with the same value, and no name says which fits this property: you pick | No, it is skipped as `ambiguous-token` |
 | `--spacing-4 (+1px)` | No token has this value, but `15px` is off the grid and one on the grid is 1px away | No |
-| `--brand (ΔE 0.012)` | No token has this color, but one is almost the same (ΔEOK up to 0.02) | No |
+| `--brand (ΔE 0.012)` | No token has this color, but one is almost the same (ΔEOK up to 0.02). The table says `close: --brand (a very similar color, ΔE 0.012)` | No |
 
 Tokens can come from more places than your own stylesheets:
 
@@ -69,7 +96,9 @@ When a value already uses a primitive token but a semantic alias exists for that
 src/b.css:2:21	suggestion	token/prefer-alias	color	--color-red-500	--color-text-danger
 ```
 
-A value that is close is only a hint: looking similar doesn't make it the same design decision. To replace close values, use [`fix --approximate`](fix.md#values-close-to-a-token---approximate), which asks first and checks the coherence guards. Measures are only compared when they are off the grid (`gridBase` in the config), so `16px` next to a `12px` token suggests nothing. Two tokens at the same distance suggest nothing either.
+A value that is close is only a hint: looking similar doesn't make it the same design decision. To replace close values, use [`fix --approximate`](fix.md#values-close-to-a-token---approximate), which asks first and checks the coherence guards. Measures are only compared when they are off the grid (`gridBase` in the config), so `16px` next to a `12px` token suggests nothing. Two tokens at the same distance suggest nothing either. `--json` lists up to 3 close tokens in `nearest`, closest first.
+
+A value equal to a token in only one theme is a review item, `token/theme-only`: `#ffffff` while `:root` has `--bg: #ffffff` and `.dark` sets `--bg: #111111`. Using `var(--bg)` there would make the value follow the dark theme, which may or may not be what you want, so `fix` never replaces it. Inside `.dark` itself the value is not reported this way.
 
 When the tokens folder exists and repeated values have no token, the summary says so, because the code changed after `generate`:
 
@@ -106,7 +135,7 @@ The file counts violations per file, rule, property and normalized value, with n
 
 ## How far along is the project
 
-`tokentidy check --summary` prints one line per token type, tab-separated: type, values still hardcoded, uses of a token.
+`tokentidy check --summary` prints one line per token type (a table in a terminal), tab-separated: type, values still hardcoded, uses of a token.
 
 ```
 color	12	87
@@ -120,17 +149,16 @@ They stay as two numbers on purpose: one overall score would hide that colors ar
 | Host | Files | What is read |
 |---|---|---|
 | `css` | `.css`, `<style>` in `.html` | every declaration |
-| `scss` | `.scss`, Angular `styles:` | every declaration; `$variables` are tokens; `@include` arguments, `@mixin` defaults and `mat.*-overrides` maps |
-| `sass` | `.sass` (indented syntax) | every declaration; `$variables` are tokens; `@include` arguments and `@mixin` defaults |
+| `scss` | `.scss`, Angular `styles:` | every declaration; `$variables` are tokens; `mat.*-overrides` maps (other `@include` arguments are skipped) |
+| `sass` | `.sass` (indented syntax) | every declaration; `$variables` are tokens |
 | `less` | `.less` | every declaration; `@variables` are tokens, mixin calls are skipped |
 | `html` | `.html` | inline `style="..."` |
-| `jsx` | `.jsx`, `.tsx`, `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts` | `style={{ ... }}` and objects that reach it (`style={card}`, also from a relative import), `css={{ }}`, `styled.div({ })`, MUI `sx`, `el.style.x`, `setProperty`, `cssText`, `setAttribute`, `Object.assign(el.style, ...)`, `@HostBinding`, `Renderer2.setStyle` |
+| `jsx` | `.jsx`, `.tsx`, `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts` | `style={{ ... }}` and objects that reach it (`style={card}`, also from a relative import), `css={{ }}`, `styled.div({ })`, `el.style.x`, `setProperty`, `cssText`, `setAttribute('style', ...)`, `Object.assign(el.style, ...)`, `@HostBinding`, `Renderer2.setStyle`. MUI `sx` also as an array, a function that returns the object, a variable, nested blocks (`'&:hover'`) and inside `*Props` (`slotProps={{ paper: { sx } }}`); in `sx`, `p: 2` is a theme step and is skipped, while `fontSize`, `fontWeight`, `lineHeight` and `letterSpacing` numbers are values |
 | `angular-template` | Angular `template:`, the `.html` of `templateUrl` and `host:` | `style="..."`, `[style.padding.px]="4"`, `[ngStyle]="{...}"` |
 | `css-in-js` | The same script files | Tagged templates: `styled.x`, `css`, `keyframes`, `createGlobalStyle`, `injectGlobal`, and the `css` prop with a template. A value with `${...}` inside it is not reported |
 | `css-string` | The same script files | CSS in a template string **without** a tag (`` const STYLES = `.a { outline: 3px solid #00a32a }` ``), or a `<style>` inside HTML built in JavaScript. Without a tag it is read only when it parses as a real stylesheet: rules with design properties and nothing loose outside them. That CSS often goes to an iframe or another window, where the tokens may not be loaded, so `fix` only reports it |
 | `component-prop` | The same script files | Style props of components (`<Stack gap="12px">`, `<Box padding="8px" color="#fff">`): `gap`, `padding*`, `margin*` (also `X`/`Y`), `color`, `backgroundColor`, `borderColor`, `borderRadius`, `fontSize`, `lineHeight`, or the list in [`componentProps`](configuration.md). Only text with a unit or a color: a bare number is often a step of the component's own scale (`gap={2}`). The prop's type belongs to the component, which may not accept `var()`, so `fix` only reports it |
-| `svg-attribute` | The same script files | SVG presentation attributes in JSX (`fill`, `stroke`, `stopColor`, `floodColor`, `lightingColor`) and `setAttribute('fill' or 'stroke', ...)`. `fix` leaves them alone |
-| `js-value` | The same script files | Colors read by JavaScript: `ctx.fillStyle`, `new Chart`/`new ApexCharts` options, and color keys in objects passed to unknown functions. `fix` writes them from the [`tokens.ts` module](fix.md#canvas-and-charts-the-tokensts-module) |
+| `js-value` | The same script files | Values read by JavaScript: `ctx.fillStyle`, `new Chart`/`new ApexCharts` options, color keys in objects passed to unknown functions, Pixi `new TextStyle({...})` and Phaser `this.add.text(x, y, text, {...})` (more in [`styleSinks`](configuration.md#style-sinks)), and the default of a parameter named after a style property (`function Badge({ color = '#4f46e5' })`). `fix` writes them from the [`tokens.ts` module](fix.md#canvas-and-charts-the-tokensts-module) |
 
 `.pcss`/`.postcss` files are read as CSS. As in TypeScript itself, JSX inside a `.ts` file is a syntax error. Token files (`*.tokens.json`) are read as the project's existing tokens, not as code.
 
@@ -183,7 +211,7 @@ Values, paths and messages in the text output have control characters escaped (`
 | `--baseline <file>` | Only report violations that are not in this baseline file |
 | `--print-baseline` | Print a baseline of the current violations to the standard output and exit with `0` |
 | `--summary` | Instead of the list: per token type, how many values are hardcoded and how many uses go through a token (see [above](#how-far-along-is-the-project)) |
-| `--format <format>` | `text` (default) or `github`: annotations for [GitHub Actions](ci-and-scripts.md#annotations-on-the-pull-request) |
+| `--format <format>` | `table` (default in a terminal), `text` (default in pipes and CI) or `github`: annotations for [GitHub Actions](ci-and-scripts.md#annotations-on-the-pull-request) |
 
 ## See also
 

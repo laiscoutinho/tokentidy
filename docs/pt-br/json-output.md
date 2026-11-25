@@ -30,7 +30,7 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
       "suggestion": { "token": "--color-primary", "match": "exact" }
     }
   ],
-  "review": [{ "file": "src/App.jsx", "line": 31, "column": 12, "type": "size", "rule": "size/no-context", "property": "width", "value": "120", "message": "size without context: …" }],
+  "review": [{ "file": "src/App.jsx", "line": 31, "column": 12, "type": "size", "rule": "size/no-context", "property": "width", "value": "120", "message": "width or height: a token only if this size is a design decision (a container, an icon)" }],
   "ignored": 0,
   "errors": [],
   "warnings": [],
@@ -50,12 +50,13 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
 | `root` | A raiz do projeto |
 | `partial` | `true` quando só parte do projeto foi pedida: definições e usos continuam cobrindo o projeto inteiro |
 | `findings` | As violações. `file` é relativo a `root` e sempre usa `/`, também no Windows |
-| `suggestion` | Opcional, em um achado: `token`, `match` (`exact` ou `near`), `distance` em `near` (diferença em px, ou ΔEOK nas cores), `alternatives` em um empate ([check](check.md#qual-token-serve)) |
+| `suggestion` | Opcional, em um achado: `token`, `match` (`exact` ou `near`), `distance` em `near` (diferença em px, ou ΔEOK nas cores), `alternatives` em um empate, `nearest` em `near` (até 3 tokens próximos, cada um com `token` e `distance`, do mais perto ao mais longe; o primeiro é o `token`) ([check](check.md#qual-token-serve)) |
 | `offset`, `endOffset` | O trecho exato do valor no arquivo (começando em 0, fim não incluído) |
-| `host` | Onde o valor foi escrito: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `css-string`, `component-prop`, `js-value`, `svg-attribute` |
+| `host` | Onde o valor foi escrito: `css`, `scss`, `sass`, `less`, `html`, `jsx`, `angular-template`, `css-in-js`, `css-string`, `component-prop`, `js-value` |
 | `selector` | O seletor CSS, ou `tag.classe` para estilos inline |
+| `declaration` | O índice da declaração no arquivo (a partir de 0): os valores de `padding: 4px 8px` compartilham o índice, então uma ferramenta pode mostrar uma linha por declaração |
 | `atRules`, `function`, `impliedUnit` | Opcionais: as at-rules em volta da regra (`@media (...)`), a função em volta do valor (`darken`), a unidade implícita no código (`px` para `padding: 8` no JSX, `rem` para `[style.gap.rem]`) |
-| `review` | Itens de revisão: os mesmos campos de uma violação, mais `message` |
+| `review` | Itens de revisão: os mesmos campos de uma violação, mais `message`. As regras deles são `size/no-context`, `value/hack` e `token/theme-only` ([Regras](rules.md#itens-de-revisão)). Um item `token/theme-only` também tem `token` e `themes` (`selector` e `value` de cada definição) |
 | `ignored` | Quantos valores os comentários de ignore removeram |
 | `errors` | Arquivos com erro de sintaxe (`file`, `line`, `column`, `message`) |
 | `warnings` | Problemas em comentários de ignore e [avisos sobre tokens](check.md#avisos-sobre-tokens) (`file`, `line`, `column`, `rule`, `message`) |
@@ -79,7 +80,7 @@ Toda saída `--json` começa com `schemaVersion` (hoje `1`). O número sobe quan
 | `config` | As configurações em uso |
 | `dryRun` | Se arquivos foram gravados |
 | `files` | Caminhos gravados, ou que seriam gravados |
-| `tokens` | Cada um com `path`, `name`, `type`, `key`, `value`, `count`, `spellings`, `occurrences`, e `equivalents`/`kept` quando se aplicam |
+| `tokens` | Cada um com `path`, `name`, `type`, `key`, `value`, `count`, `files` (quantos arquivos o usam), `spellings`, `occurrences`, e `equivalents`/`kept` quando se aplicam |
 | `aliases` | Aliases semânticos |
 | `reused` | Valores que já tinham token no projeto |
 | `belowThreshold` | Valores usados menos vezes que o limite, com as ocorrências |

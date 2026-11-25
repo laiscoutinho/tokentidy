@@ -30,7 +30,7 @@ O `-D` instala como **dependência de desenvolvimento**: ele ajuda enquanto voc�
 npx tokentidy --version
 ```
 
-Aparece a versão instalada, por exemplo `0.0.9`. Para ver os comandos:
+Aparece a versão instalada, por exemplo `0.0.28`. Para ver os comandos:
 
 ```bash
 npx tokentidy --help

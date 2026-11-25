@@ -105,11 +105,11 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 | Token generation (DTCG + CSS/SCSS/Less, scale names, semantic aliases) | 🟢 |
 | Project configuration (`tokentidy.config.json`) | 🟢 |
 | Files and folders as input, project root detection | 🟢 |
-| Rule ids, *review* items, local custom properties, breakpoints | 🟢 |
+| Rule ids, *review* items (`check --review`) | 🟢 |
 | Ignore comments and ignored folders | 🟢 |
 | Scale diagnosis in `generate`, safe writing | 🟢 |
 | Automatic fixes of exact values (`fix`, `--dry-run`) | 🟢 |
-| Context-aware detection (page container vs. icon size, controls, touch targets) | 🟢 |
+| Widths and heights sent to review (`size/no-context`), the code alone doesn't say their role | 🟢 |
 | Exact and closest token in `check`, near-duplicate colors | 🟢 |
 | Warnings about tokens: unknown names, `$deprecated`, `var()` fallbacks that disagree, unused tokens | 🟢 |
 | Baseline for projects that already have violations | 🟢 |
@@ -128,6 +128,8 @@ What sets it apart is **context**: TokenTidy looks at what a value is doing (the
 | Light/dark themes with the DTCG Resolver Module | 🟢 |
 | Hand-written tokens in `fix` without DTCG (type from usage, `$type` or name), uncompiled DTCG, values used once listed | 🟢 |
 | Token fit by property and color role, negatives, tests and stories left out, untagged CSS strings and component props, CSS tricks to review, color steps by lightness, nearest-step consolidation, `token/undefined`, `validate` without cascades | 🟢 |
+| MUI `sx` (arrays, functions, nested blocks, `*Props`), `filter: drop-shadow()`, `TextStyle` and canvas libraries, `styleSinks`, ties broken by name or left as ambiguous, reused values in `generate` | 🟢 |
+| Tables in the terminal, `generate` writing an editable `tokens.css` (other formats by flag), values equal to a token in one theme only, welcome screen | 🟢 |
 | Relative units (`%`, `vw`, `vh`): compare with absolute values used in the same role | ⚪ |
 
 ---
@@ -155,7 +157,8 @@ tokentidy/
 │   └── safe-write.ts     # atomic writes inside the project
 ├── schemas/              # DTCG 2025.10 JSON schemas used by validate
 ├── test/                 # automated tests and sample projects (fixtures)
-└── docs/                 # user documentation (English, with pt-br/ translations)
+├── docs/                 # user documentation (English, with pt-br/ translations)
+└── CHANGELOG.md          # what changed in each version
 ```
 
 The CLI (`cli.ts` and `cli/`) only handles input and output; all analysis lives in separate modules that can be tested without a terminal.

@@ -30,7 +30,7 @@ npm install -D github:laiscoutinho/tokentidy
 npx tokentidy --version
 ```
 
-It prints the installed version, for example `0.0.9`. To see the commands:
+It prints the installed version, for example `0.0.28`. To see the commands:
 
 ```bash
 npx tokentidy --help

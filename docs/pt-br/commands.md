@@ -44,7 +44,7 @@ Qualquer um deles termina com `2` em um erro de uso, como uma opção desconheci
 
 ### Ajuda
 
-`tokentidy` sem argumentos, ou `tokentidy --help`, mostra o banner do TokenTidy, a lista de comandos, as opções e exemplos de uso. Também funciona para um comando só:
+`tokentidy` sem argumentos mostra uma tela de boas-vindas: o banner, a versão e os três passos (`check`, `generate`, `fix`). `tokentidy --help` mostra a lista de comandos, as opções e exemplos de uso. Também funciona para um comando só:
 
 ```bash
 npx tokentidy --help
@@ -56,7 +56,7 @@ npx tokentidy validate --help
 
 ### Versão
 
-`tokentidy --version` (ou `-V`) mostra a versão instalada, como `0.0.9`.
+`tokentidy --version` (ou `-V`) mostra a versão instalada, como `0.0.28`.
 
 ## Todas as opções
 
@@ -65,15 +65,18 @@ npx tokentidy validate --help
 | `--json` | todos | Mostra o resultado em JSON, para scripts ([Saída JSON](json-output.md)) |
 | `--config <file>` | todos | Usa outro arquivo de configuração ([Configuração](configuration.md)) |
 | `--dry-run` | `generate`, `fix` | Mostra o que seria gravado, sem gravar nada |
-| `--min-occurrences <n>` | `generate` | Usos necessários para um valor virar token (mínimo 2) |
+| `--min-occurrences <n>` | `generate` | Usos necessários para um valor virar token (padrão 3, mínimo 2) |
 | `--out <dir>` | `generate` | Pasta de saída, dentro do projeto (padrão: `design-tokens`) |
 | `--extend` | `generate` | Mantém os nomes gerados antes e adiciona os novos |
 | `--new` | `generate` | Esquece a saída anterior e dá nome a tudo de novo |
+| `--dtcg`, `--scss`, `--less` | `generate` | Também grava `tokens.tokens.json`, `_tokens.scss` ou `_tokens.less` (o `tokens.css` é sempre gravado) |
+| `--ts`, `--js` | `generate` | Também grava o módulo `tokens.ts` ou `tokens.js`, para JS que precisa dos valores |
 | `--shared <dir>` | `generate` | Micro-frontends: uma pasta de tokens compartilhada e uma por app ([Micro-frontends](micro-frontends.md)) |
 | `--tokens <dir>` | `fix` | Pasta com os tokens gerados (padrão: `output` da configuração, `design-tokens`) |
 | `--approximate` | `fix` | Também troca valores próximos de um token, quando as guardas de coerência permitem |
 | `--yes` / `--no-input` | `fix` | Com `--approximate`: aplicar sem perguntar / só listar |
-| `--baseline <file>`, `--print-baseline`, `--summary`, `--format <format>` | `check` | Veja o [check](check.md#opções) |
+| `--format <format>` | `check` | `table` (uma tabela por arquivo, o padrão num terminal), `text` (separado por tabulação, o padrão em pipes) ou `github` |
+| `--baseline <file>`, `--print-baseline`, `--summary`, `--review` | `check` | Veja o [check](check.md#opções) |
 
 ## Versão
 

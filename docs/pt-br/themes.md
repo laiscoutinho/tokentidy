@@ -32,17 +32,17 @@ O `generate` grava:
 
 ```css
 :root {
-  --color-gray-900: #1f2937;
-  --color-gray-950: #111827;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
   --color-white: #ffffff;
   --color-bg-card: var(--color-white);
   --color-bg-default: var(--color-white);
-  --color-text-default: var(--color-gray-950);
+  --color-text-default: var(--color-gray-900);
 }
 
 .dark {
-  --color-bg-card: var(--color-gray-900);
-  --color-bg-default: var(--color-gray-950);
+  --color-bg-card: var(--color-gray-800);
+  --color-bg-default: var(--color-gray-900);
   --color-text-default: var(--color-white);
 }
 ```
@@ -53,7 +53,7 @@ Depois, o `fix` escreve `var(--color-bg-card)` tanto em `.card` quanto em `.dark
 
 ## Arquivos
 
-Além dos arquivos de sempre, o `generate` grava:
+Com `--dtcg`, o `generate` também grava:
 
 | Arquivo | O que tem |
 |---|---|
@@ -67,5 +67,5 @@ Ferramentas que leem o Resolver Module produzem cada tema a partir desses arquiv
 
 - Só cores, e só um tema escuro sobre um claro padrão. Um projeto cujo padrão é escuro, com uma sobreposição `.light`, não é detectado.
 - Custom properties que o projeto já redefine por tema (`--bg` em `:root` e em `.dark`) ficam como estão: já são um tema.
-- `_tokens.scss`, `_tokens.less` e o módulo `tokens.ts` guardam só o valor do claro.
+- `_tokens.scss`, `_tokens.less` e o módulo `tokens.ts` (gravados com `--scss`, `--less` e `--ts`) guardam só o valor do claro.
 - Desligado junto com os aliases semânticos (`"semanticTokens": false`).

@@ -104,11 +104,11 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | Geração de tokens (DTCG + CSS/SCSS/Less, nomes de escala, aliases semânticos) | 🟢 |
 | Configuração do projeto (`tokentidy.config.json`) | 🟢 |
 | Arquivos e pastas como entrada, detecção da raiz do projeto | 🟢 |
-| Identificadores de regra, itens de *revisão*, custom properties locais, breakpoints | 🟢 |
+| Identificadores de regra, itens de *revisão* (`check --review`) | 🟢 |
 | Comentários de ignore e pastas ignoradas | 🟢 |
 | Diagnóstico de escala no `generate`, gravação segura | 🟢 |
 | Correção automática de valores exatos (`fix`, `--dry-run`) | 🟢 |
-| Detecção com contexto (container da página vs. tamanho de ícone, controles, áreas de toque) | 🟢 |
+| Larguras e alturas vão para revisão (`size/no-context`), o código sozinho não diz o papel delas | 🟢 |
 | Token exato e mais próximo no `check`, cores quase duplicadas | 🟢 |
 | Avisos sobre tokens: nomes desconhecidos, `$deprecated`, valores reserva do `var()` que discordam, tokens sem uso | 🟢 |
 | Baseline para projetos que já têm violações | 🟢 |
@@ -126,7 +126,9 @@ O diferencial é o **contexto**: o TokenTidy olha o que um valor está fazendo (
 | `validate` contra o schema DTCG 2025.10 e regras de referência | 🟢 |
 | Temas claro/escuro com o Resolver Module do DTCG | 🟢 |
 | Tokens escritos à mão no `fix` sem DTCG (tipo pelo uso, `$type` ou nome), DTCG não compilado, valores usados uma vez listados | 🟢 |
+| `sx` do MUI (arrays, funções, blocos aninhados, `*Props`), `filter: drop-shadow()`, `TextStyle` e bibliotecas de canvas, `styleSinks`, empate decidido pelo nome ou deixado como ambíguo, valores reaproveitados no `generate` | 🟢 |
 | Token que serve para a propriedade e o papel da cor, negativos, testes e stories de fora, CSS em strings sem tag e props de componente, truques de CSS para revisão, degraus de cor pela luminosidade, consolidação no passo mais próximo, `token/undefined`, `validate` sem cascata | 🟢 |
+| Tabelas no terminal, `generate` gravando um `tokens.css` editável (outros formatos por flag), valores iguais a um token em um tema só, tela de boas-vindas | 🟢 |
 | Unidades relativas (`%`, `vw`, `vh`): comparar com valores absolutos usados no mesmo papel | ⚪ |
 
 ---
@@ -154,7 +156,8 @@ tokentidy/
 │   └── safe-write.ts     # gravação atômica dentro do projeto
 ├── schemas/              # schemas JSON do DTCG 2025.10 usados pelo validate
 ├── test/                 # testes automatizados e projetos de exemplo (fixtures)
-└── docs/                 # documentação de uso (inglês, com traduções em pt-br/)
+├── docs/                 # documentação de uso (inglês, com traduções em pt-br/)
+└── CHANGELOG.md          # o que mudou em cada versão (em inglês)
 ```
 
 A CLI (`cli.ts` e `cli/`) só cuida de entrada e saída; toda a análise fica em módulos separados, que podem ser testados sem terminal.
